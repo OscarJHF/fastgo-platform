@@ -1,4 +1,4 @@
-﻿# ðŸš€ FASTGO â€” Plataforma Integral de Domicilios Hiperlocales
+# ðŸš€ FASTGO â€” Plataforma Integral de Domicilios Hiperlocales
 
 <div align="center">
   <img src="fastgo-frontend/public/assets/images/solcita-un-domiciliario.png" width="320" alt="FastGo Delivery" />
@@ -35,11 +35,11 @@ La plataforma utiliza la paleta oficial **Blanco + Verde Esmeralda**:
 | Capa | TecnologÃ­as |
 |---|---|
 | **Backend Core** | Java 21 LTS, Spring Boot 4.0.7, Spring Security 7, Spring Data JPA / Hibernate, Flyway 10, Maven 3.9 |
-| **Base de Datos** | PostgreSQL 18.4 (Migraciones versionadas V1 y V2) |
+| **Base de Datos** | PostgreSQL 18.4 (Base de ProducciÃ³n: `fastgo_prod`, Migraciones versionadas V1 y V2) |
 | **Frontend Web** | React 19, TypeScript, Vite, Tailwind CSS 3.4, Lucide Icons, Vitest |
 | **App MÃ³vil** | Android 11+ (Capacitor Android Native Bridge, probado fÃ­sicamente en Xiaomi Redmi 9) |
 | **Seguridad** | JWT HMAC-SHA256 (256-bit), BCrypt, RBAC estricto, mitigaciÃ³n IDOR/BOLA |
-| **Infraestructura Cloud** | Oracle Cloud Always Free (Backend + DB + Caddy SSL), Cloudflare Pages (Frontend SPA) |
+| **Infraestructura Cloud** | Oracle Cloud Always Free (2 OCPU / 12 GB RAM, Caddy SSL), Cloudflare Pages (Frontend SPA) |
 
 ---
 
@@ -51,7 +51,7 @@ La plataforma utiliza la paleta oficial **Blanco + Verde Esmeralda**:
 [+] Frontend TypeScript Build:        EXIT CODE 0 (0 errores de compilaciÃ³n)
 [+] Mobile Physical Device Tests:     100% PASS (Xiaomi Redmi 9 - Ciclo Pedido #8946)
 [+] Cloudflare Pages SPA Routing:     _redirects configurado
-[+] Docker Containerization:          Multi-stage Java 21 Alpine + Caddy Proxy
+[+] Docker Containerization:          Multi-stage Java 21 Alpine + Caddy Proxy + PostgreSQL 18
 ```
 
 ---
@@ -66,7 +66,7 @@ La plataforma utiliza la paleta oficial **Blanco + Verde Esmeralda**:
 ### 2. Levantar Backend (Spring Boot)
 ```bash
 cd fastgo-backend
-cp .env.example .env # Ajusta tu clave de postgres
+cp .env.example .env
 ./mvnw clean spring-boot:run
 ```
 El backend iniciarÃ¡ en `http://localhost:8080`.
@@ -92,20 +92,18 @@ adb install -r release/FASTGO-Beta2-release.apk
 
 Consulte la guÃ­a completa en [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
-- **Oracle Cloud Always Free:** Ejecute `./deploy.sh` en su mÃ¡quina virtual para levantar PostgreSQL, Spring Boot y Caddy con HTTPS automÃ¡tico.
+- **Oracle Cloud Always Free:** Ejecute `./deploy.sh` en su mÃ¡quina virtual para levantar PostgreSQL (`fastgo_prod`), Spring Boot y Caddy con HTTPS automÃ¡tico.
 - **Cloudflare Pages:** Conecte este repositorio a Cloudflare Pages apuntando al subdirectorio `fastgo-frontend` con comando `npm run build`.
-
----
-
-## ðŸ” Seguridad y AuditorÃ­a
-
-Para el desglose de mitigaciones OWASP Top 10 API Security y pruebas de prevenciÃ³n IDOR, consulte [SECURITY_AUDIT.md](SECURITY_AUDIT.md).
 
 ---
 
 ## ðŸ“ DocumentaciÃ³n de Soporte
 
 - [GuÃ­a de Despliegue Cloud ($0 USD)](DEPLOYMENT_GUIDE.md)
+- [GuÃ­a de Registro en Oracle Cloud Free Tier](ORACLE_ACCOUNT_SETUP.md)
+- [PolÃ­tica de Costo Cero (Oracle Cost Guard)](ORACLE_COST_GUARD.md)
+- [GuÃ­a de Descarga y DistribuciÃ³n APK Android](FASTGO_ANDROID_DOWNLOAD.md)
 - [Informe de AuditorÃ­a de Seguridad](SECURITY_AUDIT.md)
 - [Informe de PreparaciÃ³n para ProducciÃ³n](PRODUCTION_READINESS_REPORT.md)
 - [Reporte de Pruebas en Dispositivo Android FÃ­sico](release/ANDROID_PHYSICAL_DEVICE_TEST_REPORT.md)
+- [Informe Final Consolidado de AuditorÃ­a](FASTGO_FINAL_AUDIT_REPORT.md)

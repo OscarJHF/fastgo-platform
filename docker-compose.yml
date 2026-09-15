@@ -4,15 +4,15 @@
     container_name: fastgo-postgres
     restart: always
     environment:
-      POSTGRES_DB: \
-      POSTGRES_USER: \
-      POSTGRES_PASSWORD: \
+      POSTGRES_DB: ${DB_NAME:-fastgo_prod}
+      POSTGRES_USER: ${DB_USERNAME:-fastgo_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme_secure_password}
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - fastgo-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \ -d \"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-fastgo_user} -d ${DB_NAME:-fastgo_prod}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,11 +27,11 @@
       postgres:
         condition: service_healthy
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/\
-      SPRING_DATASOURCE_USERNAME: \
-      SPRING_DATASOURCE_PASSWORD: \
-      FASTGO_JWT_SECRET: \
-      FASTGO_CORS_ALLOWED_ORIGINS: \
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-fastgo_prod}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME:-fastgo_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-changeme_secure_password}
+      FASTGO_JWT_SECRET: ${JWT_SECRET:-changeme_very_long_secret_key_at_least_32_bytes_long}
+      FASTGO_CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://fastgo.pages.dev,http://localhost:5173}
       FASTGO_WOMPI_ENABLED: "false"
       FASTGO_MAPS_ENABLED: "false"
       SPRING_PROFILES_ACTIVE: prod
@@ -50,7 +50,7 @@
       - "80:80"
       - "443:443"
     environment:
-      DOMAIN_NAME: \
+      DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

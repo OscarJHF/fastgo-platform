@@ -1,4 +1,4 @@
-﻿{\} {
+﻿{$DOMAIN_NAME:localhost} {
     reverse_proxy backend:8080 {
         header_up Host {upstream_hostport}
         header_up X-Real-IP {remote_host}
