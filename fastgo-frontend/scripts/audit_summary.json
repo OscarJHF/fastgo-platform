@@ -1,0 +1,105 @@
+{
+  "levantamiento": {
+    "backend": true,
+    "frontend": true
+  },
+  "cliente": {
+    "pass": true,
+    "steps": [
+      "Login exitoso",
+      "Búsqueda comercio",
+      "Detalle comercio",
+      "Agregar producto",
+      "Modificar cantidad",
+      "Página checkout",
+      "Crear pedido",
+      "Tracking visual",
+      "Cancelación de pedido"
+    ]
+  },
+  "comercio": {
+    "pass": true,
+    "steps": [
+      "Dashboard Comercio",
+      "Transición de estados completada",
+      "Productos comercio",
+      "Sucursales comercio"
+    ]
+  },
+  "domiciliario": {
+    "pass": true,
+    "steps": [
+      "Dashboard Domiciliario",
+      "Tomar pedido",
+      "Progresión de entrega"
+    ]
+  },
+  "admin": {
+    "pass": true,
+    "steps": [
+      "Dashboard Admin",
+      "Usuarios Admin",
+      "Categorías Admin",
+      "Comercios Admin"
+    ]
+  },
+  "seguridadVisual": {
+    "pass": true,
+    "checks": [
+      "CLIENTE a ADMIN bloqueado (403)",
+      "COMERCIO a ADMIN bloqueado (403)",
+      "DOMICILIARIO a ADMIN bloqueado (403)",
+      "Ruta protegida redirige a login"
+    ]
+  },
+  "responsive": {
+    "pass": true,
+    "viewports": [
+      {
+        "name": "360x800_mobile",
+        "status": "PASS"
+      },
+      {
+        "name": "390x844_iphone",
+        "status": "PASS"
+      },
+      {
+        "name": "768x1024_tablet",
+        "status": "PASS"
+      },
+      {
+        "name": "1024x768_laptop",
+        "status": "PASS"
+      },
+      {
+        "name": "1440x900_desktop",
+        "status": "PASS"
+      }
+    ]
+  },
+  "ux": {
+    "pass": true,
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 400 ()"
+    ],
+    "notes": []
+  },
+  "pagos": {
+    "pass": true,
+    "notes": [
+      "Wompi disabled disclaimer visible"
+    ]
+  },
+  "maps": {
+    "pass": true,
+    "notes": [
+      "Maps fallback rendered cleanly"
+    ]
+  }
+}

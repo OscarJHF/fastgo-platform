@@ -1,0 +1,61 @@
+﻿# ============================================================
+# FASTGO â€” Root .gitignore
+# Strictly prevents committing secrets, credentials, and artifacts
+# ============================================================
+
+# Environment variables & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.pfx
+*.keystore
+*.jks
+
+# Java / Maven
+target/
+*.jar
+*.war
+*.class
+.mvn/wrapper/maven-wrapper.jar
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Android / Mobile Builds
+*.apk
+*.aab
+*.ap_
+*.dex
+fastgo-cliente/android/.gradle/
+fastgo-cliente/android/app/build/
+fastgo-cliente/android/build/
+fastgo-cliente/android/local.properties
+fastgo-cliente/node_modules/
+
+# OS & IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & Temporary Files
+*.log
+logs/
+temp/
+tmp/
+.tempmediaStorage/
+coverage/

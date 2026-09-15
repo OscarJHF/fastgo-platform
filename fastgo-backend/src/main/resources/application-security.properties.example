@@ -1,0 +1,24 @@
+# Copiar estas variables al entorno de ejecución; no las subas a Git.
+# Windows PowerShell:
+#   $env:FASTGO_JWT_SECRET="reemplaza-por-un-secreto-aleatorio-de-32-o-mas-caracteres"
+#   $env:DB_PASSWORD="tu-password-local"
+#   $env:FASTGO_CORS_ALLOWED_ORIGINS="http://localhost:3000,http://localhost:5173"
+#
+# Para producción usa un gestor de secretos y HTTPS.
+FASTGO_JWT_SECRET=
+DB_PASSWORD=
+FASTGO_CORS_ALLOWED_ORIGINS=
+
+# Wompi Sandbox/Producción
+FASTGO_WOMPI_ENABLED=false
+FASTGO_WOMPI_BASE_URL=https://sandbox.wompi.co/v1
+FASTGO_WOMPI_PUBLIC_KEY=
+FASTGO_WOMPI_PRIVATE_KEY=
+FASTGO_WOMPI_INTEGRITY_SECRET=
+FASTGO_WOMPI_EVENTS_SECRET=
+FASTGO_WOMPI_REDIRECT_URL=http://localhost:8081/payment-result
+
+# Google Maps Platform (server-side APIs)
+FASTGO_MAPS_ENABLED=false
+FASTGO_MAPS_SERVER_KEY=
+FASTGO_MAPS_BASE_URL=https://maps.googleapis.com
