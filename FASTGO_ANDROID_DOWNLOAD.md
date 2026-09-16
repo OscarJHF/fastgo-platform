@@ -1,4 +1,4 @@
-﻿# FASTGO â€” GuÃ­a de DistribuciÃ³n y Descarga de la AplicaciÃ³n Android
+# FASTGO â€” GuÃ­a de DistribuciÃ³n y Descarga de la AplicaciÃ³n Android
 
 **Paquete:** `com.fastgo.app`  
 **VersiÃ³n de ProducciÃ³n:** FastGo Beta 2 Release  
@@ -7,16 +7,18 @@
 
 ---
 
-## 1. Mecanismos de Descarga y DistribuciÃ³n
+## 1. Mecanismos de Descarga y Distribución
 
-### OpciÃ³n A: DistribuciÃ³n VÃ­a URL PÃºblica y QR (ProducciÃ³n)
-Cuando la plataforma cuente con un dominio pÃºblico o almacenamiento perimetral (ej. GitHub Releases privado o Cloudflare Pages/R2):
-1. La URL de descarga directa se configurarÃ¡ en: `FASTGO_ANDROID_DOWNLOAD_URL.txt`.
-2. El cÃ³digo QR correspondiente se generarÃ¡ como: `FASTGO_ANDROID_QR.png`.
-3. El usuario podrÃ¡ escanear el cÃ³digo QR con la cÃ¡mara de cualquier telÃ©fono Android para descargar el instalador directamente.
+### Opción A: Distribución Vía URL Pública y QR (Producción)
+- **URL Real de Descarga:** `https://github.com/OscarJHF/fastgo-platform/releases/download/v2.0-beta/FASTGO-Beta2-release.apk`
+- **Página de Release:** `https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.0-beta`
+- **SHA-256:** `D37DA89E68B7575271842D82F2C4E0F62EE5043E49BA9B277F1855554D5A7B60`
+- **Tamaño:** `68,572,436 bytes` (68.5 MB)
+- **Código QR:** `FASTGO_ANDROID_QR.png` (apunta a la URL real)
+- **Instrucción:** El usuario puede escanear el código QR con la cámara de cualquier teléfono Android o abrir la URL en el navegador móvil para descargar el APK directamente.
 
-### OpciÃ³n B: InstalaciÃ³n Local VÃ­a ADB (Desarrollo y Pruebas FÃ­sicas)
-Con el telÃ©fono conectado por cable USB con *DepuraciÃ³n USB* habilitada:
+### Opción B: Instalación Local Vía ADB (Desarrollo y Pruebas Físicas)
+Con el teléfono conectado por cable USB con *Depuración USB* habilitada:
 ```bash
 adb reverse tcp:8080 tcp:8080
 adb install -r release/FASTGO-Beta2-release.apk
