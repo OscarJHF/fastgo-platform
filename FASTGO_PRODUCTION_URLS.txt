@@ -1,0 +1,20 @@
+FASTGO PRODUCTION
+=================
+
+Frontend:
+BLOCKED (Pendiente de despliegue en Cloudflare Pages tras obtener URL pÃºblica del backend)
+
+Backend API:
+BLOCKED (Pendiente de aprovisionamiento de VM Always Free en Oracle Cloud)
+
+API Health:
+BLOCKED (Pendiente de despliegue en vivo en Oracle Cloud)
+
+Android APK:
+BLOCKED (Pendiente de URL pÃºblica estable de distribuciÃ³n; APK release local verificado en release/FASTGO-Beta2-release.apk)
+
+GitHub:
+https://github.com/OscarJHF/fastgo-platform
+
+Oracle:
+https://cloud.oracle.com
