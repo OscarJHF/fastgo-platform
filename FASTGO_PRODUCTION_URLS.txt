@@ -2,16 +2,16 @@ FASTGO PRODUCTION
 =================
 
 Frontend:
-BLOCKED (Pendiente de despliegue en Cloudflare Pages tras obtener URL pÃºblica del backend)
+BLOCKED (Pendiente de despliegue en Cloudflare Pages tras obtener URL publica del backend)
 
 Backend API:
-BLOCKED (Pendiente de aprovisionamiento de VM Always Free en Oracle Cloud)
+BLOCKED (Pendiente de provision de VM Always Free en Oracle Cloud)
 
 API Health:
 BLOCKED (Pendiente de despliegue en vivo en Oracle Cloud)
 
 Android APK:
-BLOCKED (Pendiente de URL pÃºblica estable de distribuciÃ³n; APK release local verificado en release/FASTGO-Beta2-release.apk)
+READY LOCAL / READY CADDY (APK compilado 68.5 MB verificado en release/FASTGO-Beta2-release.apk; Caddy configurado en /download/fastgo.apk para Always Free $0 USD. A la espera de la IP publica de Oracle Cloud)
 
 GitHub:
 https://github.com/OscarJHF/fastgo-platform
