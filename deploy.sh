@@ -1,10 +1,12 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 set -euo pipefail
 
 echo "============================================================"
-echo "FASTGO â€” Oracle Cloud Always Free Production Deploy Script"
+echo "FASTGO - Oracle Cloud Always Free Production Deploy Script"
 echo "Target Shape: VM.Standard.A1.Flex (2 OCPU / 12 GB RAM)"
 echo "Database: fastgo_prod (PostgreSQL 18 + Flyway)"
+echo "HTTPS: Caddy con soporte IP / Dominio"
+echo "APK Storage: /srv/downloads (Always Free $0 USD)"
 echo "============================================================"
 
 # Ensure Docker is installed
@@ -33,7 +35,15 @@ if [ ! -f .env ]; then
     fi
 fi
 
-# Pull and rebuild containers
+# Prepare downloads folder for APK distribution (>= 68.5 MB)
+mkdir -p downloads
+if [ -f "release/FASTGO-Beta2-release.apk" ]; then
+    echo "[+] Copiando APK release a carpeta de descargas publicas..."
+    cp release/FASTGO-Beta2-release.apk downloads/fastgo.apk
+    cp release/FASTGO-Beta2-release.apk downloads/FASTGO-Beta2-release.apk
+fi
+
+# Build and start containers
 echo "[+] Construyendo e iniciando contenedores en red interna aislada..."
 docker compose build --pull
 docker compose up -d --remove-orphans
@@ -46,4 +56,5 @@ echo "Despliegue completado exitosamente."
 echo "API Backend: http://localhost:8080 (Interno tras Caddy)"
 echo "Base de Datos: fastgo_prod (Interno, puerto 5432 no expuesto)"
 echo "Proxy Seguro Caddy: Puertos 80/443 abiertos"
+echo "Descarga APK: https://${DOMAIN_NAME:-localhost}/download/fastgo.apk"
 echo "============================================================"

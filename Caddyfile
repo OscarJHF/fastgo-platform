@@ -1,9 +1,18 @@
-﻿{$DOMAIN_NAME:localhost} {
-    reverse_proxy backend:8080 {
-        header_up Host {upstream_hostport}
-        header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
+{$DOMAIN_NAME:localhost} {
+    # Servir descargas directas de APK (>= 68.5 MB, Always Free $0 USD)
+    handle_path /download/* {
+        root * /srv/downloads
+        file_server browse
+    }
+
+    # Proxy inverso seguro hacia Spring Boot
+    handle {
+        reverse_proxy backend:8080 {
+            header_up Host {upstream_hostport}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
     }
     encode gzip zstd
 }

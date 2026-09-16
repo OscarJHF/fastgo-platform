@@ -1,4 +1,4 @@
-﻿services:
+services:
   postgres:
     image: postgres:18-alpine
     container_name: fastgo-postgres
@@ -53,6 +53,7 @@
       DOMAIN_NAME: ${DOMAIN_NAME:-localhost}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./downloads:/srv/downloads:ro
       - caddy_data:/data
       - caddy_config:/config
     networks:
