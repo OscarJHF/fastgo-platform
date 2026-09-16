@@ -1,4 +1,4 @@
-﻿# Stage 1: Build Spring Boot JAR
+# Stage 1: Build Spring Boot JAR
 FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /build
 COPY .mvn .mvn
@@ -16,4 +16,4 @@ COPY --from=builder /build/target/*.jar app.jar
 ENV SPRING_PROFILES_ACTIVE=prod
 ENV JAVA_OPTS="-XX:+UseG1GC -XX:MaxRAMPercentage=75.0"
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java  -jar app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
