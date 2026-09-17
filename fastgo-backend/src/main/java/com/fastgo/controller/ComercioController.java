@@ -51,6 +51,23 @@ public class ComercioController {
                 comercioService.actualizar(id, datos));
     }
 
+    @GetMapping("/propio")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<ComercioResponseDTO> buscarPropio() {
+        ComercioResponseDTO propio = comercioService.buscarPropio();
+        if (propio == null) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(propio);
+    }
+
+    @PatchMapping("/{id}/pausa-manual")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<ComercioResponseDTO> togglePausaManual(
+            @PathVariable @Positive Integer id) {
+        return ResponseEntity.ok(comercioService.togglePausaManual(id));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('COMERCIO')")
     public ResponseEntity<Void> eliminar(

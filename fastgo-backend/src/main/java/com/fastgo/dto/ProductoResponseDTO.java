@@ -14,6 +14,7 @@ public class ProductoResponseDTO {
     private String imagenPrincipal;
     private Boolean disponible;
     private Boolean destacado;
+    private Integer stock;
 
     public ProductoResponseDTO() {
     }
@@ -29,6 +30,21 @@ public class ProductoResponseDTO {
             String imagenPrincipal,
             Boolean disponible,
             Boolean destacado) {
+        this(id, sucursalId, categoriaId, nombre, descripcion, precio, tiempoPreparacion, imagenPrincipal, disponible, destacado, null);
+    }
+
+    public ProductoResponseDTO(
+            Integer id,
+            Integer sucursalId,
+            Integer categoriaId,
+            String nombre,
+            String descripcion,
+            BigDecimal precio,
+            Integer tiempoPreparacion,
+            String imagenPrincipal,
+            Boolean disponible,
+            Boolean destacado,
+            Integer stock) {
 
         this.id = id;
         this.sucursalId = sucursalId;
@@ -40,6 +56,7 @@ public class ProductoResponseDTO {
         this.imagenPrincipal = imagenPrincipal;
         this.disponible = disponible;
         this.destacado = destacado;
+        this.stock = stock;
     }
 
     public Integer getId() {
@@ -121,4 +138,7 @@ public class ProductoResponseDTO {
     public void setDestacado(Boolean destacado) {
         this.destacado = destacado;
     }
+
+    public Integer getStock() { return stock; }
+    public void setStock(Integer stock) { this.stock = stock; }
 }

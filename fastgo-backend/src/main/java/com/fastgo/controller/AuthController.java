@@ -20,9 +20,12 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
-        Usuario usuario = authService.login(request);
-        return ResponseEntity.ok(new LoginResponse(
-                authService.generarToken(usuario),
-                "Bienvenido " + usuario.getNombre()));
+        return ResponseEntity.ok(authService.autenticar(request));
+    }
+
+    @PostMapping("/cambiar-rol")
+    public ResponseEntity<LoginResponse> cambiarRol(
+            @Valid @RequestBody com.fastgo.dto.CambiarRolRequest request) {
+        return ResponseEntity.ok(authService.cambiarRol(request.getNuevoRol()));
     }
 }

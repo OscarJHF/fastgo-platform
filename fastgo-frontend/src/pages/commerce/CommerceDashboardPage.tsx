@@ -12,37 +12,57 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { APP_ROUTES } from '../../constants/routes';
 
 export const CommerceDashboardPage: React.FC = () => {
-  const [commerces, setCommerces] = useState<Comercio[]>([]);
   const [activeCommerce, setActiveCommerce] = useState<Comercio | null>(null);
   const [branches, setBranches] = useState<Sucursal[]>([]);
   const [activeBranch, setActiveBranch] = useState<Sucursal | null>(null);
   const [orders, setOrders] = useState<Pedido[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
+
+  const loadDashboard = async () => {
+    try {
+      let com: Comercio | null = null;
+      try {
+        com = await commerceService.getPropio();
+      } catch {
+        const coms = await commerceService.listCommerces();
+        if (coms.length > 0) com = coms[0];
+      }
+
+      if (com) {
+        setActiveCommerce(com);
+        const sucs = await sucursalService.listByCommerce(com.id);
+        setBranches(sucs);
+        if (sucs.length > 0) {
+          setActiveBranch(sucs[0]);
+          const ords = await pedidoService.listBySucursal(sucs[0].id).catch(() => []);
+          setOrders(ords);
+        }
+      }
+    } catch (err) {
+      console.error('Error cargando panel comercio:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        const coms = await commerceService.listCommerces();
-        setCommerces(coms);
-        if (coms.length > 0) {
-          const firstCom = coms[0];
-          setActiveCommerce(firstCom);
-          const sucs = await sucursalService.listByCommerce(firstCom.id);
-          setBranches(sucs);
-          if (sucs.length > 0) {
-            setActiveBranch(sucs[0]);
-            const ords = await pedidoService.listBySucursal(sucs[0].id).catch(() => []);
-            setOrders(ords);
-          }
-        }
-      } catch (err) {
-        console.error('Error cargando panel comercio:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
     loadDashboard();
   }, []);
+
+  const handleTogglePause = async () => {
+    if (!activeCommerce) return;
+    setIsTogglingPause(true);
+    try {
+      const nuevoEstado = !activeCommerce.pausaManual;
+      const updated = await commerceService.togglePausaManual(activeCommerce.id, nuevoEstado);
+      setActiveCommerce(updated);
+    } catch (err) {
+      console.error('Error al cambiar pausa manual:', err);
+    } finally {
+      setIsTogglingPause(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -66,7 +86,23 @@ export const CommerceDashboardPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {activeCommerce && (
+            <button
+              type="button"
+              onClick={handleTogglePause}
+              disabled={isTogglingPause}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 ${
+                activeCommerce.pausaManual
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              {activeCommerce.pausaManual ? 'Reanudar Tienda' : 'Pausar Tienda'}
+            </button>
+          )}
+
           <Link to={APP_ROUTES.COMMERCE_ORDERS}>
             <Button variant="primary" size="sm" icon={<ShoppingBag className="w-4 h-4" />}>
               Ver Pedidos
@@ -79,6 +115,51 @@ export const CommerceDashboardPage: React.FC = () => {
           </Link>
         </div>
       </div>
+
+      {/* Operational Status Card */}
+      {activeCommerce && (
+        <div className="p-4 rounded-2xl bg-white border border-gray-100 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span
+              className={`w-3.5 h-3.5 rounded-full shrink-0 ${
+                activeCommerce.pausaManual
+                  ? 'bg-amber-500 animate-pulse'
+                  : activeCommerce.abierto !== false
+                  ? 'bg-emerald-500'
+                  : 'bg-rose-500'
+              }`}
+            />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black uppercase tracking-wider text-gray-900">
+                  Estado de la tienda:
+                </span>
+                <span
+                  className={`text-xs font-black px-2 py-0.5 rounded-full border uppercase tracking-wider ${
+                    activeCommerce.pausaManual
+                      ? 'bg-amber-50 text-amber-800 border-amber-200'
+                      : activeCommerce.abierto !== false
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border-rose-200'
+                  }`}
+                >
+                  {activeCommerce.pausaManual
+                    ? 'Pausa Manual'
+                    : activeCommerce.abierto !== false
+                    ? 'Abierto'
+                    : 'Cerrado'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Horario: {activeCommerce.horaApertura || '08:00'} - {activeCommerce.horaCierre || '22:00'} ({activeCommerce.diasAtencion || 'Lunes a Domingo'}) • Prep: ~{activeCommerce.tiempoPreparacionMin || 25} min
+              </p>
+            </div>
+          </div>
+          <div className="text-xs text-gray-500">
+            <span className="font-semibold text-gray-700">Pagos aceptados:</span> {activeCommerce.metodosPago || 'EFECTIVO, TARJETA, PSE, TRANSFERENCIA'}
+          </div>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

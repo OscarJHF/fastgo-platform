@@ -18,6 +18,14 @@ export interface Comercio {
   activo: boolean;
   categoria?: string;
   categoriaId?: number;
+  metodosPago?: string;
+  horaApertura?: string;
+  horaCierre?: string;
+  diasAtencion?: string;
+  tiempoPreparacionMin?: number;
+  pausaManual?: boolean;
+  abierto?: boolean;
+  estadoHorario?: string;
 }
 
 export interface ComercioRequest {
@@ -30,6 +38,12 @@ export interface ComercioRequest {
   banner?: string;
   nit?: string;
   activo?: boolean;
+  metodosPago?: string;
+  horaApertura?: string;
+  horaCierre?: string;
+  diasAtencion?: string;
+  tiempoPreparacionMin?: number;
+  pausaManual?: boolean;
 }
 
 export interface Sucursal {

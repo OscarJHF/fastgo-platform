@@ -7,6 +7,7 @@ export const pedidoService = {
     direccionId: number;
     costoEnvio?: number;
     observaciones?: string;
+    metodoPago?: string;
   }): Promise<Pedido> {
     const response = await apiClient.post<Pedido>('/api/pedidos', null, {
       params: {
@@ -14,7 +15,15 @@ export const pedidoService = {
         direccionId: params.direccionId,
         costoEnvio: params.costoEnvio,
         observaciones: params.observaciones,
+        metodoPago: params.metodoPago,
       },
+    });
+    return response.data;
+  },
+
+  async rechazarOrder(id: number, motivo?: string): Promise<Pedido> {
+    const response = await apiClient.put<Pedido>(`/api/pedidos/${id}/rechazar`, null, {
+      params: { motivo },
     });
     return response.data;
   },

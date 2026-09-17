@@ -17,6 +17,8 @@ export interface DatosUsuarioReutilizables {
 export interface LoginResponse {
   token: string;
   mensaje: string;
+  activeRole?: Role;
+  availableRoles?: Role[];
 }
 
 export interface RegisterRequest {
@@ -38,6 +40,8 @@ export interface AuthUser {
   foto?: string;
   estado: boolean;
   rol: Role;
+  activeRole?: Role;
+  availableRoles?: Role[];
 }
 
 export interface AuthState {

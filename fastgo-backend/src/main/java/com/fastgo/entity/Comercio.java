@@ -50,6 +50,24 @@ public class Comercio {
     @Column(name = "actualizado_en")
     private LocalDateTime actualizadoEn;
 
+    @Column(name = "metodos_pago", length = 255)
+    private String metodosPago;
+
+    @Column(name = "hora_apertura")
+    private java.time.LocalTime horaApertura;
+
+    @Column(name = "hora_cierre")
+    private java.time.LocalTime horaCierre;
+
+    @Column(name = "dias_atencion", length = 50)
+    private String diasAtencion;
+
+    @Column(name = "tiempo_preparacion_min")
+    private Integer tiempoPreparacionMin;
+
+    @Column(name = "pausa_manual")
+    private Boolean pausaManual;
+
     public Comercio() {
     }
 
@@ -62,6 +80,30 @@ public class Comercio {
 
         if (activo == null) {
             activo = true;
+        }
+
+        if (metodosPago == null) {
+            metodosPago = "EFECTIVO,NEQUI,DAVIPLATA,TRANSFERENCIA";
+        }
+
+        if (horaApertura == null) {
+            horaApertura = java.time.LocalTime.of(8, 0);
+        }
+
+        if (horaCierre == null) {
+            horaCierre = java.time.LocalTime.of(22, 0);
+        }
+
+        if (diasAtencion == null) {
+            diasAtencion = "1,2,3,4,5,6,7";
+        }
+
+        if (tiempoPreparacionMin == null) {
+            tiempoPreparacionMin = 20;
+        }
+
+        if (pausaManual == null) {
+            pausaManual = false;
         }
     }
 
@@ -172,5 +214,90 @@ public class Comercio {
 
     public void setActualizadoEn(LocalDateTime actualizadoEn) {
         this.actualizadoEn = actualizadoEn;
+    }
+
+    public String getMetodosPago() {
+        return metodosPago;
+    }
+
+    public void setMetodosPago(String metodosPago) {
+        this.metodosPago = metodosPago;
+    }
+
+    public java.time.LocalTime getHoraApertura() {
+        return horaApertura;
+    }
+
+    public void setHoraApertura(java.time.LocalTime horaApertura) {
+        this.horaApertura = horaApertura;
+    }
+
+    public java.time.LocalTime getHoraCierre() {
+        return horaCierre;
+    }
+
+    public void setHoraCierre(java.time.LocalTime horaCierre) {
+        this.horaCierre = horaCierre;
+    }
+
+    public String getDiasAtencion() {
+        return diasAtencion;
+    }
+
+    public void setDiasAtencion(String diasAtencion) {
+        this.diasAtencion = diasAtencion;
+    }
+
+    public Integer getTiempoPreparacionMin() {
+        return tiempoPreparacionMin;
+    }
+
+    public void setTiempoPreparacionMin(Integer tiempoPreparacionMin) {
+        this.tiempoPreparacionMin = tiempoPreparacionMin;
+    }
+
+    public Boolean getPausaManual() {
+        return pausaManual;
+    }
+
+    public void setPausaManual(Boolean pausaManual) {
+        this.pausaManual = pausaManual;
+    }
+
+    public boolean isAbierto() {
+        if (Boolean.FALSE.equals(activo)) return false;
+        if (Boolean.TRUE.equals(pausaManual)) return false;
+        if (horaApertura == null || horaCierre == null) return true;
+
+        java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Bogota"));
+        int currentDay = now.getDayOfWeek().getValue(); // 1 = Lunes ... 7 = Domingo
+        if (diasAtencion != null && !diasAtencion.isBlank()) {
+            String[] dias = diasAtencion.split(",");
+            boolean diaPermitido = false;
+            for (String d : dias) {
+                if (d.trim().equals(String.valueOf(currentDay))) {
+                    diaPermitido = true;
+                    break;
+                }
+            }
+            if (!diaPermitido) return false;
+        }
+
+        java.time.LocalTime currentTime = now.toLocalTime();
+        if (horaApertura.isBefore(horaCierre) || horaApertura.equals(horaCierre)) {
+            return !currentTime.isBefore(horaApertura) && !currentTime.isAfter(horaCierre);
+        } else {
+            return !currentTime.isBefore(horaApertura) || !currentTime.isAfter(horaCierre);
+        }
+    }
+
+    public boolean aceptaMetodoPago(String metodo) {
+        if (metodo == null || metodo.isBlank()) return false;
+        if (metodosPago == null || metodosPago.isBlank()) return true;
+        String clean = metodo.trim().toUpperCase();
+        for (String m : metodosPago.split(",")) {
+            if (m.trim().equalsIgnoreCase(clean)) return true;
+        }
+        return false;
     }
 }

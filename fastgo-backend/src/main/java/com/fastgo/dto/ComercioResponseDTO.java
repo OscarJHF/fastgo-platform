@@ -12,6 +12,13 @@ public class ComercioResponseDTO {
     private String nit;
     private Boolean activo;
     private String categoria;
+    private String metodosPago;
+    private String horaApertura;
+    private String horaCierre;
+    private String diasAtencion;
+    private Integer tiempoPreparacionMin;
+    private Boolean pausaManual;
+    private Boolean abierto;
 
     public ComercioResponseDTO() {
     }
@@ -119,4 +126,25 @@ public class ComercioResponseDTO {
     public void setCategoria(String categoria) {
         this.categoria = categoria;
     }
+
+    public String getMetodosPago() { return metodosPago; }
+    public void setMetodosPago(String metodosPago) { this.metodosPago = metodosPago; }
+
+    public String getHoraApertura() { return horaApertura; }
+    public void setHoraApertura(String horaApertura) { this.horaApertura = horaApertura; }
+
+    public String getHoraCierre() { return horaCierre; }
+    public void setHoraCierre(String horaCierre) { this.horaCierre = horaCierre; }
+
+    public String getDiasAtencion() { return diasAtencion; }
+    public void setDiasAtencion(String diasAtencion) { this.diasAtencion = diasAtencion; }
+
+    public Integer getTiempoPreparacionMin() { return tiempoPreparacionMin; }
+    public void setTiempoPreparacionMin(Integer tiempoPreparacionMin) { this.tiempoPreparacionMin = tiempoPreparacionMin; }
+
+    public Boolean getPausaManual() { return pausaManual; }
+    public void setPausaManual(Boolean pausaManual) { this.pausaManual = pausaManual; }
+
+    public Boolean getAbierto() { return abierto; }
+    public void setAbierto(Boolean abierto) { this.abierto = abierto; }
 }

@@ -36,17 +36,33 @@ public class JwtService {
     }
 
     public String generarToken(String correo, String rol) {
-        return Jwts.builder()
+        return generarToken(correo, rol, java.util.List.of(rol));
+    }
+
+    public String generarToken(String correo, String rol, java.util.List<String> availableRoles) {
+        var builder = Jwts.builder()
                 .subject(correo)
                 .claim("rol", rol)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(key)
-                .compact();
+                .signWith(key);
+        if (availableRoles != null && !availableRoles.isEmpty()) {
+            builder.claim("roles", availableRoles);
+        }
+        return builder.compact();
     }
 
     public String extraerRol(String token) {
         return claims(token).get("rol", String.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    public java.util.List<String> extraerRoles(String token) {
+        Object roles = claims(token).get("roles");
+        if (roles instanceof java.util.List<?>) {
+            return (java.util.List<String>) roles;
+        }
+        return java.util.List.of();
     }
 
     public String extraerCorreo(String token) {

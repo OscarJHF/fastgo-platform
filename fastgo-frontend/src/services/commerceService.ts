@@ -25,4 +25,14 @@ export const commerceService = {
   async deleteCommerce(id: number): Promise<void> {
     await apiClient.delete(`/api/comercios/${id}`);
   },
+
+  async getPropio(): Promise<Comercio> {
+    const response = await apiClient.get<Comercio>('/api/comercios/propio');
+    return response.data;
+  },
+
+  async togglePausaManual(id: number, pausaManual: boolean): Promise<Comercio> {
+    const response = await apiClient.patch<Comercio>(`/api/comercios/${id}/pausa-manual?pausaManual=${pausaManual}`);
+    return response.data;
+  },
 };

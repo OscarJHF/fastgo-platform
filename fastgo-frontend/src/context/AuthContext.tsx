@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { authService } from '../services/authService';
-import { AuthUser, LoginRequest, RegisterRequest, Role } from '../types';
+import { AuthUser, LoginRequest, LoginResponse, RegisterRequest, Role } from '../types';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -8,10 +8,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   role: Role | null;
-  login: (credentials: LoginRequest) => Promise<AuthUser>;
+  activeRole: Role | null;
+  availableRoles: Role[];
+  login: (credentials: LoginRequest) => Promise<{ user: AuthUser; loginResponse: LoginResponse }>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  cambiarRol: (nuevoRol: Role) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,19 +23,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(authService.getToken());
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
 
   const fetchCurrentUser = async () => {
     try {
       if (authService.getToken()) {
         const userData = await authService.getMe();
         setUser(userData);
+        if (userData.availableRoles && userData.availableRoles.length > 0) {
+          setAvailableRoles(userData.availableRoles);
+        } else if (userData.rol) {
+          setAvailableRoles([userData.rol]);
+        }
       } else {
         setUser(null);
+        setAvailableRoles([]);
       }
     } catch {
       authService.logout();
       setUser(null);
       setToken(null);
+      setAvailableRoles([]);
     } finally {
       setIsLoading(false);
     }
@@ -44,6 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleUnauthorized = () => {
       setUser(null);
       setToken(null);
+      setAvailableRoles([]);
     };
 
     window.addEventListener('fastgo:auth:unauthorized', handleUnauthorized);
@@ -52,14 +64,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (credentials: LoginRequest): Promise<AuthUser> => {
+  const login = async (credentials: LoginRequest): Promise<{ user: AuthUser; loginResponse: LoginResponse }> => {
     setIsLoading(true);
     try {
-      const response = await authService.login(credentials);
-      setToken(response.token);
+      const loginResponse = await authService.login(credentials);
+      setToken(loginResponse.token);
+      if (loginResponse.availableRoles && loginResponse.availableRoles.length > 0) {
+        setAvailableRoles(loginResponse.availableRoles);
+      }
       const userData = await authService.getMe();
       setUser(userData);
-      return userData;
+      return { user: userData, loginResponse };
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const cambiarRol = async (nuevoRol: Role) => {
+    setIsLoading(true);
+    try {
+      const response = await authService.cambiarRol(nuevoRol);
+      setToken(response.token);
+      if (response.availableRoles) {
+        setAvailableRoles(response.availableRoles);
+      }
+      const userData = await authService.getMe();
+      setUser(userData);
     } finally {
       setIsLoading(false);
     }
@@ -80,11 +110,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     authService.logout();
     setUser(null);
     setToken(null);
+    setAvailableRoles([]);
   };
 
   const refreshUser = async () => {
     await fetchCurrentUser();
   };
+
+  const effectiveRole = (user?.activeRole || user?.rol || null) as Role | null;
 
   return (
     <AuthContext.Provider
@@ -93,11 +126,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         token,
         isAuthenticated: !!token && !!user,
         isLoading,
-        role: user?.rol || null,
+        role: effectiveRole,
+        activeRole: effectiveRole,
+        availableRoles,
         login,
         register,
         logout,
         refreshUser,
+        cambiarRol,
       }}
     >
       {children}

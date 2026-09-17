@@ -98,6 +98,19 @@ export const CommerceProductsPage: React.FC = () => {
     }
   };
 
+  const handleToggleDisponibilidad = async (prod: Producto) => {
+    try {
+      const nuevo = !prod.disponible;
+      await productoService.cambiarDisponibilidad(prod.id, nuevo);
+      success(`Producto marcado como ${nuevo ? 'DISPONIBLE' : 'AGOTADO'}`);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === prod.id ? { ...p, disponible: nuevo } : p))
+      );
+    } catch {
+      showError('Error al cambiar la disponibilidad del producto');
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!window.confirm('¿Eliminar este producto permanentemente?')) return;
     try {
@@ -167,14 +180,31 @@ export const CommerceProductsPage: React.FC = () => {
               <h3 className="font-bold text-sm text-gray-900 line-clamp-1">{prod.nombre}</h3>
               <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion || 'Sin descripción'}</p>
               <div className="flex items-center justify-between pt-2">
-                <span className="font-black text-sm text-gray-900">{formatCurrency(prod.precio)}</span>
+                <div>
+                  <span className="font-black text-sm text-gray-900 block">{formatCurrency(prod.precio)}</span>
+                  <span className="text-[11px] text-gray-500">
+                    Stock: {prod.stock != null ? prod.stock : 'Ilimitado'}
+                  </span>
+                </div>
                 <Badge variant={prod.disponible ? 'success' : 'danger'}>
                   {prod.disponible ? 'Disponible' : 'Agotado'}
                 </Badge>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-gray-100 mt-3 flex justify-end">
+            <div className="pt-3 border-t border-gray-100 mt-3 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => handleToggleDisponibilidad(prod)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider transition-all ${
+                  prod.disponible
+                    ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                }`}
+              >
+                {prod.disponible ? 'Agotar' : 'Activar'}
+              </button>
+
               <button
                 onClick={() => handleDelete(prod.id)}
                 className="p-1.5 text-gray-400 hover:text-rose-600 transition-colors"
@@ -203,7 +233,7 @@ export const CommerceProductsPage: React.FC = () => {
             value={formData.descripcion}
             onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
           />
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Input
               label="Precio (COP)"
               type="number"
@@ -212,10 +242,17 @@ export const CommerceProductsPage: React.FC = () => {
               required
             />
             <Input
-              label="Tiempo Preparación (Minutos)"
+              label="Preparación (Min)"
               type="number"
               value={formData.tiempoPreparacion}
               onChange={(e) => setFormData({ ...formData, tiempoPreparacion: parseInt(e.target.value) })}
+            />
+            <Input
+              label="Stock Inicial"
+              type="number"
+              placeholder="Opcional"
+              value={formData.stock !== undefined ? formData.stock : ''}
+              onChange={(e) => setFormData({ ...formData, stock: e.target.value ? parseInt(e.target.value) : undefined })}
             />
           </div>
 

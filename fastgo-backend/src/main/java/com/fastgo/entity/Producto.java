@@ -37,6 +37,9 @@ public class Producto {
 
     private Boolean destacado;
 
+    @Column(name = "stock")
+    private Integer stock;
+
     @Column(name = "creado_en")
     private LocalDateTime creadoEn;
 
@@ -164,5 +167,13 @@ public class Producto {
 
     public void setActualizadoEn(LocalDateTime actualizadoEn) {
         this.actualizadoEn = actualizadoEn;
+    }
+
+    public Integer getStock() {
+        return stock;
+    }
+
+    public void setStock(Integer stock) {
+        this.stock = stock;
     }
 }

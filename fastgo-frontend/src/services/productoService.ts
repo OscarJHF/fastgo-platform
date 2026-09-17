@@ -45,4 +45,14 @@ export const productoService = {
   async deleteProduct(id: number): Promise<void> {
     await apiClient.delete(`/api/productos/${id}`);
   },
+
+  async listMisProductos(): Promise<Producto[]> {
+    const response = await apiClient.get<Producto[]>('/api/productos/comercio/mis-productos');
+    return response.data;
+  },
+
+  async cambiarDisponibilidad(id: number, disponible: boolean): Promise<Producto> {
+    const response = await apiClient.patch<Producto>(`/api/productos/${id}/disponibilidad?disponible=${disponible}`);
+    return response.data;
+  },
 };

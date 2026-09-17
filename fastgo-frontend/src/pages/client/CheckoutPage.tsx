@@ -6,6 +6,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { direccionService } from '../../services/direccionService';
 import { pedidoService } from '../../services/pedidoService';
+import { sucursalService } from '../../services/sucursalService';
+import { commerceService } from '../../services/commerceService';
 import { wompiService } from '../../services/wompiService';
 import { Direccion, WompiBank } from '../../types';
 import { Card } from '../../components/common/Card';
@@ -26,7 +28,10 @@ export const CheckoutPage: React.FC = () => {
   const [addresses, setAddresses] = useState<Direccion[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<number | null>(null);
   const [observaciones, setObservaciones] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'NEQUI' | 'PSE'>('NEQUI');
+  const [paymentMethod, setPaymentMethod] = useState<string>('EFECTIVO');
+  const [acceptedMethods, setAcceptedMethods] = useState<string[]>(['EFECTIVO']);
+  const [storeCommerce, setStoreCommerce] = useState<any>(null);
+  const [isStoreOpen, setIsStoreOpen] = useState<boolean>(true);
   const [nequiPhone, setNequiPhone] = useState(user?.telefono || '');
   const [banks, setBanks] = useState<WompiBank[]>([]);
   const [selectedBank, setSelectedBank] = useState<string>('');
@@ -42,6 +47,28 @@ export const CheckoutPage: React.FC = () => {
         if (addressList.length > 0) {
           const principal = addressList.find((a) => a.principal) || addressList[0];
           setSelectedAddressId(principal.id);
+        }
+
+        // Obtener datos del comercio para validar horario y medios de pago
+        if (cart?.sucursalId) {
+          try {
+            const sucursal = await sucursalService.getSucursal(cart.sucursalId);
+            if (sucursal?.comercioId) {
+              const comercio = await commerceService.getCommerce(sucursal.comercioId);
+              setStoreCommerce(comercio);
+              setIsStoreOpen(comercio.abierto !== false && !comercio.pausaManual);
+
+              if (comercio.metodosPago) {
+                const methods = comercio.metodosPago.split(',').map((m: string) => m.trim().toUpperCase());
+                setAcceptedMethods(methods);
+                if (methods.length > 0) {
+                  setPaymentMethod(methods[0]);
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('No se pudo verificar el estado del comercio:', e);
+          }
         }
 
         // Intento cargar bancos PSE si Wompi está disponible
@@ -61,7 +88,7 @@ export const CheckoutPage: React.FC = () => {
       }
     };
     initCheckout();
-  }, [user]);
+  }, [user, cart]);
 
   const handlePlaceOrder = async () => {
     if (!cart) {
@@ -70,6 +97,10 @@ export const CheckoutPage: React.FC = () => {
     }
     if (!selectedAddressId) {
       showError('Por favor selecciona o añade una dirección de entrega.');
+      return;
+    }
+    if (!isStoreOpen) {
+      showError('El comercio se encuentra actualmente cerrado. No es posible realizar el pedido en este momento.');
       return;
     }
 
@@ -81,6 +112,7 @@ export const CheckoutPage: React.FC = () => {
         direccionId: selectedAddressId,
         costoEnvio: 0,
         observaciones: observaciones.trim() || undefined,
+        metodoPago: paymentMethod,
       });
 
       // 2. Limpiar carrito en frontend
@@ -112,6 +144,19 @@ export const CheckoutPage: React.FC = () => {
       </Link>
 
       <h1 className="text-2xl font-black text-gray-900">Finalizar Compra</h1>
+
+      {!isStoreOpen && storeCommerce && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-sm">El comercio se encuentra actualmente cerrado</h4>
+            <p className="text-xs text-rose-700 mt-1">
+              {storeCommerce.nombre} no está recibiendo pedidos en este momento.
+              {storeCommerce.pausaManual ? ' La tienda está en pausa temporal.' : ` Horario de atención: ${storeCommerce.horaApertura || '08:00'} - ${storeCommerce.horaCierre || '22:00'} (${storeCommerce.diasAtencion || 'Lunes a Domingo'}).`}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-6">
         {/* Direcciones */}
@@ -172,54 +217,86 @@ export const CheckoutPage: React.FC = () => {
 
         {/* Método de Pago */}
         <Card className="p-6 space-y-4">
-          <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
-            <CreditCard className="w-5 h-5 text-gray-800" /> Método de Pago (Wompi)
-          </h3>
-
-          <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold">Pasarela Wompi en Modo Seguro / Demostración</p>
-              <p className="text-amber-800 text-[11px] mt-0.5">
-                La integración bancaria con Wompi está deshabilitada en este entorno (<code className="font-mono bg-amber-100 px-1 rounded">fastgo.wompi.enabled=false</code>). El pedido se registrará de manera autoritativa en estado <strong>PENDIENTE</strong> sin debitar fondos reales ni simular una aprobación financiera falsa.
-              </p>
-            </div>
+          <div className="flex items-center justify-between">
+            <h3 className="font-black text-base text-gray-900 flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-gray-800" /> Método de Pago
+            </h3>
+            {storeCommerce && (
+              <span className="text-[11px] text-gray-500">
+                Aceptados por {storeCommerce.nombre}
+              </span>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('NEQUI')}
-              className={`p-4 rounded-2xl border text-center transition-all ${
-                paymentMethod === 'NEQUI'
-                  ? 'border-purple-600 bg-purple-50 text-purple-900 font-bold'
-                  : 'border-gray-200 text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              🟣 Nequi
-            </button>
-            <button
-              type="button"
-              onClick={() => setPaymentMethod('PSE')}
-              className={`p-4 rounded-2xl border text-center transition-all ${
-                paymentMethod === 'PSE'
-                  ? 'border-blue-600 bg-blue-50 text-blue-900 font-bold'
-                  : 'border-gray-200 text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              🔵 PSE (Bancos)
-            </button>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {acceptedMethods.includes('EFECTIVO') && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('EFECTIVO')}
+                className={`p-3.5 rounded-2xl border text-center text-xs font-bold transition-all ${
+                  paymentMethod === 'EFECTIVO'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                💵 Efectivo
+              </button>
+            )}
+
+            {acceptedMethods.includes('TARJETA') && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('TARJETA')}
+                className={`p-3.5 rounded-2xl border text-center text-xs font-bold transition-all ${
+                  paymentMethod === 'TARJETA'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                💳 Tarjeta
+              </button>
+            )}
+
+            {acceptedMethods.includes('PSE') && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('PSE')}
+                className={`p-3.5 rounded-2xl border text-center text-xs font-bold transition-all ${
+                  paymentMethod === 'PSE'
+                    ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🔵 PSE
+              </button>
+            )}
+
+            {(acceptedMethods.includes('TRANSFERENCIA') || acceptedMethods.includes('NEQUI')) && (
+              <button
+                type="button"
+                onClick={() => setPaymentMethod('TRANSFERENCIA')}
+                className={`p-3.5 rounded-2xl border text-center text-xs font-bold transition-all ${
+                  paymentMethod === 'TRANSFERENCIA' || paymentMethod === 'NEQUI'
+                    ? 'border-purple-600 bg-purple-50 text-purple-900 shadow-sm'
+                    : 'border-gray-200 text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🟣 Nequi / Daviplata
+              </button>
+            )}
           </div>
 
-          {paymentMethod === 'NEQUI' ? (
+          {(paymentMethod === 'TRANSFERENCIA' || paymentMethod === 'NEQUI') && (
             <Input
-              label="Número de Celular Nequi"
+              label="Número de Celular para Confirmación de Transferencia"
               placeholder="3001234567"
               value={nequiPhone}
               onChange={(e) => setNequiPhone(e.target.value)}
-              helperText="Recibirás una notificación en tu app Nequi para autorizar el cobro."
+              helperText="Podrás enviar el comprobante directamente al comercio o al repartidor."
             />
-          ) : (
+          )}
+
+          {paymentMethod === 'PSE' && (
             <div className="space-y-1.5">
               <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">Banco PSE</label>
               <select
@@ -239,6 +316,18 @@ export const CheckoutPage: React.FC = () => {
               </select>
             </div>
           )}
+
+          {paymentMethod === 'EFECTIVO' && (
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800">
+              💵 Pagarás en efectivo al momento de recibir tu entrega de manos del domiciliario.
+            </div>
+          )}
+
+          {paymentMethod === 'TARJETA' && (
+            <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-xs text-blue-800">
+              💳 El datáfono del comercio será llevado por el repartidor para tu pago electrónico con tarjeta.
+            </div>
+          )}
         </Card>
 
         {/* Resumen Final y Botón de Pago */}
@@ -253,9 +342,9 @@ export const CheckoutPage: React.FC = () => {
               size="lg"
               onClick={handlePlaceOrder}
               isLoading={isLoading}
-              disabled={addresses.length === 0}
+              disabled={addresses.length === 0 || !isStoreOpen}
             >
-              Confirmar y Crear Pedido
+              {!isStoreOpen ? 'Comercio Cerrado' : 'Confirmar y Crear Pedido'}
             </Button>
           </div>
         </Card>

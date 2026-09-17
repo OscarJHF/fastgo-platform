@@ -60,31 +60,41 @@ public class UsuarioService {
         Rol rolAsignar = rolRepository.findByNombreIgnoreCase(requestedRol)
                 .orElseThrow(() -> new IllegalStateException("Rol " + requestedRol + " no configurado"));
 
-        if (usuarioRepository.existsByCorreoAndRolId(correo, rolAsignar.getId())) {
-            throw new IllegalArgumentException("El usuario ya tiene una cuenta registrada con el rol " + requestedRol);
-        }
+        java.util.Optional<Usuario> existenteOpt = usuarioRepository.findByCorreo(correo);
 
-        // Si el usuario ya existe con otro rol, podemos reutilizar datos personales si no se proporcionaron
-        List<Usuario> cuentasExistentes = usuarioRepository.findAllByCorreo(correo);
-        String nombre = request.getNombre() != null ? request.getNombre().trim() : "";
-        String apellido = request.getApellido() != null ? request.getApellido().trim() : "";
-        if (!cuentasExistentes.isEmpty()) {
-            Usuario existente = cuentasExistentes.get(0);
-            if (nombre.isBlank()) nombre = existente.getNombre();
-            if (apellido.isBlank()) apellido = existente.getApellido();
-            if ((telefono == null || telefono.isBlank()) && existente.getTelefono() != null) {
-                telefono = existente.getTelefono();
+        if (existenteOpt.isPresent()) {
+            Usuario usuario = existenteOpt.get();
+            if (usuario.hasRole(requestedRol)) {
+                throw new IllegalArgumentException("El usuario ya tiene una cuenta registrada con el rol " + requestedRol);
             }
+
+            if (request.getNombre() != null && !request.getNombre().trim().isBlank()) {
+                usuario.setNombre(request.getNombre().trim());
+            }
+            if (request.getApellido() != null && !request.getApellido().trim().isBlank()) {
+                usuario.setApellido(request.getApellido().trim());
+            }
+            if (telefono != null && !telefono.isBlank()) {
+                usuario.setTelefono(telefono);
+            }
+            if (request.getPassword() != null && !request.getPassword().isBlank()) {
+                usuario.setPassword(passwordEncoder.encode(request.getPassword()));
+            }
+
+            usuario.getRoles().add(rolAsignar);
+            usuario.setRol(rolAsignar); // Rol recién registrado pasa a ser el activo
+            return toDto(usuarioRepository.save(usuario));
         }
 
         Usuario usuario = new Usuario();
-        usuario.setNombre(nombre);
-        usuario.setApellido(apellido);
+        usuario.setNombre(request.getNombre() != null ? request.getNombre().trim() : "");
+        usuario.setApellido(request.getApellido() != null ? request.getApellido().trim() : "");
         usuario.setCorreo(correo);
         usuario.setTelefono(telefono == null || telefono.isBlank() ? null : telefono);
         usuario.setPassword(passwordEncoder.encode(request.getPassword()));
         usuario.setFoto(request.getFoto());
         usuario.setRol(rolAsignar);
+        usuario.getRoles().add(rolAsignar);
         usuario.setEstado(true);
 
         return toDto(usuarioRepository.save(usuario));
@@ -95,17 +105,24 @@ public class UsuarioService {
             return new com.fastgo.dto.DatosUsuarioReutilizablesDTO(null, null, "", null, List.of());
         }
         String c = correo.trim().toLowerCase();
-        List<Usuario> cuentas = usuarioRepository.findAllByCorreo(c);
-        if (cuentas.isEmpty()) {
+        java.util.Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(c);
+        if (usuarioOpt.isEmpty()) {
             return new com.fastgo.dto.DatosUsuarioReutilizablesDTO(null, null, c, null, List.of());
         }
-        Usuario base = cuentas.get(0);
-        List<String> roles = cuentas.stream()
-                .map(u -> u.getRol() != null ? u.getRol().getNombre() : "")
-                .filter(r -> !r.isBlank())
-                .toList();
+        Usuario base = usuarioOpt.get();
+        java.util.LinkedHashSet<String> roles = new java.util.LinkedHashSet<>();
+        if (base.getRol() != null && base.getRol().getNombre() != null) {
+            roles.add(base.getRol().getNombre().trim().toUpperCase());
+        }
+        if (base.getRoles() != null) {
+            for (Rol r : base.getRoles()) {
+                if (r != null && r.getNombre() != null) {
+                    roles.add(r.getNombre().trim().toUpperCase());
+                }
+            }
+        }
         return new com.fastgo.dto.DatosUsuarioReutilizablesDTO(
-                base.getNombre(), base.getApellido(), c, base.getTelefono(), roles);
+                base.getNombre(), base.getApellido(), c, base.getTelefono(), new java.util.ArrayList<>(roles));
     }
 
     public UsuarioResponseDTO obtenerUsuarioActual() {
@@ -132,8 +149,19 @@ public class UsuarioService {
     }
 
     private UsuarioResponseDTO toDto(Usuario usuario) {
+        String activeRole = usuario.getRol() != null ? usuario.getRol().getNombre().trim().toUpperCase() : "CLIENTE";
+        java.util.LinkedHashSet<String> rolesSet = new java.util.LinkedHashSet<>();
+        rolesSet.add(activeRole);
+        if (usuario.getRoles() != null) {
+            for (Rol r : usuario.getRoles()) {
+                if (r != null && r.getNombre() != null) {
+                    rolesSet.add(r.getNombre().trim().toUpperCase());
+                }
+            }
+        }
+        List<String> available = new java.util.ArrayList<>(rolesSet);
 
-        return new UsuarioResponseDTO(
+        UsuarioResponseDTO dto = new UsuarioResponseDTO(
                 usuario.getId(),
                 usuario.getNombre(),
                 usuario.getApellido(),
@@ -141,9 +169,10 @@ public class UsuarioService {
                 usuario.getTelefono(),
                 usuario.getFoto(),
                 usuario.getEstado(),
-                usuario.getRol() != null
-                        ? usuario.getRol().getNombre()
-                        : ""
+                activeRole
         );
+        dto.setActiveRole(activeRole);
+        dto.setAvailableRoles(available);
+        return dto;
     }
 }

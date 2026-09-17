@@ -10,6 +10,8 @@ public class UsuarioResponseDTO {
     private String foto;
     private Boolean estado;
     private String rol;
+    private String activeRole;
+    private java.util.List<String> availableRoles;
 
     public UsuarioResponseDTO() {
     }
@@ -32,6 +34,7 @@ public class UsuarioResponseDTO {
         this.foto = foto;
         this.estado = estado;
         this.rol = rol;
+        this.activeRole = rol;
     }
 
     public Integer getId() {
@@ -97,4 +100,10 @@ public class UsuarioResponseDTO {
     public void setRol(String rol) {
         this.rol = rol;
     }
+
+    public String getActiveRole() { return activeRole; }
+    public void setActiveRole(String activeRole) { this.activeRole = activeRole; }
+
+    public java.util.List<String> getAvailableRoles() { return availableRoles; }
+    public void setAvailableRoles(java.util.List<String> availableRoles) { this.availableRoles = availableRoles; }
 }

@@ -17,17 +17,36 @@ import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
 import { FastGoLogo } from '../common/FastGoLogo';
 import { APP_ROUTES } from '../../constants/routes';
+import { Role } from '../../types';
 
 export const Navbar: React.FC = () => {
-  const { user, isAuthenticated, role, logout } = useAuth();
+  const { user, isAuthenticated, role, activeRole, availableRoles, cambiarRol, logout } = useAuth();
   const { itemCount } = useCart();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
     navigate(APP_ROUTES.LOGIN);
   };
+
+  const handleSwitchRole = async (targetRole: Role) => {
+    setRoleMenuOpen(false);
+    setMobileMenuOpen(false);
+    await cambiarRol(targetRole);
+    if (targetRole === 'COMERCIO') {
+      navigate(APP_ROUTES.COMMERCE_DASHBOARD);
+    } else if (targetRole === 'DOMICILIARIO') {
+      navigate(APP_ROUTES.DELIVERY_DASHBOARD);
+    } else if (targetRole === 'ADMIN') {
+      navigate(APP_ROUTES.ADMIN_DASHBOARD);
+    } else {
+      navigate(APP_ROUTES.HOME);
+    }
+  };
+
+  const currentRole = activeRole || role;
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-sm transition-all">
@@ -39,16 +58,47 @@ export const Navbar: React.FC = () => {
               <FastGoLogo size="md" />
             </Link>
 
-            {/* Role Badge if Authenticated */}
-            {isAuthenticated && role && (
-              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${
-                role === 'ADMIN' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                role === 'COMERCIO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
-                role === 'DOMICILIARIO' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                'bg-blue-50 text-blue-700 border-blue-200'
-              }`}>
-                {role}
-              </span>
+            {/* Role Badge and Switcher if Authenticated */}
+            {isAuthenticated && currentRole && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => availableRoles.length > 1 && setRoleMenuOpen(!roleMenuOpen)}
+                  className={`text-[11px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-wider flex items-center gap-1.5 transition-all ${
+                    currentRole === 'ADMIN' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                    currentRole === 'COMERCIO' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                    currentRole === 'DOMICILIARIO' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                    'bg-blue-50 text-blue-700 border-blue-200'
+                  } ${availableRoles.length > 1 ? 'hover:shadow cursor-pointer' : 'cursor-default'}`}
+                  title={availableRoles.length > 1 ? 'Haz clic para cambiar de rol' : undefined}
+                >
+                  <span>{currentRole}</span>
+                  {availableRoles.length > 1 && (
+                    <span className="text-[10px] text-gray-500 font-normal">▼</span>
+                  )}
+                </button>
+
+                {roleMenuOpen && availableRoles.length > 1 && (
+                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-50 animate-fade-in">
+                    <div className="px-3 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100">
+                      Cambiar de Rol
+                    </div>
+                    {availableRoles.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => handleSwitchRole(r)}
+                        className={`w-full text-left px-3 py-2 text-xs font-semibold flex items-center justify-between hover:bg-gray-50 ${
+                          r === currentRole ? 'text-emerald-600 bg-emerald-50/50' : 'text-gray-700'
+                        }`}
+                      >
+                        <span>{r}</span>
+                        {r === currentRole && <span className="text-emerald-600 font-bold">✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 

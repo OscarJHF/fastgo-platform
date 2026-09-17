@@ -5,9 +5,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "usuarios", uniqueConstraints = {
-    @UniqueConstraint(name = "uq_usuarios_correo_rol", columnNames = {"correo", "rol_id"})
-})
+@Table(name = "usuarios")
 public class Usuario {
 
     @Id
@@ -44,6 +42,14 @@ public class Usuario {
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "rol_id")
     private Rol rol;
+
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(
+        name = "usuarios_roles",
+        joinColumns = @JoinColumn(name = "usuario_id"),
+        inverseJoinColumns = @JoinColumn(name = "rol_id")
+    )
+    private java.util.Set<Rol> roles = new java.util.HashSet<>();
 
     public Usuario() {}
 
@@ -91,4 +97,19 @@ public class Usuario {
 
     public Rol getRol() { return rol; }
     public void setRol(Rol rol) { this.rol = rol; }
+
+    public java.util.Set<Rol> getRoles() { return roles; }
+    public void setRoles(java.util.Set<Rol> roles) { this.roles = roles; }
+
+    public boolean hasRole(String roleName) {
+        if (roleName == null) return false;
+        String clean = roleName.trim().toUpperCase();
+        if (rol != null && clean.equalsIgnoreCase(rol.getNombre())) return true;
+        if (roles != null) {
+            for (Rol r : roles) {
+                if (r != null && clean.equalsIgnoreCase(r.getNombre())) return true;
+            }
+        }
+        return false;
+    }
 }

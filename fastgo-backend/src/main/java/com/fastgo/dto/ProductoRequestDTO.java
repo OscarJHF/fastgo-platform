@@ -24,6 +24,7 @@ public class ProductoRequestDTO {
     @Size(max=255, message="La imagen no puede superar 255 caracteres")
     private String imagenPrincipal;
     private Boolean disponible, destacado;
+    private Integer stock;
     public ProductoRequestDTO(){}
     public Integer getSucursalId(){return sucursalId;} public void setSucursalId(Integer v){sucursalId=v;}
     public Integer getCategoriaId(){return categoriaId;} public void setCategoriaId(Integer v){categoriaId=v;}
@@ -34,4 +35,5 @@ public class ProductoRequestDTO {
     public String getImagenPrincipal(){return imagenPrincipal;} public void setImagenPrincipal(String v){imagenPrincipal=v;}
     public Boolean getDisponible(){return disponible;} public void setDisponible(Boolean v){disponible=v;}
     public Boolean getDestacado(){return destacado;} public void setDestacado(Boolean v){destacado=v;}
+    public Integer getStock(){return stock;} public void setStock(Integer v){stock=v;}
 }

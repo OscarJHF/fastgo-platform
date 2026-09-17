@@ -28,10 +28,11 @@ public class PedidoController {
             @RequestParam @Positive Integer carritoId,
             @RequestParam @Positive Integer direccionId,
             @RequestParam(required = false) BigDecimal costoEnvio,
-            @RequestParam(required = false) @Size(max = 500) String observaciones) {
+            @RequestParam(required = false) @Size(max = 500) String observaciones,
+            @RequestParam(required = false) String metodoPago) {
 
         return ResponseEntity.ok(pedidoService.crearPedido(
-                carritoId, direccionId, costoEnvio, observaciones));
+                carritoId, direccionId, costoEnvio, observaciones, metodoPago));
     }
 
     @GetMapping("/{id}")
@@ -72,6 +73,14 @@ public class PedidoController {
     @PreAuthorize("hasRole('COMERCIO')")
     public ResponseEntity<Pedido> confirmar(@PathVariable @Positive Integer id) {
         return ResponseEntity.ok(pedidoService.confirmar(id));
+    }
+
+    @PutMapping("/{id}/rechazar")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<Pedido> rechazar(
+            @PathVariable @Positive Integer id,
+            @RequestParam(required = false) @Size(max = 255) String motivo) {
+        return ResponseEntity.ok(pedidoService.rechazar(id, motivo));
     }
 
     @PutMapping("/{id}/preparar")

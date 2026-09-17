@@ -16,6 +16,7 @@ export interface Producto {
   tiempoPreparacion?: number;
   imagenPrincipal?: string;
   disponible: boolean;
+  stock?: number;
   destacado?: boolean;
   creadoEn?: string;
   actualizadoEn?: string;
@@ -30,5 +31,6 @@ export interface ProductoRequest {
   tiempoPreparacion?: number;
   imagenPrincipal?: string;
   disponible?: boolean;
+  stock?: number;
   destacado?: boolean;
 }

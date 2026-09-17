@@ -39,6 +39,9 @@ public class Pedido {
     @Column(name = "tarifa_aceptada")
     private Boolean tarifaAceptada;
 
+    @Column(name = "metodo_pago", length = 50)
+    private String metodoPago;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
@@ -56,6 +59,7 @@ public class Pedido {
         if (estado == null || estado.isBlank()) estado = "PENDIENTE";
         if (costoEnvio == null) costoEnvio = BigDecimal.ZERO;
         if (tarifaAceptada == null) tarifaAceptada = true;
+        if (metodoPago == null || metodoPago.isBlank()) metodoPago = "EFECTIVO";
     }
 
     public Integer getId() { return id; }
@@ -93,6 +97,9 @@ public class Pedido {
 
     public String getObservaciones() { return observaciones; }
     public void setObservaciones(String observaciones) { this.observaciones = observaciones; }
+
+    public String getMetodoPago() { return metodoPago; }
+    public void setMetodoPago(String metodoPago) { this.metodoPago = metodoPago; }
 
     public LocalDateTime getCreadoEn() { return creadoEn; }
     public void setCreadoEn(LocalDateTime creadoEn) { this.creadoEn = creadoEn; }

@@ -20,6 +20,14 @@ export const authService = {
     return response.data;
   },
 
+  async cambiarRol(nuevoRol: string): Promise<LoginResponse> {
+    const response = await apiClient.post<LoginResponse>('/api/auth/cambiar-rol', { nuevoRol });
+    if (response.data.token) {
+      localStorage.setItem(TOKEN_STORAGE_KEY, response.data.token);
+    }
+    return response.data;
+  },
+
   async getDatosReutilizables(correo: string): Promise<DatosUsuarioReutilizables> {
     const response = await apiClient.get<DatosUsuarioReutilizables>(
       `/api/usuarios/datos-reutilizables?correo=${encodeURIComponent(correo)}`

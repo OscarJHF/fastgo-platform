@@ -49,6 +49,13 @@ interface Comercio {
   telefono?: string;
   direccion?: string;
   categoria?: string;
+  horaApertura?: string;
+  horaCierre?: string;
+  diasAtencion?: string;
+  tiempoPreparacionMin?: number;
+  pausaManual?: boolean;
+  metodosPago?: string;
+  abierto?: boolean;
 }
 
 interface Producto {
@@ -57,6 +64,7 @@ interface Producto {
   descripcion?: string;
   precio: number;
   disponible?: boolean;
+  stock?: number;
   sucursalId?: number;
   categoria?: string;
 }
@@ -73,6 +81,8 @@ interface UserProfile {
   correo: string;
   telefono?: string;
   rol: "CLIENTE" | "COMERCIO" | "DOMICILIARIO" | "ADMIN";
+  activeRole?: "CLIENTE" | "COMERCIO" | "DOMICILIARIO" | "ADMIN";
+  availableRoles?: ("CLIENTE" | "COMERCIO" | "DOMICILIARIO" | "ADMIN")[];
 }
 
 interface PedidoItem {
@@ -117,6 +127,18 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  // Multi-Rol y Selector
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
+  const [pendingRoles, setPendingRoles] = useState<string[]>([]);
+  const [switchingRole, setSwitchingRole] = useState<boolean>(false);
+
+  // Comercio y Tienda Propia
+  const [comercioPropio, setComercioPropio] = useState<any>(null);
+  const [togglingPause, setTogglingPause] = useState<boolean>(false);
+
+  // Método de Pago Seleccionado
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("EFECTIVO");
 
   // Formulario Login
   const [loginEmail, setLoginEmail] = useState<string>("");
@@ -169,6 +191,7 @@ export default function App() {
 
   // Carrito de compras
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState<string>("EFECTIVO");
 
   // Pedidos Cliente
   const [pedidosCliente, setPedidosCliente] = useState<PedidoItem[]>([]);
@@ -286,6 +309,113 @@ export default function App() {
   // ==========================================
   // AUTENTICACIÓN Y REGISTRO MULTI-ROL
   // ==========================================
+  const routeUserToDashboard = (role: string, jwt = token) => {
+    if (role === "CLIENTE") {
+      navigateTo("explorar");
+      fetchPedidosCliente(jwt);
+      fetchEncomiendasCliente(jwt);
+    } else if (role === "COMERCIO") {
+      navigateTo("comercio_cocina");
+      fetchPedidosComercio(jwt);
+      fetchComercioPropio(jwt);
+    } else if (role === "DOMICILIARIO") {
+      navigateTo("domi_disponibles");
+      fetchPedidosDomiciliario(jwt);
+      fetchEncomiendasDomi(jwt);
+    } else if (role === "ADMIN") {
+      navigateTo("admin_dashboard");
+      fetchAdminData(jwt);
+    }
+  };
+
+  const handleSwitchRole = async (targetRole: string) => {
+    if (!token) return;
+    setSwitchingRole(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/auth/cambiar-rol`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ nuevoRol: targetRole }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setToken(data.token);
+        const meRes = await fetch(`${apiUrl}/api/usuarios/me`, {
+          headers: { Authorization: `Bearer ${data.token}` },
+        });
+        if (meRes.ok) {
+          const profile: UserProfile = await meRes.json();
+          setUser(profile);
+          setShowRoleModal(false);
+          routeUserToDashboard(targetRole, data.token);
+          Alert.alert("Perfil Actualizado", `Has ingresado con éxito como ${targetRole}.`);
+        }
+      } else {
+        Alert.alert("Error", "No fue posible cambiar al rol seleccionado.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error de Red", e.message || "Error al cambiar de perfil.");
+    } finally {
+      setSwitchingRole(false);
+    }
+  };
+
+  const fetchComercioPropio = async (jwt = token) => {
+    if (!jwt) return;
+    try {
+      const res = await fetch(`${apiUrl}/api/comercios/propio`, {
+        headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComercioPropio(data);
+      }
+    } catch {}
+  };
+
+  const handleTogglePausaTienda = async () => {
+    if (!token || !comercioPropio) return;
+    setTogglingPause(true);
+    try {
+      const nuevoEstado = !comercioPropio.pausaManual;
+      const res = await fetch(`${apiUrl}/api/comercios/${comercioPropio.id}/pausa-manual?pausaManual=${nuevoEstado}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setComercioPropio(updated);
+        Alert.alert("Tienda Actualizada", `La tienda ha sido ${nuevoEstado ? "PAUSADA temporalmente" : "REANUDADA para recibir pedidos"}.`);
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Error al cambiar pausa.");
+    } finally {
+      setTogglingPause(false);
+    }
+  };
+
+  const handleToggleProductoDisponibilidad = async (prodId: number, estadoActual: boolean) => {
+    if (!token) return;
+    try {
+      const nuevo = !estadoActual;
+      const res = await fetch(`${apiUrl}/api/productos/${prodId}/disponibilidad?disponible=${nuevo}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        setProductos((prev) =>
+          prev.map((p) => (p.id === prodId ? { ...p, disponible: nuevo } : p))
+        );
+        Alert.alert("Producto Actualizado", `Disponibilidad cambiada a ${nuevo ? "DISPONIBLE" : "AGOTADO"}.`);
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Error al actualizar producto.");
+    }
+  };
+
   const handleLogin = async () => {
     if (!loginEmail.trim() || !loginPassword.trim()) {
       Alert.alert("Atención", "Por favor ingresa tu correo y contraseña.");
@@ -312,22 +442,14 @@ export default function App() {
           setLoginEmail("");
           setLoginPassword("");
 
-          // Redirección directa e inmediata según el rol
-          if (profile.rol === "CLIENTE") {
-            navigateTo("explorar");
-            fetchPedidosCliente(jwt);
-            fetchEncomiendasCliente(jwt);
-          } else if (profile.rol === "COMERCIO") {
-            navigateTo("comercio_cocina");
-            fetchPedidosComercio(jwt);
-          } else if (profile.rol === "DOMICILIARIO") {
-            navigateTo("domi_disponibles");
-            fetchPedidosDomiciliario(jwt);
-            fetchEncomiendasDomi(jwt);
-          } else if (profile.rol === "ADMIN") {
-            navigateTo("admin_dashboard");
-            fetchAdminData(jwt);
+          const roles = authData.availableRoles || profile.availableRoles || [profile.rol];
+          if (roles.length > 1) {
+            setPendingRoles(roles);
+            setShowRoleModal(true);
+            return;
           }
+
+          routeUserToDashboard(profile.activeRole || profile.rol, jwt);
         }
       } else {
         Alert.alert("Acceso Denegado", "Correo o contraseña incorrectos.");
@@ -584,6 +706,10 @@ export default function App() {
   // CARRITO Y CREACIÓN DE PEDIDOS
   // ==========================================
   const addToCart = (producto: Producto) => {
+    if (producto.disponible === false) {
+      Alert.alert("Producto Agotado", "Este producto no se encuentra disponible temporalmente.");
+      return;
+    }
     setCart((prev) => {
       const existing = prev.find((item) => item.producto.id === producto.id);
       if (existing) {
@@ -623,7 +749,21 @@ export default function App() {
       return;
     }
 
-    Alert.alert("¡Pedido Confirmado!", "Tu pedido ha sido registrado con éxito. En breve el restaurante iniciará su preparación.");
+    if (selectedComercio?.pausaManual) {
+      Alert.alert("Comercio en Pausa", "El comercio se encuentra en pausa operativa temporal. No es posible realizar pedidos en este momento.");
+      return;
+    }
+
+    const agotado = cart.find((i) => i.producto.disponible === false);
+    if (agotado) {
+      Alert.alert("Producto Agotado", `El producto "${agotado.producto.nombre}" está agotado. Elimínalo del carrito para continuar.`);
+      return;
+    }
+
+    Alert.alert(
+      "¡Pedido Confirmado!",
+      `Tu pedido ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${totalCart.toLocaleString()} COP.\nEn breve el restaurante iniciará su preparación.`
+    );
     setCart([]);
     await fetchPedidosCliente();
     navigateTo("mis_pedidos");
@@ -694,7 +834,7 @@ export default function App() {
     } catch {}
   };
 
-  const transitionPedidoComercio = async (pedidoId: number, action: "confirmar" | "preparar" | "listo") => {
+  const transitionPedidoComercio = async (pedidoId: number, action: "confirmar" | "preparar" | "listo" | "rechazar") => {
     try {
       const res = await fetch(`${apiUrl}/api/pedidos/${pedidoId}/${action}`, {
         method: "PUT",
@@ -999,12 +1139,28 @@ export default function App() {
                 filteredProducts.map((p) => (
                   <View key={p.id} style={styles.productCard}>
                     <View style={styles.productInfo}>
-                      <Text style={styles.productName}>{p.nombre}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={styles.productName}>{p.nombre}</Text>
+                        {p.disponible === false && (
+                          <View style={[styles.statusPill, { backgroundColor: "#FEE2E2" }]}>
+                            <Text style={{ color: "#991B1B", fontSize: 9, fontWeight: "bold" }}>AGOTADO</Text>
+                          </View>
+                        )}
+                      </View>
                       <Text style={styles.productDesc}>{p.descripcion || "Preparación fresca con los mejores ingredientes"}</Text>
-                      <Text style={styles.productPrice}>${p.precio.toLocaleString()} COP</Text>
+                      <Text style={styles.productPrice}>${p.precio.toLocaleString()} COP{p.stock != null ? ` • Stock: ${p.stock}` : ""}</Text>
                     </View>
-                    <TouchableOpacity style={styles.addBtn} onPress={() => addToCart(p)}>
-                      <Text style={styles.addBtnText}>+ Agregar</Text>
+                    <TouchableOpacity
+                      style={[
+                        styles.addBtn,
+                        p.disponible === false && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" }
+                      ]}
+                      onPress={() => addToCart(p)}
+                      disabled={p.disponible === false}
+                    >
+                      <Text style={[styles.addBtnText, p.disponible === false && { color: "#94A3B8" }]}>
+                        {p.disponible === false ? "Agotado" : "+ Agregar"}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 ))
@@ -1064,9 +1220,64 @@ export default function App() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={[styles.solidBtn, { marginTop: 16 }]} onPress={handleCheckout}>
+                {/* Banner de comercio cerrado o pausado */}
+                {selectedComercio?.pausaManual && (
+                  <View style={styles.closedStoreBanner}>
+                    <Text style={{ fontSize: 16 }}>⚠️</Text>
+                    <Text style={{ flex: 1, fontSize: 11, color: "#991B1B", fontWeight: "bold" }}>
+                      El comercio seleccionado se encuentra pausado temporalmente y no recibe pedidos en este momento.
+                    </Text>
+                  </View>
+                )}
+
+                {/* Métodos de Pago Habilitados */}
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.inputLabel}>Método de Pago:</Text>
+                  <View style={styles.paymentMethodsRow}>
+                    {[
+                      { id: "EFECTIVO", label: "💵 Efectivo" },
+                      { id: "TARJETA", label: "💳 Tarjeta" },
+                      { id: "PSE", label: "🏦 PSE" },
+                      { id: "TRANSFERENCIA", label: "📲 Transferencia" },
+                    ].map((m) => (
+                      <TouchableOpacity
+                        key={m.id}
+                        style={[
+                          styles.paymentMethodChip,
+                          metodoPagoSeleccionado === m.id && styles.paymentMethodChipActive,
+                        ]}
+                        onPress={() => setMetodoPagoSeleccionado(m.id)}
+                      >
+                        <Text
+                          style={[
+                            styles.paymentMethodText,
+                            metodoPagoSeleccionado === m.id && styles.paymentMethodTextActive,
+                          ]}
+                        >
+                          {m.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.solidBtn,
+                    {
+                      marginTop: 14,
+                      backgroundColor: selectedComercio?.pausaManual ? "#94A3B8" : Theme.primary,
+                    },
+                  ]}
+                  onPress={handleCheckout}
+                  disabled={Boolean(selectedComercio?.pausaManual)}
+                >
                   <Text style={styles.solidBtnText}>
-                    {token ? "Confirmar y Realizar Pedido" : "Iniciar Sesión para Pedir"}
+                    {token
+                      ? selectedComercio?.pausaManual
+                        ? "Comercio en Pausa"
+                        : "Confirmar y Realizar Pedido"
+                      : "Iniciar Sesión para Pedir"}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1431,10 +1642,43 @@ export default function App() {
             <View style={styles.rowBetween}>
               <View>
                 <Text style={styles.pageTitle}>Gestión de Cocina</Text>
-                <Text style={styles.subtext}>Sucursal Centro Aliada (ID: 1)</Text>
+                <Text style={styles.subtext}>
+                  {comercioPropio ? comercioPropio.nombre : "Sucursal Aliada FastGo"}
+                </Text>
               </View>
               <TouchableOpacity onPress={() => fetchPedidosComercio()}>
                 <Text style={styles.linkAction}>↻ Refrescar</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Banner de Estado Operacional de la Tienda */}
+            <View style={{ marginTop: 12, padding: 12, backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, borderColor: Theme.border, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                    Estado: {comercioPropio?.pausaManual ? "⏸️ Pausada" : "🟢 Abierta"}
+                  </Text>
+                  <View style={[styles.statusPill, { backgroundColor: comercioPropio?.pausaManual ? "#FEF3C7" : "#DCFCE7" }]}>
+                    <Text style={{ color: comercioPropio?.pausaManual ? "#92400E" : "#166534", fontSize: 9, fontWeight: "bold" }}>
+                      {comercioPropio?.pausaManual ? "PAUSA" : "ACTIVA"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 2 }}>
+                  Horario: {comercioPropio?.horaApertura || "08:00"} - {comercioPropio?.horaCierre || "22:00"} • Pagos: {comercioPropio?.metodosPago || "Todos"}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.smallActionBtn,
+                  { backgroundColor: comercioPropio?.pausaManual ? Theme.primary : Theme.warning },
+                ]}
+                onPress={handleTogglePausaTienda}
+                disabled={togglingPause}
+              >
+                <Text style={styles.smallActionText}>
+                  {comercioPropio?.pausaManual ? "Reanudar" : "Pausar"}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -1458,12 +1702,20 @@ export default function App() {
                   {/* Transiciones Autorizadas */}
                   <View style={styles.actionButtonRow}>
                     {p.estado === "PENDIENTE" && (
-                      <TouchableOpacity
-                        style={[styles.smallActionBtn, { backgroundColor: Theme.info }]}
-                        onPress={() => transitionPedidoComercio(p.id, "confirmar")}
-                      >
-                        <Text style={styles.smallActionText}>✓ Confirmar Pedido</Text>
-                      </TouchableOpacity>
+                      <>
+                        <TouchableOpacity
+                          style={[styles.smallActionBtn, { backgroundColor: Theme.info, flex: 1, marginRight: 6 }]}
+                          onPress={() => transitionPedidoComercio(p.id, "confirmar")}
+                        >
+                          <Text style={styles.smallActionText}>✓ Confirmar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.smallActionBtn, { backgroundColor: Theme.danger, flex: 1 }]}
+                          onPress={() => transitionPedidoComercio(p.id, "rechazar")}
+                        >
+                          <Text style={styles.smallActionText}>✕ Rechazar</Text>
+                        </TouchableOpacity>
+                      </>
                     )}
                     {p.estado === "CONFIRMADO" && (
                       <TouchableOpacity
@@ -1744,6 +1996,39 @@ export default function App() {
                   <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Teléfono:</Text>
                     <Text style={styles.infoValue}>{user.telefono}</Text>
+                  </View>
+                )}
+
+                {/* Perfiles Asociados y Cambio de Rol */}
+                {user.availableRoles && user.availableRoles.length > 1 && (
+                  <View style={{ marginTop: 16, padding: 14, backgroundColor: "#F8FAFC", borderRadius: 14, borderWidth: 1, borderColor: Theme.border }}>
+                    <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text, marginBottom: 4 }}>
+                      🔄 Cambiar de Perfil / Rol
+                    </Text>
+                    <Text style={{ fontSize: 11, color: Theme.textMuted, marginBottom: 10 }}>
+                      Tu cuenta cuenta con múltiples perfiles autorizados. Toca para cambiar de modo:
+                    </Text>
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                      {user.availableRoles.map((r) => {
+                        const isActive = (user.activeRole || user.rol) === r;
+                        return (
+                          <TouchableOpacity
+                            key={r}
+                            onPress={() => !isActive && handleSwitchRole(r)}
+                            disabled={switchingRole}
+                            style={[
+                              styles.roleChoiceBtn,
+                              isActive && { backgroundColor: Theme.primary, borderColor: Theme.primary },
+                            ]}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: "bold", color: isActive ? "#FFFFFF" : Theme.text }}>
+                              {r === "CLIENTE" ? "🛍️ Cliente" : r === "COMERCIO" ? "🏪 Comercio" : r === "DOMICILIARIO" ? "🛵 Domiciliario" : "⚙️ Admin"}
+                              {isActive ? " (Activo)" : ""}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   </View>
                 )}
 
@@ -2142,6 +2427,54 @@ export default function App() {
           </>
         )}
       </View>
+
+      {/* MODAL DE SELECCIÓN DE PERFIL / MULTI-ROL */}
+      {showRoleModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCardContainer}>
+            <Text style={styles.modalEmoji}>👋</Text>
+            <Text style={styles.modalHeaderTitle}>¿Cómo quieres usar FASTGO hoy?</Text>
+            <Text style={styles.modalHeaderSub}>
+              Tu cuenta tiene múltiples perfiles habilitados. Selecciona el perfil con el que deseas ingresar en esta sesión:
+            </Text>
+
+            <View style={{ gap: 10, marginTop: 14 }}>
+              {pendingRoles.map((r) => {
+                const roleMeta: Record<string, { label: string; desc: string; icon: string }> = {
+                  CLIENTE: { label: "Cliente", desc: "Comprar comida, productos y solicitar envíos", icon: "🛍️" },
+                  COMERCIO: { label: "Comercio", desc: "Gestionar mi tienda, productos y órdenes", icon: "🏪" },
+                  DOMICILIARIO: { label: "Domiciliario", desc: "Aceptar despachos y repartir encomiendas", icon: "🛵" },
+                  ADMIN: { label: "Administrador", desc: "Supervisión y control de la plataforma", icon: "⚙️" },
+                };
+                const meta = roleMeta[r] || { label: r, desc: "Ingresar como " + r, icon: "👤" };
+
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    onPress={() => handleSwitchRole(r)}
+                    disabled={switchingRole}
+                    style={styles.modalRoleSelectionBtn}
+                  >
+                    <Text style={{ fontSize: 24, marginRight: 12 }}>{meta.icon}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 14, fontWeight: "bold", color: Theme.text }}>{meta.label}</Text>
+                      <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>{meta.desc}</Text>
+                    </View>
+                    <Text style={{ fontSize: 16, color: Theme.primary, fontWeight: "bold" }}>→</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {switchingRole && (
+              <View style={{ marginTop: 12, alignItems: "center" }}>
+                <ActivityIndicator color={Theme.primary} />
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 4 }}>Cambiando de perfil...</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -3126,5 +3459,103 @@ const styles = StyleSheet.create({
     color: "#E2E8F0",
     fontSize: 11,
     lineHeight: 15,
+  },
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+    padding: 20,
+  },
+  modalCardContainer: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
+  modalEmoji: {
+    fontSize: 40,
+    marginBottom: 8,
+  },
+  modalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Theme.text,
+    textAlign: "center",
+    marginBottom: 6,
+  },
+  modalHeaderSub: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  modalRoleSelectionBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: Theme.border,
+    borderRadius: 14,
+    padding: 14,
+    width: "100%",
+  },
+  roleChoiceBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: "#FFFFFF",
+  },
+  paymentMethodsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  paymentMethodChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: "#FFFFFF",
+  },
+  paymentMethodChipActive: {
+    backgroundColor: Theme.primary,
+    borderColor: Theme.primary,
+  },
+  paymentMethodText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.text,
+  },
+  paymentMethodTextActive: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  closedStoreBanner: {
+    backgroundColor: "#FEF2F2",
+    borderColor: "#FECACA",
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
 });

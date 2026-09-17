@@ -2,6 +2,7 @@ package com.fastgo.service;
 
 import com.fastgo.dto.ProductoRequestDTO;
 import com.fastgo.dto.ProductoResponseDTO;
+import com.fastgo.entity.Comercio;
 import com.fastgo.entity.Producto;
 import com.fastgo.entity.Sucursal;
 import com.fastgo.entity.Usuario;
@@ -207,6 +208,35 @@ public class ProductoService {
         if (datos.getDestacado() != null) {
             producto.setDestacado(datos.getDestacado());
         }
+
+        if (datos.getStock() != null) {
+            producto.setStock(datos.getStock());
+        }
+    }
+
+    public List<ProductoResponseDTO> listarPorComercioPropio() {
+        Usuario usuario = usuario();
+        Comercio comercio = comercioRepository.findByUsuarioId(usuario.getId())
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+
+        List<Sucursal> sucursales = sucursalRepository.findByComercioId(comercio.getId());
+        return sucursales.stream()
+                .flatMap(s -> productoRepository.findBySucursalId(s.getId()).stream())
+                .map(this::toDto)
+                .toList();
+    }
+
+    public ProductoResponseDTO cambiarDisponibilidad(Integer id, Boolean disponible) {
+        Producto producto = productoRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+
+        Sucursal sucursal = sucursalRepository.findById(producto.getSucursalId())
+                .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
+
+        exigirPropietarioComercio(sucursal.getComercioId());
+
+        producto.setDisponible(disponible != null ? disponible : !Boolean.TRUE.equals(producto.getDisponible()));
+        return toDto(productoRepository.save(producto));
     }
 
     private void exigirPropietarioComercio(Integer comercioId) {
@@ -257,7 +287,8 @@ public class ProductoService {
                 producto.getTiempoPreparacion(),
                 producto.getImagenPrincipal(),
                 producto.getDisponible(),
-                producto.getDestacado()
+                producto.getDestacado(),
+                producto.getStock()
         );
     }
 }

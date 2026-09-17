@@ -65,6 +65,20 @@ public class ProductoController {
         return ResponseEntity.ok(service.actualizar(id, datos));
     }
 
+    @GetMapping("/comercio/mis-productos")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<List<ProductoResponseDTO>> misProductos() {
+        return ResponseEntity.ok(service.listarPorComercioPropio());
+    }
+
+    @PatchMapping("/{id}/disponibilidad")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<ProductoResponseDTO> cambiarDisponibilidad(
+            @PathVariable @Positive Integer id,
+            @RequestParam(required = false) Boolean disponible) {
+        return ResponseEntity.ok(service.cambiarDisponibilidad(id, disponible));
+    }
+
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('COMERCIO')")
     public ResponseEntity<Void> eliminar(@PathVariable @Positive Integer id) {
