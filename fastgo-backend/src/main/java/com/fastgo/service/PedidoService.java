@@ -22,6 +22,7 @@ public class PedidoService {
     private final SucursalRepository sucursalRepository;
     private final ComercioRepository comercioRepository;
     private final ProductoRepository productoRepository;
+    private final TarifaService tarifaService;
 
     public PedidoService(
             PedidoRepository pedidoRepository,
@@ -32,7 +33,8 @@ public class PedidoService {
             DireccionRepository direccionRepository,
             SucursalRepository sucursalRepository,
             ComercioRepository comercioRepository,
-            ProductoRepository productoRepository) {
+            ProductoRepository productoRepository,
+            TarifaService tarifaService) {
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
         this.carritoService = carritoService;
@@ -42,6 +44,7 @@ public class PedidoService {
         this.sucursalRepository = sucursalRepository;
         this.comercioRepository = comercioRepository;
         this.productoRepository = productoRepository;
+        this.tarifaService = tarifaService;
     }
 
     @Transactional
@@ -55,12 +58,9 @@ public class PedidoService {
 
         Carrito carrito = carritoService.obtenerPropio(carritoId);
 
-        if (!direccionRepository
+        Direccion direccion = direccionRepository
                 .findByIdAndUsuarioId(direccionId, usuario.getId())
-                .isPresent()) {
-            throw new RuntimeException(
-                    "La dirección no existe o no pertenece al usuario");
-        }
+                .orElseThrow(() -> new RuntimeException("La dirección no existe o no pertenece al usuario"));
 
         List<CarritoDetalle> detalles =
                 carritoDetalleService.detallesInternos(carritoId);
@@ -70,9 +70,16 @@ public class PedidoService {
                     "No se puede crear un pedido con un carrito vacío");
         }
 
-        // El cliente no puede decidir cuánto cuesta el envío. Hasta implementar
-        // el cálculo de tarifa por distancia/zona, el backend usa una tarifa fija de 0.
-        costoEnvio = BigDecimal.ZERO;
+        Sucursal sucursal = sucursalRepository.findById(carrito.getSucursalId()).orElse(null);
+        BigDecimal distanciaKm = BigDecimal.ONE;
+        if (sucursal != null && sucursal.getLatitud() != null && sucursal.getLongitud() != null
+                && direccion.getLatitud() != null && direccion.getLongitud() != null) {
+            distanciaKm = tarifaService.calcularDistanciaHaversine(
+                    sucursal.getLatitud(), sucursal.getLongitud(),
+                    direccion.getLatitud(), direccion.getLongitud());
+        }
+
+        costoEnvio = tarifaService.calcularTarifaPorDistancia(distanciaKm);
 
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CarritoDetalle detalleCarrito : detalles) {
@@ -98,7 +105,9 @@ public class PedidoService {
         pedido.setDireccionId(direccionId);
         pedido.setEstado("PENDIENTE");
         pedido.setSubtotal(subtotal);
+        pedido.setDistanciaKm(distanciaKm);
         pedido.setCostoEnvio(costoEnvio);
+        pedido.setTarifaAceptada(true);
         pedido.setTotal(subtotal.add(costoEnvio));
         pedido.setObservaciones(normalizarObservaciones(observaciones));
 

@@ -8,6 +8,7 @@ import { Button } from '../../components/common/Button';
 import { FastGoLogo } from '../../components/common/FastGoLogo';
 import { APP_ROUTES } from '../../constants/routes';
 import { parseApiError } from '../../utils/errorHandler';
+import { Role } from '../../types';
 
 export const LoginPage: React.FC = () => {
   const { login, role } = useAuth();
@@ -22,6 +23,8 @@ export const LoginPage: React.FC = () => {
 
   const from = (location.state as any)?.from?.pathname || null;
 
+  const [selectedRol, setSelectedRol] = useState<Role | ''>('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -33,12 +36,23 @@ export const LoginPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await login({ correo, password });
-      success('¡Bienvenido a FastGo!');
+      const loggedUser = await login({
+        correo,
+        password,
+        rol: selectedRol ? selectedRol : undefined,
+      });
+      success(`¡Bienvenido a FastGo, ${loggedUser.nombre}!`);
+      
       if (from) {
         navigate(from, { replace: true });
+      } else if (loggedUser.rol === 'COMERCIO') {
+        navigate(APP_ROUTES.COMMERCE_DASHBOARD, { replace: true });
+      } else if (loggedUser.rol === 'DOMICILIARIO') {
+        navigate(APP_ROUTES.DELIVERY_DASHBOARD, { replace: true });
+      } else if (loggedUser.rol === 'ADMIN') {
+        navigate(APP_ROUTES.ADMIN_DASHBOARD, { replace: true });
       } else {
-        navigate(APP_ROUTES.HOME);
+        navigate(APP_ROUTES.HOME, { replace: true });
       }
     } catch (err) {
       const parsed = parseApiError(err);

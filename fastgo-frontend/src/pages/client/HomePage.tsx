@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, Store, Sparkles, MapPin, ChevronRight, Utensils, ShoppingCart } from 'lucide-react';
+import { Search, Store, Sparkles, MapPin, ChevronRight, Utensils, ShoppingCart, Package, Bike, ArrowRight } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { categoriaService } from '../../services/categoriaService';
 import { productoService } from '../../services/productoService';
@@ -94,6 +94,41 @@ export const HomePage: React.FC = () => {
 
         {/* Decorative graphic */}
         <div className="absolute -right-10 -bottom-10 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      </section>
+
+      {/* Servicios Principales FastGo */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-200/60 shadow-sm flex items-center justify-between group hover:border-emerald-300 transition-all">
+          <div className="space-y-1 max-w-[75%]">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full">
+              Comercios Locales
+            </span>
+            <h2 className="text-xl font-black text-gray-900 mt-1">Pedir en Restaurantes y Tiendas</h2>
+            <p className="text-xs text-gray-600">Explora platos, bebidas y productos de comercios aliados.</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+            <Store className="w-6 h-6" />
+          </div>
+        </div>
+
+        <Link
+          to={APP_ROUTES.ENCOMIENDAS}
+          className="p-6 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-md flex items-center justify-between group hover:shadow-xl hover:ring-2 hover:ring-emerald-500/50 transition-all border border-slate-700"
+        >
+          <div className="space-y-1 max-w-[75%]">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 px-2.5 py-0.5 rounded-full border border-emerald-800/40">
+                Nuevo Servicio
+              </span>
+              <span className="text-[11px] font-bold text-slate-300">Desde $2.000 COP</span>
+            </div>
+            <h2 className="text-xl font-black text-white mt-1">Enviar una Encomienda</h2>
+            <p className="text-xs text-slate-300">Envíos urbanos exprés de paquetes, documentos y encargos.</p>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center shadow-md group-hover:scale-110 transition-transform font-black">
+            <ArrowRight className="w-6 h-6" />
+          </div>
+        </Link>
       </section>
 
       {/* Category Pills */}

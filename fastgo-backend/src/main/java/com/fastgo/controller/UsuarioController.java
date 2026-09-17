@@ -31,6 +31,12 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarioService.obtenerUsuarioActual());
     }
 
+    @GetMapping("/datos-reutilizables")
+    public ResponseEntity<com.fastgo.dto.DatosUsuarioReutilizablesDTO> datosReutilizables(
+            @RequestParam(required = false) String correo) {
+        return ResponseEntity.ok(usuarioService.obtenerDatosReutilizables(correo));
+    }
+
     @PostMapping
     public ResponseEntity<UsuarioResponseDTO> registrar(
             @Valid @RequestBody RegistroUsuarioRequest request) {

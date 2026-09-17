@@ -8,7 +8,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   role: Role | null;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest) => Promise<AuthUser>;
   register: (data: RegisterRequest) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -52,13 +52,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (credentials: LoginRequest) => {
+  const login = async (credentials: LoginRequest): Promise<AuthUser> => {
     setIsLoading(true);
     try {
       const response = await authService.login(credentials);
       setToken(response.token);
       const userData = await authService.getMe();
       setUser(userData);
+      return userData;
     } finally {
       setIsLoading(false);
     }
@@ -68,8 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(true);
     try {
       await authService.register(data);
-      // Auto login tras registro exitoso
-      await login({ correo: data.correo, password: data.password });
+      // Auto login tras registro exitoso con el rol registrado
+      await login({ correo: data.correo, password: data.password, rol: data.rol });
     } finally {
       setIsLoading(false);
     }

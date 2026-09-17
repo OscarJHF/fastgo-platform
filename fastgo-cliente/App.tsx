@@ -121,14 +121,44 @@ export default function App() {
   // Formulario Login
   const [loginEmail, setLoginEmail] = useState<string>("");
   const [loginPassword, setLoginPassword] = useState<string>("");
+  const [showLoginPassword, setShowLoginPassword] = useState<boolean>(false);
 
-  // Formulario Registro con selección de rol permitida
+  // Formulario Registro con selección de rol permitida y confirmación
   const [regNombre, setRegNombre] = useState<string>("");
   const [regApellido, setRegApellido] = useState<string>("");
   const [regCorreo, setRegCorreo] = useState<string>("");
   const [regTelefono, setRegTelefono] = useState<string>("");
   const [regPassword, setRegPassword] = useState<string>("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState<string>("");
+  const [showRegPassword, setShowRegPassword] = useState<boolean>(false);
+  const [showRegConfirmPassword, setShowRegConfirmPassword] = useState<boolean>(false);
   const [regRol, setRegRol] = useState<"CLIENTE" | "COMERCIO" | "DOMICILIARIO">("CLIENTE");
+  const [reusableData, setReusableData] = useState<{
+    nombre?: string;
+    apellido?: string;
+    telefono?: string;
+    rolesExistentes: string[];
+  } | null>(null);
+
+  // Encomiendas Urbanas State
+  const [encomiendasCliente, setEncomiendasCliente] = useState<any[]>([]);
+  const [encomiendasDisponibles, setEncomiendasDisponibles] = useState<any[]>([]);
+  const [misEncomiendasDomi, setMisEncomiendasDomi] = useState<any[]>([]);
+  const [encomiendaTab, setEncomiendaTab] = useState<"nueva" | "mis_envios">("nueva");
+  const [domiServiceTab, setDomiServiceTab] = useState<"pedidos" | "encomiendas">("pedidos");
+
+  // Formulario de Encomienda
+  const [encRemitenteNombre, setEncRemitenteNombre] = useState<string>("");
+  const [encRemitenteTel, setEncRemitenteTel] = useState<string>("");
+  const [encOrigen, setEncOrigen] = useState<string>("");
+  const [encDestinatarioNombre, setEncDestinatarioNombre] = useState<string>("");
+  const [encDestinatarioTel, setEncDestinatarioTel] = useState<string>("");
+  const [encDestino, setEncDestino] = useState<string>("");
+  const [encDescripcion, setEncDescripcion] = useState<string>("");
+  const [encTamano, setEncTamano] = useState<string>("Pequeño (< 2kg)");
+  const [encDistanciaKm, setEncDistanciaKm] = useState<number>(2.0);
+  const [encTarifaAceptada, setEncTarifaAceptada] = useState<boolean>(false);
+  const [encSubmitting, setEncSubmitting] = useState<boolean>(false);
 
   // Catálogos y Exploración
   const [comercios, setComercios] = useState<Comercio[]>([]);
@@ -239,9 +269,15 @@ export default function App() {
     setRefreshing(true);
     await checkConnection(apiUrl);
     if (token && user) {
-      if (user.rol === "CLIENTE") await fetchPedidosCliente();
+      if (user.rol === "CLIENTE") {
+        await fetchPedidosCliente();
+        await fetchEncomiendasCliente();
+      }
       if (user.rol === "COMERCIO") await fetchPedidosComercio();
-      if (user.rol === "DOMICILIARIO") await fetchPedidosDomiciliario();
+      if (user.rol === "DOMICILIARIO") {
+        await fetchPedidosDomiciliario();
+        await fetchEncomiendasDomi();
+      }
       if (user.rol === "ADMIN") await fetchAdminData();
     }
     setRefreshing(false);
@@ -276,16 +312,18 @@ export default function App() {
           setLoginEmail("");
           setLoginPassword("");
 
-          // Redirección inteligente según el rol
+          // Redirección directa e inmediata según el rol
           if (profile.rol === "CLIENTE") {
             navigateTo("explorar");
             fetchPedidosCliente(jwt);
+            fetchEncomiendasCliente(jwt);
           } else if (profile.rol === "COMERCIO") {
             navigateTo("comercio_cocina");
             fetchPedidosComercio(jwt);
           } else if (profile.rol === "DOMICILIARIO") {
             navigateTo("domi_disponibles");
             fetchPedidosDomiciliario(jwt);
+            fetchEncomiendasDomi(jwt);
           } else if (profile.rol === "ADMIN") {
             navigateTo("admin_dashboard");
             fetchAdminData(jwt);
@@ -301,13 +339,49 @@ export default function App() {
     }
   };
 
+  // Reutilización inteligente de datos al escribir/desenfocar correo
+  const checkReusableData = async (email: string) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes("@") || !trimmed.includes(".")) {
+      setReusableData(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${apiUrl}/api/usuarios/datos-reutilizables?correo=${encodeURIComponent(trimmed)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.rolesExistentes && data.rolesExistentes.length > 0) {
+          setReusableData(data);
+          if (!regNombre && data.nombre) setRegNombre(data.nombre);
+          if (!regApellido && data.apellido) setRegApellido(data.apellido);
+          if (!regTelefono && data.telefono) setRegTelefono(data.telefono);
+        } else {
+          setReusableData(null);
+        }
+      }
+    } catch {
+      setReusableData(null);
+    }
+  };
+
   const handleRegister = async () => {
     if (!regNombre.trim() || !regApellido.trim() || !regCorreo.trim() || !regPassword.trim()) {
       Alert.alert("Campos requeridos", "Por favor completa todos los campos del formulario.");
       return;
     }
+    if (regPassword !== regConfirmPassword) {
+      Alert.alert("Contraseñas no coinciden", "Por favor asegúrate de que ambas contraseñas sean idénticas.");
+      return;
+    }
     if (regPassword.length < 8) {
       Alert.alert("Contraseña débil", "La contraseña debe tener al menos 8 caracteres.");
+      return;
+    }
+    if (reusableData?.rolesExistentes?.includes(regRol)) {
+      Alert.alert(
+        "Rol ya registrado",
+        `Tu correo ya cuenta con perfil activo como ${regRol}. Por favor inicia sesión con tu contraseña o selecciona otro rol.`
+      );
       return;
     }
 
@@ -330,11 +404,11 @@ export default function App() {
 
       if (res.ok) {
         Alert.alert("¡Registro Exitoso!", `Bienvenido a FastGo como ${regRol}.`);
-        // Iniciar sesión automáticamente
+        // Iniciar sesión automáticamente pasando el rol registrado
         const loginRes = await fetch(`${apiUrl}/api/auth/login`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ correo: payload.correo, password: payload.password }),
+          body: JSON.stringify({ correo: payload.correo, password: payload.password, rol: payload.rol }),
         });
         if (loginRes.ok) {
           const authData = await loginRes.json();
@@ -352,7 +426,10 @@ export default function App() {
             setRegCorreo("");
             setRegTelefono("");
             setRegPassword("");
+            setRegConfirmPassword("");
+            setReusableData(null);
 
+            // Redirección inmediata según el rol
             if (profile.rol === "COMERCIO") {
               navigateTo("comercio_cocina");
             } else if (profile.rol === "DOMICILIARIO") {
@@ -370,6 +447,127 @@ export default function App() {
       Alert.alert("Error de Conexión", e.message || "Error al registrarte.");
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  // Tarifa Oficial FastGo: Base $2,000 COP hasta 1 km, + $200 COP por km adicional (ceil)
+  const calcTarifa = (d: number) => {
+    return d <= 1.0 ? 2000 : 2000 + Math.ceil(d) * 200;
+  };
+
+  const fetchEncomiendasCliente = async (jwt = token) => {
+    if (!jwt) return;
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/mis-encomiendas`, {
+        headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+      });
+      if (res.ok) setEncomiendasCliente(await res.json());
+    } catch {}
+  };
+
+  const fetchEncomiendasDomi = async (jwt = token) => {
+    if (!jwt) return;
+    try {
+      const [disp, asig] = await Promise.all([
+        fetch(`${apiUrl}/api/encomiendas/disponibles`, {
+          headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+        }).then((r) => (r.ok ? r.json() : [])),
+        fetch(`${apiUrl}/api/encomiendas/asignadas`, {
+          headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+        }).then((r) => (r.ok ? r.json() : [])),
+      ]);
+      setEncomiendasDisponibles(disp);
+      setMisEncomiendasDomi(asig);
+    } catch {}
+  };
+
+  const handleCrearEncomienda = async () => {
+    if (!token) {
+      Alert.alert("Iniciar Sesión Requerido", "Para solicitar el envío de una encomienda, por favor ingresa con tu cuenta.", [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Ingresar", onPress: () => navigateTo("perfil") },
+      ]);
+      return;
+    }
+    if (!encRemitenteNombre.trim() || !encRemitenteTel.trim() || !encOrigen.trim() ||
+        !encDestinatarioNombre.trim() || !encDestinatarioTel.trim() || !encDestino.trim() || !encDescripcion.trim()) {
+      Alert.alert("Campos Requeridos", "Por favor completa los datos de origen, destino y descripción del paquete.");
+      return;
+    }
+    if (!encTarifaAceptada) {
+      Alert.alert("Aceptación Obligatoria", "Debes marcar la casilla aceptando la tarifa oficial calculada para continuar.");
+      return;
+    }
+
+    setEncSubmitting(true);
+    try {
+      const tarifa = calcTarifa(encDistanciaKm);
+      const res = await fetch(`${apiUrl}/api/encomiendas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          remitenteNombre: encRemitenteNombre.trim(),
+          remitenteTelefono: encRemitenteTel.trim(),
+          direccionOrigen: encOrigen.trim(),
+          destinatarioNombre: encDestinatarioNombre.trim(),
+          destinatarioTelefono: encDestinatarioTel.trim(),
+          direccionDestino: encDestino.trim(),
+          descripcion: encDescripcion.trim(),
+          tamanoPeso: encTamano,
+          distanciaKm: encDistanciaKm,
+          costoEnvio: tarifa,
+          tarifaAceptada: true,
+        }),
+      });
+
+      if (res.ok) {
+        const nueva = await res.json();
+        Alert.alert("¡Encomienda Solicitada!", `Tu servicio #ENC-${nueva.id} fue creado con éxito. Un domiciliario cercano será asignado pronto.`);
+        setEncDescripcion("");
+        setEncTarifaAceptada(false);
+        setEncomiendaTab("mis_envios");
+        fetchEncomiendasCliente();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No fue posible crear la encomienda.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error de Red", e.message || "Fallo al enviar solicitud.");
+    } finally {
+      setEncSubmitting(false);
+    }
+  };
+
+  const handleTomarEncomienda = async (id: number) => {
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${id}/tomar`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        Alert.alert("¡Encomienda Asignada!", `Has tomado la encomienda #ENC-${id}.`);
+        fetchEncomiendasDomi();
+      } else {
+        Alert.alert("No Disponible", "La encomienda ya fue tomada por otro domiciliario.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const handleEstadoEncomienda = async (id: number, nuevoEstado: string, label: string) => {
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${id}/estado`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ estado: nuevoEstado }),
+      });
+      if (res.ok) {
+        Alert.alert("Estado Actualizado", `Encomienda #ENC-${id}: ${label}`);
+        fetchEncomiendasDomi();
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
     }
   };
 
@@ -681,6 +879,42 @@ export default function App() {
               </View>
             )}
 
+            {/* Servicios Principales FastGo */}
+            {!selectedComercio && (
+              <View style={styles.servicesGridRow}>
+                <TouchableOpacity
+                  style={[styles.serviceCard, { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }]}
+                  onPress={() => setSelectedCategory("Todos")}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={[styles.serviceBadge, { backgroundColor: "#D1FAE5" }]}>
+                      <Text style={[styles.serviceBadgeText, { color: Theme.primaryDark }]}>COMERCIOS</Text>
+                    </View>
+                    <Text style={styles.serviceTitle}>Restaurantes y Tiendas</Text>
+                    <Text style={styles.serviceSub}>Platos y víveres aliados</Text>
+                  </View>
+                  <Text style={styles.serviceIcon}>🍔</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.serviceCard, { backgroundColor: "#0F172A", borderColor: "#334155" }]}
+                  onPress={() => {
+                    navigateTo("encomiendas");
+                    fetchEncomiendasCliente();
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={[styles.serviceBadge, { backgroundColor: "#064E3B" }]}>
+                      <Text style={[styles.serviceBadgeText, { color: "#34D399" }]}>DESDE $2.000</Text>
+                    </View>
+                    <Text style={[styles.serviceTitle, { color: "#FFFFFF" }]}>Enviar Encomienda</Text>
+                    <Text style={[styles.serviceSub, { color: "#94A3B8" }]}>Paquetes urbanos exprés</Text>
+                  </View>
+                  <Text style={styles.serviceIcon}>📦</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Categorías Horizontales */}
             {!selectedComercio && (
               <View style={styles.categorySection}>
@@ -954,6 +1188,242 @@ export default function App() {
         )}
 
         {/* ====================================================
+            VISTA: ENCOMIENDAS URBANAS (CLIENTE)
+           ==================================================== */}
+        {activeTab === "encomiendas" && (
+          <View style={styles.cardContainer}>
+            <View style={styles.rowBetween}>
+              <View>
+                <Text style={styles.pageTitle}>📦 Encomiendas FastGo</Text>
+                <Text style={styles.subtext}>Envíos urbanos exprés con tarifa transparente</Text>
+              </View>
+              <TouchableOpacity onPress={() => fetchEncomiendasCliente()}>
+                <Text style={styles.linkAction}>↻ Refrescar</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Selector de sub-pestaña */}
+            <View style={[styles.authToggleRow, { marginTop: 12 }]}>
+              <TouchableOpacity
+                style={[styles.authToggleBtn, encomiendaTab === "nueva" && styles.authToggleBtnActive]}
+                onPress={() => setEncomiendaTab("nueva")}
+              >
+                <Text style={[styles.authToggleText, encomiendaTab === "nueva" && styles.authToggleTextActive]}>
+                  + Nueva Solicitud
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.authToggleBtn, encomiendaTab === "mis_envios" && styles.authToggleBtnActive]}
+                onPress={() => {
+                  setEncomiendaTab("mis_envios");
+                  fetchEncomiendasCliente();
+                }}
+              >
+                <Text style={[styles.authToggleText, encomiendaTab === "mis_envios" && styles.authToggleTextActive]}>
+                  Mis Envíos ({encomiendasCliente.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {encomiendaTab === "nueva" ? (
+              <View style={{ marginTop: 16 }}>
+                {/* Remitente */}
+                <View style={[styles.kitchenCard, { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" }]}>
+                  <Text style={[styles.subHeading, { color: Theme.primaryDark, marginTop: 0 }]}>📍 Punto A (Recogida)</Text>
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Nombre del Remitente:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Tu nombre completo"
+                    placeholderTextColor="#94A3B8"
+                    value={encRemitenteNombre}
+                    onChangeText={setEncRemitenteNombre}
+                  />
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Teléfono del Remitente:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="3001234567"
+                    placeholderTextColor="#94A3B8"
+                    value={encRemitenteTel}
+                    onChangeText={setEncRemitenteTel}
+                    keyboardType="phone-pad"
+                  />
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Dirección de Recogida:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Calle 123 # 45 - 67, Apto 301"
+                    placeholderTextColor="#94A3B8"
+                    value={encOrigen}
+                    onChangeText={setEncOrigen}
+                  />
+                </View>
+
+                {/* Destinatario */}
+                <View style={[styles.kitchenCard, { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE", marginTop: 8 }]}>
+                  <Text style={[styles.subHeading, { color: "#1E40AF", marginTop: 0 }]}>🎯 Punto B (Entrega)</Text>
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Nombre del Destinatario:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Nombre de quien recibe"
+                    placeholderTextColor="#94A3B8"
+                    value={encDestinatarioNombre}
+                    onChangeText={setEncDestinatarioNombre}
+                  />
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Teléfono del Destinatario:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="3109876543"
+                    placeholderTextColor="#94A3B8"
+                    value={encDestinatarioTel}
+                    onChangeText={setEncDestinatarioTel}
+                    keyboardType="phone-pad"
+                  />
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Dirección de Entrega:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Carrera 45 # 67 - 89, Casa 2"
+                    placeholderTextColor="#94A3B8"
+                    value={encDestino}
+                    onChangeText={setEncDestino}
+                  />
+                </View>
+
+                {/* Detalle del Paquete */}
+                <View style={[styles.kitchenCard, { marginTop: 8 }]}>
+                  <Text style={[styles.subHeading, { marginTop: 0 }]}>📦 Detalles del Envío</Text>
+                  <Text style={[styles.inputLabel, { marginTop: 6 }]}>Descripción del Contenido:</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ej. Documentos notaría, llaves, caja pequeña..."
+                    placeholderTextColor="#94A3B8"
+                    value={encDescripcion}
+                    onChangeText={setEncDescripcion}
+                  />
+
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Tamaño / Peso Aprox:</Text>
+                  <View style={styles.roleSelectionRow}>
+                    {["Pequeño (< 2kg)", "Mediano (2-5kg)", "Grande (5-10kg)"].map((tam) => (
+                      <TouchableOpacity
+                        key={tam}
+                        style={[styles.roleSelectCard, encTamano === tam && styles.roleSelectCardActive]}
+                        onPress={() => setEncTamano(tam)}
+                      >
+                        <Text style={[styles.roleCardTitle, encTamano === tam && styles.roleCardTitleActive, { fontSize: 10 }]}>
+                          {tam}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>
+                    Distancia Estimada: <Text style={{ color: Theme.primaryDark, fontWeight: "900" }}>{encDistanciaKm.toFixed(1)} km</Text>
+                  </Text>
+                  <View style={styles.distanceChipsRow}>
+                    {[1.0, 2.0, 3.0, 4.0, 5.4, 8.0].map((d) => (
+                      <TouchableOpacity
+                        key={d}
+                        style={[styles.distanceChip, encDistanciaKm === d && styles.distanceChipActive]}
+                        onPress={() => setEncDistanciaKm(d)}
+                      >
+                        <Text style={[styles.distanceChipText, encDistanciaKm === d && styles.distanceChipTextActive]}>
+                          {d} km
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Tarifa Oficial y Aceptación Expresa */}
+                <View style={[styles.kitchenCard, { backgroundColor: Theme.secondary, borderColor: Theme.secondaryLight, marginTop: 8 }]}>
+                  <View style={styles.rowBetween}>
+                    <View>
+                      <Text style={{ color: "#34D399", fontSize: 11, fontWeight: "bold", textTransform: "uppercase" }}>
+                        Cotización Oficial FastGo
+                      </Text>
+                      <Text style={{ color: "#FFFFFF", fontSize: 13, fontWeight: "bold", marginTop: 2 }}>
+                        Base $2.000 COP + $200/km (ceil)
+                      </Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={{ color: "#94A3B8", fontSize: 10 }}>Total a Cobrar</Text>
+                      <Text style={{ color: "#34D399", fontSize: 20, fontWeight: "900" }}>
+                        ${calcTarifa(encDistanciaKm).toLocaleString()} COP
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Casilla de Aceptación Expresa Obligatoria */}
+                  <TouchableOpacity
+                    style={[styles.checkboxRow, encTarifaAceptada && styles.checkboxRowActive]}
+                    onPress={() => setEncTarifaAceptada(!encTarifaAceptada)}
+                  >
+                    <View style={[styles.checkboxBox, encTarifaAceptada && styles.checkboxBoxActive]}>
+                      {encTarifaAceptada && <Text style={styles.checkboxCheck}>✓</Text>}
+                    </View>
+                    <Text style={[styles.checkboxLabel, { flex: 1 }]}>
+                      Acepto expresamente la tarifa calculada de{" "}
+                      <Text style={{ color: "#34D399", fontWeight: "bold" }}>
+                        ${calcTarifa(encDistanciaKm).toLocaleString()} COP
+                      </Text>{" "}
+                      para el transporte y entrega de esta encomienda.
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.solidBtn,
+                      { backgroundColor: encTarifaAceptada ? Theme.accent : "#475569", marginTop: 14 }
+                    ]}
+                    onPress={handleCrearEncomienda}
+                    disabled={!encTarifaAceptada || encSubmitting}
+                  >
+                    {encSubmitting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.solidBtnText}>Confirmar y Solicitar Domiciliario</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              /* Mis Envíos Solicitados */
+              <View style={{ marginTop: 14 }}>
+                {encomiendasCliente.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyIcon}>📦</Text>
+                    <Text style={styles.emptyCardTitle}>No tienes encomiendas registradas</Text>
+                    <Text style={styles.emptyCardText}>Crea una nueva solicitud para pedir un mensajero urbano.</Text>
+                  </View>
+                ) : (
+                  encomiendasCliente.map((enc) => (
+                    <View key={enc.id} style={[styles.kitchenCard, { borderColor: Theme.border }]}>
+                      <View style={styles.orderHeaderRow}>
+                        <Text style={styles.orderNumberTitle}>#ENC-{enc.id}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: enc.estado === "ENTREGADA" ? "#DCFCE7" : "#FEF3C7" }]}>
+                          <Text style={{ color: enc.estado === "ENTREGADA" ? "#166534" : "#92400E", fontSize: 10, fontWeight: "bold" }}>
+                            {enc.estado}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text style={styles.kitchenPrice}>Costo de envío: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                      <Text style={styles.kitchenNotes}>Paquete: {enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
+                      <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
+                        <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>De:</Text> {enc.direccionOrigen}</Text>
+                        <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>A:</Text> {enc.direccionDestino}</Text>
+                      </View>
+                      {enc.domiciliarioNombre && (
+                        <Text style={{ fontSize: 11, color: Theme.primaryDark, fontWeight: "bold", marginTop: 6 }}>
+                          🛵 Domiciliario: {enc.domiciliarioNombre}
+                        </Text>
+                      )}
+                    </View>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ====================================================
             VISTA: COMERCIO (COCINA Y PEDIDOS)
            ==================================================== */}
         {activeTab === "comercio_cocina" && (
@@ -1033,53 +1503,169 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Disponibles para Tomar */}
-            <Text style={[styles.subHeading, { marginTop: 12 }]}>Listos para Recoger ({pedidosDisponibles.length})</Text>
-            {pedidosDisponibles.length === 0 ? (
-              <Text style={styles.helperText}>No hay pedidos esperando repartidor en este momento.</Text>
-            ) : (
-              pedidosDisponibles.map((p) => (
-                <View key={p.id} style={styles.kitchenCard}>
-                  <View style={styles.orderHeaderRow}>
-                    <Text style={styles.orderNumberTitle}>Pedido #{p.id}</Text>
-                    <View style={[styles.statusPill, { backgroundColor: "#D1FAE5" }]}>
-                      <Text style={{ color: "#065F46", fontSize: 10, fontWeight: "bold" }}>LISTO</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.kitchenPrice}>Total de la orden: ${p.total.toLocaleString()} COP</Text>
-                  <Text style={styles.kitchenNotes}>Ganancia de entrega: $4.500 COP</Text>
-                  <TouchableOpacity
-                    style={[styles.solidBtn, { marginTop: 10 }]}
-                    onPress={() => tomarPedidoDomiciliario(p.id)}
-                  >
-                    <Text style={styles.solidBtnText}>Tomar Pedido (Atómico)</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
-            )}
+            {/* Selector de Tipo de Servicio para Domiciliario */}
+            <View style={[styles.authToggleRow, { marginTop: 12 }]}>
+              <TouchableOpacity
+                style={[styles.authToggleBtn, domiServiceTab === "pedidos" && styles.authToggleBtnActive]}
+                onPress={() => setDomiServiceTab("pedidos")}
+              >
+                <Text style={[styles.authToggleText, domiServiceTab === "pedidos" && styles.authToggleTextActive]}>
+                  🍔 Pedidos Comercio ({pedidosDisponibles.length})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.authToggleBtn, domiServiceTab === "encomiendas" && styles.authToggleBtnActive]}
+                onPress={() => {
+                  setDomiServiceTab("encomiendas");
+                  fetchEncomiendasDomi();
+                }}
+              >
+                <Text style={[styles.authToggleText, domiServiceTab === "encomiendas" && styles.authToggleTextActive]}>
+                  📦 Encomiendas ({encomiendasDisponibles.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-            {/* Mis Entregas Asignadas */}
-            <Text style={[styles.subHeading, { marginTop: 24 }]}>Mis Entregas en Curso ({misEntregas.length})</Text>
-            {misEntregas.length === 0 ? (
-              <Text style={styles.helperText}>No tienes pedidos activos en ruta.</Text>
-            ) : (
-              misEntregas.map((p) => (
-                <View key={p.id} style={[styles.kitchenCard, { borderColor: Theme.primary }]}>
-                  <View style={styles.orderHeaderRow}>
-                    <Text style={styles.orderNumberTitle}>Pedido #{p.id}</Text>
-                    <View style={[styles.statusPill, { backgroundColor: "#E0E7FF" }]}>
-                      <Text style={{ color: "#3730A3", fontSize: 10, fontWeight: "bold" }}>EN CAMINO</Text>
+            {domiServiceTab === "pedidos" ? (
+              <View>
+                {/* Pedidos Disponibles para Tomar */}
+                <Text style={[styles.subHeading, { marginTop: 14 }]}>Listos para Recoger ({pedidosDisponibles.length})</Text>
+                {pedidosDisponibles.length === 0 ? (
+                  <Text style={styles.helperText}>No hay pedidos esperando repartidor en este momento.</Text>
+                ) : (
+                  pedidosDisponibles.map((p) => (
+                    <View key={p.id} style={styles.kitchenCard}>
+                      <View style={styles.orderHeaderRow}>
+                        <Text style={styles.orderNumberTitle}>Pedido #{p.id}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: "#D1FAE5" }]}>
+                          <Text style={{ color: "#065F46", fontSize: 10, fontWeight: "bold" }}>LISTO</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.kitchenPrice}>Total de la orden: ${p.total.toLocaleString()} COP</Text>
+                      <Text style={styles.kitchenNotes}>Ganancia de entrega: $4.500 COP</Text>
+                      <TouchableOpacity
+                        style={[styles.solidBtn, { marginTop: 10 }]}
+                        onPress={() => tomarPedidoDomiciliario(p.id)}
+                      >
+                        <Text style={styles.solidBtnText}>Tomar Pedido (Atómico)</Text>
+                      </TouchableOpacity>
                     </View>
-                  </View>
-                  <Text style={styles.kitchenPrice}>Cobro al cliente: ${p.total.toLocaleString()} COP</Text>
-                  <TouchableOpacity
-                    style={[styles.solidBtn, { backgroundColor: Theme.accent, marginTop: 10 }]}
-                    onPress={() => entregarPedidoDomiciliario(p.id)}
-                  >
-                    <Text style={styles.solidBtnText}>✓ Marcar como ENTREGADO</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
+                  ))
+                )}
+
+                {/* Mis Entregas Asignadas */}
+                <Text style={[styles.subHeading, { marginTop: 24 }]}>Mis Entregas en Curso ({misEntregas.length})</Text>
+                {misEntregas.length === 0 ? (
+                  <Text style={styles.helperText}>No tienes pedidos activos en ruta.</Text>
+                ) : (
+                  misEntregas.map((p) => (
+                    <View key={p.id} style={[styles.kitchenCard, { borderColor: Theme.primary }]}>
+                      <View style={styles.orderHeaderRow}>
+                        <Text style={styles.orderNumberTitle}>Pedido #{p.id}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: "#E0E7FF" }]}>
+                          <Text style={{ color: "#3730A3", fontSize: 10, fontWeight: "bold" }}>EN CAMINO</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.kitchenPrice}>Cobro al cliente: ${p.total.toLocaleString()} COP</Text>
+                      <TouchableOpacity
+                        style={[styles.solidBtn, { backgroundColor: Theme.accent, marginTop: 10 }]}
+                        onPress={() => entregarPedidoDomiciliario(p.id)}
+                      >
+                        <Text style={styles.solidBtnText}>✓ Marcar como ENTREGADO</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
+            ) : (
+              /* SECCIÓN ENCOMIENDAS URBANAS */
+              <View>
+                {/* Encomiendas Asignadas en Curso */}
+                <Text style={[styles.subHeading, { marginTop: 14 }]}>
+                  Mis Encomiendas en Curso ({misEncomiendasDomi.filter(e => e.estado !== "ENTREGADA").length})
+                </Text>
+                {misEncomiendasDomi.filter(e => e.estado !== "ENTREGADA").length === 0 ? (
+                  <Text style={styles.helperText}>No tienes encomiendas asignadas en este momento.</Text>
+                ) : (
+                  misEncomiendasDomi
+                    .filter(e => e.estado !== "ENTREGADA")
+                    .map((enc) => (
+                      <View key={enc.id} style={[styles.kitchenCard, { borderColor: Theme.info }]}>
+                        <View style={styles.orderHeaderRow}>
+                          <Text style={styles.orderNumberTitle}>Encomienda #ENC-{enc.id}</Text>
+                          <View style={[styles.statusPill, { backgroundColor: "#DBEAFE" }]}>
+                            <Text style={{ color: "#1E40AF", fontSize: 10, fontWeight: "bold" }}>{enc.estado}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.kitchenPrice}>Ganancia de envío: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                        <Text style={styles.kitchenNotes}>Paquete: {enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
+                        <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
+                          <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>1. Recoger:</Text> {enc.direccionOrigen} ({enc.remitenteNombre} - {enc.remitenteTelefono})</Text>
+                          <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>2. Entregar:</Text> {enc.direccionDestino} ({enc.destinatarioNombre} - {enc.destinatarioTelefono})</Text>
+                        </View>
+
+                        {/* Botones de acción según el estado */}
+                        <View style={styles.actionButtonRow}>
+                          {enc.estado === "ACEPTADA" && (
+                            <TouchableOpacity
+                              style={[styles.smallActionBtn, { backgroundColor: Theme.primary }]}
+                              onPress={() => handleEstadoEncomienda(enc.id, "EN_RECOGIDA", "En camino a recoger paquete")}
+                            >
+                              <Text style={styles.smallActionText}>🛵 Ir a Recoger Paquete</Text>
+                            </TouchableOpacity>
+                          )}
+                          {enc.estado === "EN_RECOGIDA" && (
+                            <TouchableOpacity
+                              style={[styles.smallActionBtn, { backgroundColor: Theme.info }]}
+                              onPress={() => handleEstadoEncomienda(enc.id, "EN_CAMINO", "Paquete recogido, en ruta")}
+                            >
+                              <Text style={styles.smallActionText}>📦 Paquete Recogido (En Ruta)</Text>
+                            </TouchableOpacity>
+                          )}
+                          {enc.estado === "EN_CAMINO" && (
+                            <TouchableOpacity
+                              style={[styles.smallActionBtn, { backgroundColor: Theme.accent }]}
+                              onPress={() => handleEstadoEncomienda(enc.id, "ENTREGADA", "Encomienda entregada con éxito")}
+                            >
+                              <Text style={styles.smallActionText}>✓ Confirmar Entrega</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    ))
+                )}
+
+                {/* Encomiendas Disponibles */}
+                <Text style={[styles.subHeading, { marginTop: 24 }]}>
+                  Encomiendas Disponibles para Tomar ({encomiendasDisponibles.length})
+                </Text>
+                {encomiendasDisponibles.length === 0 ? (
+                  <Text style={styles.helperText}>No hay encomiendas pendientes por repartidor.</Text>
+                ) : (
+                  encomiendasDisponibles.map((enc) => (
+                    <View key={enc.id} style={styles.kitchenCard}>
+                      <View style={styles.orderHeaderRow}>
+                        <Text style={styles.orderNumberTitle}>#ENC-{enc.id}</Text>
+                        <View style={[styles.statusPill, { backgroundColor: "#FEF3C7" }]}>
+                          <Text style={{ color: "#92400E", fontSize: 10, fontWeight: "bold" }}>DISPONIBLE</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.kitchenPrice}>Ganancia del servicio: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                      <Text style={styles.kitchenNotes}>{enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
+                      <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
+                        <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>Origen:</Text> {enc.direccionOrigen}</Text>
+                        <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>Destino:</Text> {enc.direccionDestino}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={[styles.solidBtn, { marginTop: 10 }]}
+                        onPress={() => handleTomarEncomienda(enc.id)}
+                      >
+                        <Text style={styles.solidBtnText}>Tomar Encomienda (Atómico)</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                )}
+              </View>
             )}
           </View>
         )}
@@ -1189,7 +1775,7 @@ export default function App() {
                 </View>
 
                 {authMode === "login" ? (
-                  /* Formulario de Login Limpio */
+                  /* Formulario de Login Limpio con Eye Toggle */
                   <View style={{ marginTop: 16 }}>
                     <Text style={styles.inputLabel}>Correo Electrónico:</Text>
                     <TextInput
@@ -1203,14 +1789,22 @@ export default function App() {
                     />
 
                     <Text style={[styles.inputLabel, { marginTop: 12 }]}>Contraseña:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="••••••••"
-                      placeholderTextColor="#94A3B8"
-                      value={loginPassword}
-                      onChangeText={setLoginPassword}
-                      secureTextEntry
-                    />
+                    <View style={styles.passwordInputRow}>
+                      <TextInput
+                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                        placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
+                        value={loginPassword}
+                        onChangeText={setLoginPassword}
+                        secureTextEntry={!showLoginPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowLoginPassword((prev) => !prev)}
+                      >
+                        <Text style={styles.eyeIcon}>{showLoginPassword ? "👁️" : "🔒"}</Text>
+                      </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity
                       style={[styles.solidBtn, { marginTop: 18 }]}
@@ -1225,9 +1819,37 @@ export default function App() {
                     </TouchableOpacity>
                   </View>
                 ) : (
-                  /* Formulario de Registro con Selección de Rol y Teléfonos Duplicados */
+                  /* Formulario de Registro con Selección de Rol, Reutilización de Datos y Confirmación */
                   <View style={{ marginTop: 16 }}>
-                    <Text style={styles.inputLabel}>¿Cómo deseas unirte a FASTGO?</Text>
+                    {/* Correo Electrónico Primero para Detectar Cuenta Existente */}
+                    <Text style={styles.inputLabel}>Correo Electrónico:</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="tu.correo@ejemplo.com"
+                      placeholderTextColor="#94A3B8"
+                      value={regCorreo}
+                      onChangeText={(v) => {
+                        setRegCorreo(v);
+                        checkReusableData(v);
+                      }}
+                      onBlur={() => checkReusableData(regCorreo)}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+
+                    {/* Banner de Reutilización Inteligente de Datos */}
+                    {reusableData && (
+                      <View style={styles.reusableBanner}>
+                        <Text style={styles.reusableBannerTitle}>✨ ¡Cuenta existente detectada!</Text>
+                        <Text style={styles.reusableBannerSub}>
+                          Se han precargado tus datos personales. Tu correo ya cuenta con rol(es):{" "}
+                          <Text style={{ fontWeight: "bold" }}>{reusableData.rolesExistentes.join(", ")}</Text>.
+                          Puedes crear un nuevo rol manteniendo tu misma cuenta.
+                        </Text>
+                      </View>
+                    )}
+
+                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>¿Cómo deseas unirte a FASTGO?</Text>
                     <View style={styles.roleSelectionRow}>
                       <TouchableOpacity
                         style={[styles.roleSelectCard, regRol === "CLIENTE" && styles.roleSelectCardActive]}
@@ -1237,6 +1859,9 @@ export default function App() {
                         <Text style={[styles.roleCardTitle, regRol === "CLIENTE" && styles.roleCardTitleActive]}>
                           Cliente
                         </Text>
+                        {reusableData?.rolesExistentes?.includes("CLIENTE") && (
+                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                        )}
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -1247,6 +1872,9 @@ export default function App() {
                         <Text style={[styles.roleCardTitle, regRol === "COMERCIO" && styles.roleCardTitleActive]}>
                           Comercio
                         </Text>
+                        {reusableData?.rolesExistentes?.includes("COMERCIO") && (
+                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                        )}
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -1257,8 +1885,17 @@ export default function App() {
                         <Text style={[styles.roleCardTitle, regRol === "DOMICILIARIO" && styles.roleCardTitleActive]}>
                           Domiciliario
                         </Text>
+                        {reusableData?.rolesExistentes?.includes("DOMICILIARIO") && (
+                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                        )}
                       </TouchableOpacity>
                     </View>
+
+                    {reusableData?.rolesExistentes?.includes(regRol) && (
+                      <Text style={{ fontSize: 11, color: Theme.warning, fontWeight: "bold", marginTop: 4 }}>
+                        ⚠️ Ya estás registrado como {regRol}. Selecciona otro rol o inicia sesión.
+                      </Text>
+                    )}
 
                     <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nombre:</Text>
                     <TextInput
@@ -1278,17 +1915,6 @@ export default function App() {
                       onChangeText={setRegApellido}
                     />
 
-                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Correo Electrónico:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="juan.perez@correo.com"
-                      placeholderTextColor="#94A3B8"
-                      value={regCorreo}
-                      onChangeText={setRegCorreo}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-
                     <Text style={[styles.inputLabel, { marginTop: 10 }]}>Teléfono Celular:</Text>
                     <TextInput
                       style={styles.textInput}
@@ -1299,25 +1925,63 @@ export default function App() {
                       keyboardType="phone-pad"
                     />
 
+                    {/* Contraseña con Eye Toggle */}
                     <Text style={[styles.inputLabel, { marginTop: 10 }]}>Contraseña (mínimo 8 caracteres):</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="••••••••"
-                      placeholderTextColor="#94A3B8"
-                      value={regPassword}
-                      onChangeText={setRegPassword}
-                      secureTextEntry
-                    />
+                    <View style={styles.passwordInputRow}>
+                      <TextInput
+                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                        placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
+                        value={regPassword}
+                        onChangeText={setRegPassword}
+                        secureTextEntry={!showRegPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowRegPassword((prev) => !prev)}
+                      >
+                        <Text style={styles.eyeIcon}>{showRegPassword ? "👁️" : "🔒"}</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Confirmar Contraseña con Eye Toggle */}
+                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Confirmar Contraseña:</Text>
+                    <View style={styles.passwordInputRow}>
+                      <TextInput
+                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                        placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
+                        value={regConfirmPassword}
+                        onChangeText={setRegConfirmPassword}
+                        secureTextEntry={!showRegConfirmPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowRegConfirmPassword((prev) => !prev)}
+                      >
+                        <Text style={styles.eyeIcon}>{showRegConfirmPassword ? "👁️" : "🔒"}</Text>
+                      </TouchableOpacity>
+                    </View>
 
                     <TouchableOpacity
-                      style={[styles.solidBtn, { marginTop: 18 }]}
+                      style={[
+                        styles.solidBtn,
+                        {
+                          marginTop: 18,
+                          backgroundColor: reusableData?.rolesExistentes?.includes(regRol) ? "#94A3B8" : Theme.primary,
+                        },
+                      ]}
                       onPress={handleRegister}
-                      disabled={authLoading}
+                      disabled={authLoading || Boolean(reusableData?.rolesExistentes?.includes(regRol))}
                     >
                       {authLoading ? (
                         <ActivityIndicator color="#FFFFFF" />
                       ) : (
-                        <Text style={styles.solidBtnText}>Registrarme como {regRol}</Text>
+                        <Text style={styles.solidBtnText}>
+                          {reusableData?.rolesExistentes?.includes(regRol)
+                            ? `Ya Registrado como ${regRol}`
+                            : `Registrarme como ${regRol}`}
+                        </Text>
                       )}
                     </TouchableOpacity>
                   </View>
@@ -1339,6 +2003,17 @@ export default function App() {
             >
               <Text style={[styles.navIcon, activeTab === "explorar" && styles.navIconActive]}>🔍</Text>
               <Text style={[styles.navText, activeTab === "explorar" && styles.navTextActive]}>Explorar</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.navItem}
+              onPress={() => {
+                navigateTo("encomiendas");
+                fetchEncomiendasCliente();
+              }}
+            >
+              <Text style={[styles.navIcon, activeTab === "encomiendas" && styles.navIconActive]}>🚚</Text>
+              <Text style={[styles.navText, activeTab === "encomiendas" && styles.navTextActive]}>Encomiendas</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -2315,5 +2990,141 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 9,
     fontWeight: "bold",
+  },
+  servicesGridRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginVertical: 12,
+  },
+  serviceCard: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  serviceBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  serviceBadgeText: {
+    fontSize: 8,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+  },
+  serviceTitle: {
+    fontSize: 12,
+    fontWeight: "900",
+    color: Theme.text,
+  },
+  serviceSub: {
+    fontSize: 10,
+    color: Theme.textMuted,
+    marginTop: 1,
+  },
+  serviceIcon: {
+    fontSize: 24,
+    marginLeft: 6,
+  },
+  passwordInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "relative",
+  },
+  eyeBtn: {
+    position: "absolute",
+    right: 10,
+    padding: 6,
+  },
+  eyeIcon: {
+    fontSize: 14,
+  },
+  reusableBanner: {
+    backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    borderRadius: 10,
+    padding: 10,
+    marginVertical: 8,
+  },
+  reusableBannerTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#065F46",
+    marginBottom: 2,
+  },
+  reusableBannerSub: {
+    fontSize: 10,
+    color: "#047857",
+    lineHeight: 14,
+  },
+  distanceChipsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginTop: 6,
+  },
+  distanceChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: "#FFFFFF",
+  },
+  distanceChipActive: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primaryLight,
+  },
+  distanceChipText: {
+    fontSize: 11,
+    color: Theme.textMuted,
+    fontWeight: "600",
+  },
+  distanceChipTextActive: {
+    color: Theme.primaryDark,
+    fontWeight: "bold",
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1E293B",
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  checkboxRowActive: {
+    borderColor: "#059669",
+    backgroundColor: "#064E3B",
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: "#94A3B8",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  checkboxBoxActive: {
+    backgroundColor: "#10B981",
+    borderColor: "#10B981",
+  },
+  checkboxCheck: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  checkboxLabel: {
+    color: "#E2E8F0",
+    fontSize: 11,
+    lineHeight: 15,
   },
 });

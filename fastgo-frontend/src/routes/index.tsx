@@ -15,6 +15,7 @@ import { AddressesPage } from '../pages/client/AddressesPage';
 import { OrdersPage } from '../pages/client/OrdersPage';
 import { OrderDetailPage } from '../pages/client/OrderDetailPage';
 import { ProfilePage } from '../pages/client/ProfilePage';
+import { EncomiendasPage } from '../pages/client/EncomiendasPage';
 
 // Commerce Pages
 import { CommerceDashboardPage } from '../pages/commerce/CommerceDashboardPage';
@@ -83,6 +84,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <ProtectedRoute>
               <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={APP_ROUTES.ENCOMIENDAS}
+          element={
+            <ProtectedRoute>
+              <EncomiendasPage />
             </ProtectedRoute>
           }
         />
@@ -172,6 +181,8 @@ export const AppRoutes: React.FC = () => {
         <Route path="/comercio/sucursales" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceBranchesPage /></RoleRoute>} />
 
         <Route path="/domiciliario/dashboard" element={<RoleRoute allowedRoles={['DOMICILIARIO', 'ADMIN']}><DeliveryDashboardPage /></RoleRoute>} />
+        <Route path="/domiciliario/pedidos" element={<RoleRoute allowedRoles={['DOMICILIARIO', 'ADMIN']}><DeliveryDashboardPage /></RoleRoute>} />
+        <Route path="/encomiendas" element={<ProtectedRoute><EncomiendasPage /></ProtectedRoute>} />
 
         <Route path="/admin" element={<RoleRoute allowedRoles={['ADMIN']}><AdminDashboardPage /></RoleRoute>} />
         <Route path="/admin/dashboard" element={<RoleRoute allowedRoles={['ADMIN']}><AdminDashboardPage /></RoleRoute>} />

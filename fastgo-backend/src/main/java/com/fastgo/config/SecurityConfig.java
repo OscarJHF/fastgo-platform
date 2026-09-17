@@ -58,6 +58,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/api/health", "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/usuarios").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/usuarios/datos-reutilizables").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/domicilios/calcular-tarifa").permitAll()
                         .requestMatchers("/api/test/publico").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/comercios/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/sucursales/**").permitAll()

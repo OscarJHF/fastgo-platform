@@ -41,7 +41,20 @@ public class JwtFilter extends OncePerRequestFilter {
             try {
                 if (jwtService.validarToken(token)) {
                     String correo = jwtService.extraerCorreo(token);
-                    Usuario usuario = usuarioRepository.findByCorreo(correo).orElse(null);
+                    String rolToken = jwtService.extraerRol(token);
+                    java.util.List<Usuario> cuentas = usuarioRepository.findAllByCorreo(correo);
+                    Usuario usuario = null;
+                    if (rolToken != null && !rolToken.isBlank()) {
+                        for (Usuario u : cuentas) {
+                            if (u.getRol() != null && rolToken.equalsIgnoreCase(u.getRol().getNombre())) {
+                                usuario = u;
+                                break;
+                            }
+                        }
+                    }
+                    if (usuario == null && !cuentas.isEmpty()) {
+                        usuario = cuentas.get(0);
+                    }
 
                     if (usuario != null
                             && Boolean.TRUE.equals(usuario.getEstado())

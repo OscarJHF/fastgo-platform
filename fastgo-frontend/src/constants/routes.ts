@@ -9,6 +9,7 @@ export const APP_ROUTES = {
   MY_ORDERS: '/mis-pedidos',
   ORDER_DETAIL: '/pedidos/:id',
   PROFILE: '/perfil',
+  ENCOMIENDAS: '/encomiendas',
 
   // Comercio
   COMMERCE_DASHBOARD: '/comercio-panel',

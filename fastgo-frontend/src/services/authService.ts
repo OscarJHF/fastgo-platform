@@ -1,5 +1,5 @@
 import { apiClient, TOKEN_STORAGE_KEY } from '../api/apiClient';
-import { AuthUser, LoginRequest, LoginResponse, RegisterRequest } from '../types';
+import { AuthUser, LoginRequest, LoginResponse, RegisterRequest, DatosUsuarioReutilizables } from '../types';
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
@@ -17,6 +17,13 @@ export const authService = {
 
   async getMe(): Promise<AuthUser> {
     const response = await apiClient.get<AuthUser>('/api/usuarios/me');
+    return response.data;
+  },
+
+  async getDatosReutilizables(correo: string): Promise<DatosUsuarioReutilizables> {
+    const response = await apiClient.get<DatosUsuarioReutilizables>(
+      `/api/usuarios/datos-reutilizables?correo=${encodeURIComponent(correo)}`
+    );
     return response.data;
   },
 

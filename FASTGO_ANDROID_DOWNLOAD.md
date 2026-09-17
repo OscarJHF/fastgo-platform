@@ -1,9 +1,9 @@
 # FASTGO â€” GuÃ­a de DistribuciÃ³n y Descarga de la AplicaciÃ³n Android
 
 **Paquete:** `com.fastgo.app`  
-**VersiÃ³n de ProducciÃ³n:** FastGo Beta 2 Release  
-**Archivo FÃ­sico Local:** `release/FASTGO-Beta2-release.apk` (68.5 MB)  
-**Dispositivo FÃ­sico de Referencia:** Xiaomi Redmi 9 (Android 11 / MIUI)  
+**Versión de Producción:** FastGo v2.1.0 Release (Build 6)  
+**Archivo Físico Local:** `release/FASTGO-Beta2-release.apk` (68.3 MB)  
+**Dispositivo Físico de Referencia:** Xiaomi Redmi 9 (Android 11 / MIUI)  
 
 ---
 
@@ -12,9 +12,9 @@
 ### Opción A: Distribución Vía URL Pública y QR (Producción)
 - **URL Real de Descarga:** `https://github.com/OscarJHF/fastgo-platform/releases/download/v2.0-beta/FASTGO-Beta2-release.apk`
 - **Página de Release:** `https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.0-beta`
-- **SHA-256:** `7A79DF7A511D10A1456480EB67DF2A48AF454690DCB371B79CE9C8572327C2BD`
-- **Tamaño:** `68,578,664 bytes` (68.5 MB)
-- **Código QR:** `FASTGO_ANDROID_QR.png` (apunta a la URL real)
+- **SHA-256:** `FE7376EB15B10000B5411B924CD23E543E25DA8CDCF2C6B7A94415D20E16057E`
+- **Tamaño:** `68,297,488 bytes` (68.3 MB)
+- **Código QR:** `FASTGO_ANDROID_QR.png` (apunta a la URL real de descarga directa)
 - **Instrucción:** El usuario puede escanear el código QR con la cámara de cualquier teléfono Android o abrir la URL en el navegador móvil para descargar el APK directamente.
 
 ### Opción B: Instalación Local Vía ADB (Desarrollo y Pruebas Físicas)

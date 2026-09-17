@@ -33,6 +33,12 @@ public class Pedido {
     @Column(name = "costo_envio", nullable = false, precision = 12, scale = 2)
     private BigDecimal costoEnvio;
 
+    @Column(name = "distancia_km", precision = 6, scale = 2)
+    private BigDecimal distanciaKm;
+
+    @Column(name = "tarifa_aceptada")
+    private Boolean tarifaAceptada;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
@@ -49,6 +55,7 @@ public class Pedido {
         if (creadoEn == null) creadoEn = LocalDateTime.now();
         if (estado == null || estado.isBlank()) estado = "PENDIENTE";
         if (costoEnvio == null) costoEnvio = BigDecimal.ZERO;
+        if (tarifaAceptada == null) tarifaAceptada = true;
     }
 
     public Integer getId() { return id; }
@@ -74,6 +81,12 @@ public class Pedido {
 
     public BigDecimal getCostoEnvio() { return costoEnvio; }
     public void setCostoEnvio(BigDecimal costoEnvio) { this.costoEnvio = costoEnvio; }
+
+    public BigDecimal getDistanciaKm() { return distanciaKm; }
+    public void setDistanciaKm(BigDecimal distanciaKm) { this.distanciaKm = distanciaKm; }
+
+    public Boolean getTarifaAceptada() { return tarifaAceptada; }
+    public void setTarifaAceptada(Boolean tarifaAceptada) { this.tarifaAceptada = tarifaAceptada; }
 
     public BigDecimal getTotal() { return total; }
     public void setTotal(BigDecimal total) { this.total = total; }

@@ -11,6 +11,7 @@ import {
   Store,
   Bike,
   ShieldAlert,
+  Package,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -55,6 +56,11 @@ export const Navbar: React.FC = () => {
           <nav className="hidden md:flex items-center gap-6">
             <Link to={APP_ROUTES.HOME} className="text-sm font-semibold text-gray-600 hover:text-black transition-colors">
               Explorar
+            </Link>
+
+            <Link to={APP_ROUTES.ENCOMIENDAS} className="text-sm font-semibold text-gray-600 hover:text-black transition-colors flex items-center gap-1.5">
+              <Package className="w-4 h-4 text-emerald-600" />
+              Encomiendas
             </Link>
 
             {role === 'CLIENTE' && (
@@ -172,6 +178,15 @@ export const Navbar: React.FC = () => {
             className="block px-3 py-2 rounded-lg text-base font-semibold text-gray-800 hover:bg-gray-50"
           >
             Explorar Comercios
+          </Link>
+
+          <Link
+            to={APP_ROUTES.ENCOMIENDAS}
+            onClick={() => setMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-lg text-base font-semibold text-gray-800 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <Package className="w-4 h-4 text-emerald-600" />
+            Encomiendas y Envíos
           </Link>
 
           {role === 'CLIENTE' && (

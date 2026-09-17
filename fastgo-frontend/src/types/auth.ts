@@ -3,6 +3,15 @@ export type Role = 'CLIENTE' | 'COMERCIO' | 'DOMICILIARIO' | 'ADMIN';
 export interface LoginRequest {
   correo: string;
   password: string;
+  rol?: Role;
+}
+
+export interface DatosUsuarioReutilizables {
+  nombre?: string;
+  apellido?: string;
+  correo: string;
+  telefono?: string;
+  rolesExistentes: string[];
 }
 
 export interface LoginResponse {

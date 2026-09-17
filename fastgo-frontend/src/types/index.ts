@@ -7,3 +7,4 @@ export * from './order';
 export * from './payment';
 export * from './maps';
 export * from './api';
+export * from './encomienda';

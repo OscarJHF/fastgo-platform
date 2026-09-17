@@ -14,6 +14,8 @@ public class LoginRequest {
     @Size(max = 72, message = "La contraseña no puede superar 72 caracteres")
     private String password;
 
+    private String rol;
+
     public LoginRequest() {}
 
     public LoginRequest(String correo, String password) {
@@ -21,9 +23,18 @@ public class LoginRequest {
         this.password = password;
     }
 
+    public LoginRequest(String correo, String password, String rol) {
+        this.correo = correo;
+        this.password = password;
+        this.rol = rol;
+    }
+
     public String getCorreo() { return correo; }
     public void setCorreo(String correo) { this.correo = correo; }
 
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+
+    public String getRol() { return rol; }
+    public void setRol(String rol) { this.rol = rol; }
 }
