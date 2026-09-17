@@ -48,14 +48,6 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleQuickFill = (emailVal: string) => {
-    setCorreo(emailVal);
-    if (emailVal.includes('admin')) setPassword('AdminPassword123!');
-    else if (emailVal.includes('comercio')) setPassword('ComercioPassword123!');
-    else if (emailVal.includes('domiciliario')) setPassword('DomiciliarioPassword123!');
-    else setPassword('ClientePassword123!');
-  };
-
   return (
     <div className="min-h-[75vh] flex items-center justify-center py-10 px-4 relative overflow-hidden">
       <div 
@@ -103,43 +95,6 @@ export const LoginPage: React.FC = () => {
             Iniciar Sesión
           </Button>
         </form>
-
-        {/* Cuentas de Demostración Rápida */}
-        <div className="pt-4 border-t border-gray-100">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider text-center mb-2.5">
-            Acceso Rápido de Prueba (Demo)
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleQuickFill('cliente@fastgo.com')}
-              className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 font-semibold text-center border border-blue-200 transition-colors"
-            >
-              👤 Cliente
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('comercio@fastgo.com')}
-              className="p-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-800 font-semibold text-center border border-purple-200 transition-colors"
-            >
-              🏪 Comercio
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('domiciliario@fastgo.com')}
-              className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 font-semibold text-center border border-amber-200 transition-colors"
-            >
-              🛵 Domiciliario
-            </button>
-            <button
-              type="button"
-              onClick={() => handleQuickFill('admin@fastgo.com')}
-              className="p-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 font-semibold text-center border border-rose-200 transition-colors"
-            >
-              🛡️ Admin
-            </button>
-          </div>
-        </div>
 
         <div className="text-center text-xs text-gray-500 pt-2">
           ¿No tienes una cuenta?{' '}

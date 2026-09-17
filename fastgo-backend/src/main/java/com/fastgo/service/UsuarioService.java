@@ -49,13 +49,20 @@ public class UsuarioService {
                 ? null
                 : request.getTelefono().trim();
 
-        if (telefono != null && !telefono.isBlank()
-                && usuarioRepository.existsByTelefono(telefono)) {
-            throw new IllegalArgumentException("El teléfono ya está registrado");
+        String requestedRol = request.getRol() == null || request.getRol().isBlank()
+                ? "CLIENTE"
+                : request.getRol().trim().toUpperCase();
+
+        if ("ADMIN".equals(requestedRol) || "ADMINISTRADOR".equals(requestedRol)) {
+            throw new IllegalArgumentException("No está permitido registrarse con rol de Administrador");
         }
 
-        Rol rolCliente = rolRepository.findByNombreIgnoreCase("CLIENTE")
-                .orElseThrow(() -> new IllegalStateException("Rol CLIENTE no configurado"));
+        if (!"CLIENTE".equals(requestedRol) && !"COMERCIO".equals(requestedRol) && !"DOMICILIARIO".equals(requestedRol)) {
+            throw new IllegalArgumentException("Rol no válido. Roles permitidos: CLIENTE, COMERCIO, DOMICILIARIO");
+        }
+
+        Rol rolAsignar = rolRepository.findByNombreIgnoreCase(requestedRol)
+                .orElseThrow(() -> new IllegalStateException("Rol " + requestedRol + " no configurado"));
 
         Usuario usuario = new Usuario();
         usuario.setNombre(request.getNombre().trim());
@@ -64,7 +71,7 @@ public class UsuarioService {
         usuario.setTelefono(telefono == null || telefono.isBlank() ? null : telefono);
         usuario.setPassword(passwordEncoder.encode(request.getPassword()));
         usuario.setFoto(request.getFoto());
-        usuario.setRol(rolCliente);
+        usuario.setRol(rolAsignar);
         usuario.setEstado(true);
 
         return toDto(usuarioRepository.save(usuario));

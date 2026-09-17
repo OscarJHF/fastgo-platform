@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "fastgo-cliente",
-    "slug": "fastgo-cliente",
+    "name": "FASTGO",
+    "slug": "fastgo",
     "version": "2.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

@@ -17,6 +17,7 @@ export interface RegisterRequest {
   telefono: string;
   password: string;
   foto?: string;
+  rol?: Role;
 }
 
 export interface AuthUser {

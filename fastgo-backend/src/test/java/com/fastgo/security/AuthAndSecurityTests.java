@@ -77,6 +77,20 @@ class AuthAndSecurityTests {
                     return rolRepository.save(r);
                 });
 
+        rolRepository.findByNombreIgnoreCase("COMERCIO")
+                .orElseGet(() -> {
+                    Rol r = new Rol();
+                    r.setNombre("COMERCIO");
+                    return rolRepository.save(r);
+                });
+
+        rolRepository.findByNombreIgnoreCase("DOMICILIARIO")
+                .orElseGet(() -> {
+                    Rol r = new Rol();
+                    r.setNombre("DOMICILIARIO");
+                    return rolRepository.save(r);
+                });
+
         clienteTest = usuarioRepository.findByCorreo("test.auth.cliente@fastgo.com")
                 .orElseGet(() -> {
                     Usuario u = new Usuario();
@@ -169,7 +183,7 @@ class AuthAndSecurityTests {
     }
 
     @Test
-    @DisplayName("Registro público asigna únicamente rol CLIENTE e impide role tampering")
+    @DisplayName("Registro público asigna únicamente rol CLIENTE cuando no se especifica rol")
     void testRegistroClienteNoPermiteRoleTampering() throws Exception {
         String correoUnico = "nuevo.usuario." + System.currentTimeMillis() + "@fastgo.com";
         RegistroUsuarioRequest req = new RegistroUsuarioRequest();
@@ -187,6 +201,106 @@ class AuthAndSecurityTests {
 
         Usuario u = usuarioRepository.findByCorreo(correoUnico).orElseThrow();
         org.junit.jupiter.api.Assertions.assertEquals("CLIENTE", u.getRol().getNombre());
+    }
+
+    @Test
+    @DisplayName("Registro público permite registrarse como COMERCIO")
+    void testRegistroConRolComercioExitoso() throws Exception {
+        String correoUnico = "comercio." + System.currentTimeMillis() + "@fastgo.com";
+        RegistroUsuarioRequest req = new RegistroUsuarioRequest();
+        req.setNombre("Nuevo");
+        req.setApellido("Comercio");
+        req.setCorreo(correoUnico);
+        req.setPassword("Password123");
+        req.setRol("COMERCIO");
+
+        mockMvc.perform(post("/api/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correo", is(correoUnico)))
+                .andExpect(jsonPath("$.rol", is("COMERCIO")));
+
+        Usuario u = usuarioRepository.findByCorreo(correoUnico).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("COMERCIO", u.getRol().getNombre());
+    }
+
+    @Test
+    @DisplayName("Registro público permite registrarse como DOMICILIARIO")
+    void testRegistroConRolDomiciliarioExitoso() throws Exception {
+        String correoUnico = "domiciliario." + System.currentTimeMillis() + "@fastgo.com";
+        RegistroUsuarioRequest req = new RegistroUsuarioRequest();
+        req.setNombre("Nuevo");
+        req.setApellido("Domiciliario");
+        req.setCorreo(correoUnico);
+        req.setPassword("Password123");
+        req.setRol("DOMICILIARIO");
+
+        mockMvc.perform(post("/api/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correo", is(correoUnico)))
+                .andExpect(jsonPath("$.rol", is("DOMICILIARIO")));
+
+        Usuario u = usuarioRepository.findByCorreo(correoUnico).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals("DOMICILIARIO", u.getRol().getNombre());
+    }
+
+    @Test
+    @DisplayName("Registro público rechaza intento de registro con rol ADMIN")
+    void testRegistroConRolAdminEsRechazado() throws Exception {
+        String correoUnico = "intento.admin." + System.currentTimeMillis() + "@fastgo.com";
+        RegistroUsuarioRequest req = new RegistroUsuarioRequest();
+        req.setNombre("Hacker");
+        req.setApellido("Admin");
+        req.setCorreo(correoUnico);
+        req.setPassword("Password123");
+        req.setRol("ADMIN");
+
+        mockMvc.perform(post("/api/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Registro público permite múltiples usuarios con el mismo número telefónico")
+    void testRegistroPermiteTelefonosDuplicados() throws Exception {
+        String telefonoCompartido = "3007654321";
+        String correo1 = "tel.user1." + System.currentTimeMillis() + "@fastgo.com";
+        String correo2 = "tel.user2." + (System.currentTimeMillis() + 1) + "@fastgo.com";
+
+        RegistroUsuarioRequest req1 = new RegistroUsuarioRequest();
+        req1.setNombre("Usuario");
+        req1.setApellido("Uno");
+        req1.setCorreo(correo1);
+        req1.setPassword("Password123");
+        req1.setTelefono(telefonoCompartido);
+
+        mockMvc.perform(post("/api/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telefono", is(telefonoCompartido)));
+
+        RegistroUsuarioRequest req2 = new RegistroUsuarioRequest();
+        req2.setNombre("Usuario");
+        req2.setApellido("Dos");
+        req2.setCorreo(correo2);
+        req2.setPassword("Password123");
+        req2.setTelefono(telefonoCompartido);
+
+        mockMvc.perform(post("/api/usuarios")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req2)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.telefono", is(telefonoCompartido)));
+
+        Usuario u1 = usuarioRepository.findByCorreo(correo1).orElseThrow();
+        Usuario u2 = usuarioRepository.findByCorreo(correo2).orElseThrow();
+        org.junit.jupiter.api.Assertions.assertEquals(telefonoCompartido, u1.getTelefono());
+        org.junit.jupiter.api.Assertions.assertEquals(telefonoCompartido, u2.getTelefono());
     }
 
     @Test

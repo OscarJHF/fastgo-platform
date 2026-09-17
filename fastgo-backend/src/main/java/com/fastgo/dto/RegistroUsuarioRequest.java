@@ -31,6 +31,8 @@ public class RegistroUsuarioRequest {
     @Size(max = 255, message = "La foto no puede superar 255 caracteres")
     private String foto;
 
+    private String rol;
+
     public RegistroUsuarioRequest() {}
 
     public String getNombre() { return nombre; }
@@ -50,4 +52,7 @@ public class RegistroUsuarioRequest {
 
     public String getFoto() { return foto; }
     public void setFoto(String foto) { this.foto = foto; }
+
+    public String getRol() { return rol; }
+    public void setRol(String rol) { this.rol = rol; }
 }

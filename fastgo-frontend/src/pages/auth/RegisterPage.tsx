@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Phone, Lock, AlertCircle, CheckCircle } from 'lucide-react';
+import { User, Mail, Phone, Lock, AlertCircle, CheckCircle, Store, Bike } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { Input } from '../../components/common/Input';
@@ -14,13 +14,22 @@ export const RegisterPage: React.FC = () => {
   const { success } = useToast();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    nombre: string;
+    apellido: string;
+    correo: string;
+    telefono: string;
+    password: string;
+    confirmPassword: string;
+    rol: 'CLIENTE' | 'COMERCIO' | 'DOMICILIARIO';
+  }>({
     nombre: '',
     apellido: '',
     correo: '',
     telefono: '',
     password: '',
     confirmPassword: '',
+    rol: 'CLIENTE',
   });
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -55,6 +64,7 @@ export const RegisterPage: React.FC = () => {
         correo: formData.correo,
         telefono: formData.telefono,
         password: formData.password,
+        rol: formData.rol,
       });
       success('¡Registro exitoso! Bienvenido a FastGo.');
       navigate(APP_ROUTES.HOME);
@@ -92,6 +102,53 @@ export const RegisterPage: React.FC = () => {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Selector de Rol */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+              ¿Cómo deseas unirte a FastGo?
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleChange('rol', 'CLIENTE')}
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                  formData.rol === 'CLIENTE'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20'
+                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                <User className={`w-5 h-5 ${formData.rol === 'CLIENTE' ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <span className="text-xs font-bold">Cliente</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleChange('rol', 'COMERCIO')}
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                  formData.rol === 'COMERCIO'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20'
+                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                <Store className={`w-5 h-5 ${formData.rol === 'COMERCIO' ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <span className="text-xs font-bold">Comercio</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleChange('rol', 'DOMICILIARIO')}
+                className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                  formData.rol === 'DOMICILIARIO'
+                    ? 'border-emerald-600 bg-emerald-50 text-emerald-900 shadow-sm ring-2 ring-emerald-500/20'
+                    : 'border-gray-200 bg-white hover:bg-gray-50 text-gray-600'
+                }`}
+              >
+                <Bike className={`w-5 h-5 ${formData.rol === 'DOMICILIARIO' ? 'text-emerald-600' : 'text-gray-400'}`} />
+                <span className="text-xs font-bold">Domiciliario</span>
+              </button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label="Nombre"
