@@ -12,8 +12,8 @@
 ### Opción A: Distribución Vía URL Pública y QR (Producción)
 - **URL Real de Descarga:** `https://github.com/OscarJHF/fastgo-platform/releases/download/v2.0-beta/FASTGO-Beta2-release.apk`
 - **Página de Release:** `https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.0-beta`
-- **SHA-256:** `D37DA89E68B7575271842D82F2C4E0F62EE5043E49BA9B277F1855554D5A7B60`
-- **Tamaño:** `68,572,436 bytes` (68.5 MB)
+- **SHA-256:** `7A79DF7A511D10A1456480EB67DF2A48AF454690DCB371B79CE9C8572327C2BD`
+- **Tamaño:** `68,578,664 bytes` (68.5 MB)
 - **Código QR:** `FASTGO_ANDROID_QR.png` (apunta a la URL real)
 - **Instrucción:** El usuario puede escanear el código QR con la cámara de cualquier teléfono Android o abrir la URL en el navegador móvil para descargar el APK directamente.
 
