@@ -186,16 +186,16 @@ public class PedidoService {
         Usuario usuario = usuario();
 
         if (pedido.getUsuarioId().equals(usuario.getId())) {
-            return pedido;
+            return enriquecerPedido(pedido);
         }
 
         if (esComercioPropietario(pedido, usuario)) {
-            return pedido;
+            return enriquecerPedido(pedido);
         }
 
         if ("DOMICILIARIO".equalsIgnoreCase(rol(usuario))
                 && usuario.getId().equals(pedido.getDomiciliarioId())) {
-            return pedido;
+            return enriquecerPedido(pedido);
         }
 
         throw new RuntimeException(
@@ -203,7 +203,7 @@ public class PedidoService {
     }
 
     public List<Pedido> listarPorUsuario() {
-        return pedidoRepository.findByUsuarioId(usuario().getId());
+        return enriquecerPedidos(pedidoRepository.findByUsuarioId(usuario().getId()));
     }
 
     public List<Pedido> listarPorUsuario(Integer usuarioId) {
@@ -212,7 +212,7 @@ public class PedidoService {
             throw new RuntimeException(
                     "No tienes permiso para consultar estos pedidos");
         }
-        return pedidoRepository.findByUsuarioId(usuarioId);
+        return enriquecerPedidos(pedidoRepository.findByUsuarioId(usuarioId));
     }
 
     public List<Pedido> listarPorSucursal(Integer sucursalId) {
@@ -223,7 +223,7 @@ public class PedidoService {
 
         exigirComercioPropietario(sucursal.getComercioId(), usuario);
 
-        return pedidoRepository.findBySucursalId(sucursalId);
+        return enriquecerPedidos(pedidoRepository.findBySucursalId(sucursalId));
     }
 
     public List<Pedido> listarPorEstado(String estado) {
@@ -237,18 +237,18 @@ public class PedidoService {
                 ? ""
                 : estado.trim().toUpperCase();
 
-        return sucursalRepository.findByComercioId(
+        return enriquecerPedidos(sucursalRepository.findByComercioId(
                         comercioPropio(usuario).getId())
                 .stream()
                 .flatMap(sucursal ->
                         pedidoRepository.findBySucursalId(sucursal.getId()).stream())
                 .filter(pedido ->
                         pedido.getEstado().equalsIgnoreCase(estadoNormalizado))
-                .toList();
+                .toList());
     }
 
     public List<Pedido> disponiblesParaDomiciliario() {
-        return pedidoRepository.findByEstadoAndDomiciliarioIdIsNull("LISTO");
+        return enriquecerPedidos(pedidoRepository.findByEstadoAndDomiciliarioIdIsNull("LISTO"));
     }
 
     public List<Pedido> misPedidosDomiciliario() {
@@ -257,7 +257,7 @@ public class PedidoService {
             throw new RuntimeException(
                     "Solo un domiciliario puede consultar sus pedidos");
         }
-        return pedidoRepository.findByDomiciliarioId(usuario.getId());
+        return enriquecerPedidos(pedidoRepository.findByDomiciliarioId(usuario.getId()));
     }
 
     public List<DetallePedido> detalles(Integer pedidoId) {
@@ -275,7 +275,39 @@ public class PedidoService {
                     "No tienes permiso para consultar los detalles");
         }
 
-        return detallePedidoRepository.findByPedidoId(pedidoId);
+        List<DetallePedido> lista = detallePedidoRepository.findByPedidoId(pedidoId);
+        for (DetallePedido d : lista) {
+            if (d.getProductoId() != null) {
+                productoRepository.findById(d.getProductoId()).ifPresent(p -> d.setProductoNombre(p.getNombre()));
+            }
+        }
+        return lista;
+    }
+
+    private Pedido enriquecerPedido(Pedido p) {
+        if (p == null) return null;
+        if (p.getUsuarioId() != null) {
+            usuarioRepository.findById(p.getUsuarioId()).ifPresent(u -> {
+                String nombreCompleto = u.getNombre() + (u.getApellido() != null && !u.getApellido().isBlank() ? " " + u.getApellido() : "");
+                p.setClienteNombre(nombreCompleto.trim());
+                p.setClienteTelefono(u.getTelefono());
+            });
+        }
+        if (p.getDireccionId() != null) {
+            direccionRepository.findById(p.getDireccionId()).ifPresent(d -> {
+                String dir = d.getDireccion() + (d.getCiudad() != null && !d.getCiudad().isBlank() ? ", " + d.getCiudad() : "");
+                p.setDireccionTexto(dir);
+            });
+        }
+        return p;
+    }
+
+    private List<Pedido> enriquecerPedidos(List<Pedido> lista) {
+        if (lista == null) return List.of();
+        for (Pedido p : lista) {
+            enriquecerPedido(p);
+        }
+        return lista;
     }
 
     public Pedido confirmar(Integer id) {

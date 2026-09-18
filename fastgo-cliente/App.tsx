@@ -96,6 +96,11 @@ interface PedidoItem {
   costoEnvio: number;
   total: number;
   observaciones?: string;
+  metodoPago?: string;
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  direccionTexto?: string;
+  distanciaKm?: number;
   creadoEn?: string;
 }
 
@@ -103,6 +108,7 @@ interface DetallePedidoItem {
   id: number;
   pedidoId: number;
   productoId: number;
+  productoNombre?: string;
   cantidad: number;
   precio: number;
   subtotal: number;
@@ -201,6 +207,8 @@ export default function App() {
 
   // Comercio
   const [pedidosComercio, setPedidosComercio] = useState<PedidoItem[]>([]);
+  const [expandedKitchenOrders, setExpandedKitchenOrders] = useState<Record<number, DetallePedidoItem[]>>({});
+  const [loadingKitchenDetails, setLoadingKitchenDetails] = useState<Record<number, boolean>>({});
 
   // Domiciliario
   const [pedidosDisponibles, setPedidosDisponibles] = useState<PedidoItem[]>([]);
@@ -847,6 +855,28 @@ export default function App() {
       }
     } catch (e: any) {
       Alert.alert("Error", e.message);
+    }
+  };
+
+  const toggleKitchenOrderDetails = async (orderId: number) => {
+    if (expandedKitchenOrders[orderId]) {
+      const next = { ...expandedKitchenOrders };
+      delete next[orderId];
+      setExpandedKitchenOrders(next);
+      return;
+    }
+    setLoadingKitchenDetails((prev) => ({ ...prev, [orderId]: true }));
+    try {
+      const res = await fetch(`${apiUrl}/api/pedidos/${orderId}/detalles`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setExpandedKitchenOrders((prev) => ({ ...prev, [orderId]: data }));
+      }
+    } catch {}
+    finally {
+      setLoadingKitchenDetails((prev) => ({ ...prev, [orderId]: false }));
     }
   };
 
@@ -1696,8 +1726,58 @@ export default function App() {
                       <Text style={styles.statusPillText}>{p.estado}</Text>
                     </View>
                   </View>
+
+                  {/* Datos del Cliente y Entrega */}
+                  <View style={{ backgroundColor: "#F8FAFC", padding: 8, borderRadius: 8, marginVertical: 6, borderWidth: 1, borderColor: "#E2E8F0" }}>
+                    <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>
+                      👤 Cliente: {p.clienteNombre || "Cliente FastGo"} {p.clienteTelefono ? `(${p.clienteTelefono})` : ""}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                      📍 Entrega: {p.direccionTexto || "Dirección registrada"}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: Theme.primary, fontWeight: "600", marginTop: 2 }}>
+                      💳 Pago: {p.metodoPago || "EFECTIVO"}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 4 }}>
+                      Subtotal: ${p.subtotal ? p.subtotal.toLocaleString() : "0"} • Domicilio: ${p.costoEnvio ? p.costoEnvio.toLocaleString() : "0"}
+                    </Text>
+                  </View>
+
                   <Text style={styles.kitchenPrice}>Total a cobrar: ${p.total.toLocaleString()} COP</Text>
-                  <Text style={styles.kitchenNotes}>{p.observaciones || "Sin instrucciones especiales"}</Text>
+                  {p.observaciones ? (
+                    <Text style={[styles.kitchenNotes, { fontStyle: "italic", backgroundColor: "#FEF3C7", padding: 6, borderRadius: 6, color: "#92400E" }]}>
+                      Nota: {p.observaciones}
+                    </Text>
+                  ) : null}
+
+                  {/* Toggle para ver productos a empacar */}
+                  <TouchableOpacity
+                    style={{ paddingVertical: 6, flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginVertical: 4 }}
+                    onPress={() => toggleKitchenOrderDetails(p.id)}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.primary }}>
+                      📦 {expandedKitchenOrders[p.id] ? "Ocultar productos a empacar ▲" : "Ver productos a empacar ▼"}
+                    </Text>
+                    {loadingKitchenDetails[p.id] && <ActivityIndicator size="small" color={Theme.primary} />}
+                  </TouchableOpacity>
+
+                  {expandedKitchenOrders[p.id] && (
+                    <View style={{ backgroundColor: "#FFFFFF", padding: 8, borderRadius: 8, borderWidth: 1, borderColor: "#CBD5E1", marginBottom: 8 }}>
+                      <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.textMuted, textTransform: "uppercase", marginBottom: 4 }}>
+                        Ítems para cocina / empaque:
+                      </Text>
+                      {expandedKitchenOrders[p.id].map((it) => (
+                        <View key={it.id} style={{ flexDirection: "row", justifyContent: "space-between", paddingVertical: 3, borderBottomWidth: 0.5, borderBottomColor: "#F1F5F9" }}>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>
+                            {it.cantidad}x {it.productoNombre || `Producto #${it.productoId}`}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                            ${it.subtotal ? it.subtotal.toLocaleString() : (it.precio * it.cantidad).toLocaleString()} COP
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
 
                   {/* Transiciones Autorizadas */}
                   <View style={styles.actionButtonRow}>
@@ -1732,6 +1812,27 @@ export default function App() {
                       >
                         <Text style={styles.smallActionText}>📦 Listo para Entrega</Text>
                       </TouchableOpacity>
+                    )}
+                    {p.estado === "LISTO" && (
+                      <View style={{ padding: 6, backgroundColor: "#FEF3C7", borderRadius: 6, width: "100%", alignItems: "center" }}>
+                        <Text style={{ color: "#92400E", fontSize: 11, fontWeight: "bold" }}>
+                          ⏳ En mostrador — Esperando repartidor
+                        </Text>
+                      </View>
+                    )}
+                    {p.estado === "EN_CAMINO" && (
+                      <View style={{ padding: 6, backgroundColor: "#DBEAFE", borderRadius: 6, width: "100%", alignItems: "center" }}>
+                        <Text style={{ color: "#1E40AF", fontSize: 11, fontWeight: "bold" }}>
+                          🛵 En camino con el repartidor
+                        </Text>
+                      </View>
+                    )}
+                    {p.estado === "ENTREGADO" && (
+                      <View style={{ padding: 6, backgroundColor: "#DCFCE7", borderRadius: 6, width: "100%", alignItems: "center" }}>
+                        <Text style={{ color: "#166534", fontSize: 11, fontWeight: "bold" }}>
+                          ✅ Entregado con éxito
+                        </Text>
+                      </View>
                     )}
                   </View>
                 </View>

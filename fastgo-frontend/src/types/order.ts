@@ -20,6 +20,11 @@ export interface Pedido {
   costoEnvio: number;
   total: number;
   observaciones?: string;
+  metodoPago?: string;
+  clienteNombre?: string;
+  clienteTelefono?: string;
+  direccionTexto?: string;
+  distanciaKm?: number;
   creadoEn: string;
 }
 
@@ -27,7 +32,9 @@ export interface DetallePedido {
   id: number;
   pedidoId: number;
   productoId: number;
+  productoNombre?: string;
   cantidad: number;
   precio: number;
   subtotal: number;
 }
+

@@ -31,6 +31,7 @@ export const CheckoutPage: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>('EFECTIVO');
   const [acceptedMethods, setAcceptedMethods] = useState<string[]>(['EFECTIVO']);
   const [storeCommerce, setStoreCommerce] = useState<any>(null);
+  const [storeSucursal, setStoreSucursal] = useState<any>(null);
   const [isStoreOpen, setIsStoreOpen] = useState<boolean>(true);
   const [nequiPhone, setNequiPhone] = useState(user?.telefono || '');
   const [banks, setBanks] = useState<WompiBank[]>([]);
@@ -53,6 +54,7 @@ export const CheckoutPage: React.FC = () => {
         if (cart?.sucursalId) {
           try {
             const sucursal = await sucursalService.getSucursal(cart.sucursalId);
+            setStoreSucursal(sucursal);
             if (sucursal?.comercioId) {
               const comercio = await commerceService.getCommerce(sucursal.comercioId);
               setStoreCommerce(comercio);
@@ -90,6 +92,28 @@ export const CheckoutPage: React.FC = () => {
     initCheckout();
   }, [user, cart]);
 
+  const calculateDistanceKm = (lat1?: number, lon1?: number, lat2?: number, lon2?: number): number => {
+    if (!lat1 || !lon1 || !lat2 || !lon2) return 2.5;
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return Math.max(0.5, Math.round((R * c) * 10) / 10);
+  };
+
+  const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
+  const estimatedDistance = selectedAddress && storeSucursal
+    ? calculateDistanceKm(storeSucursal.latitud, storeSucursal.longitud, selectedAddress.latitud, selectedAddress.longitud)
+    : 2.5;
+
+  // Tarifa Oficial FastGo: $2.000 COP base hasta 1 km, + $200 COP por km adicional (ceil)
+  const deliveryFee = estimatedDistance <= 1.0 ? 2000 : 2000 + Math.ceil(estimatedDistance) * 200;
+  const finalTotal = subtotal + deliveryFee;
+
   const handlePlaceOrder = async () => {
     if (!cart) {
       showError('No se encontró carrito activo.');
@@ -106,11 +130,11 @@ export const CheckoutPage: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // 1. Crear el pedido autoritativo en el backend
+      // 1. Crear el pedido autoritativo en el backend con tarifa calculada
       const pedido = await pedidoService.createOrder({
         carritoId: cart.id,
         direccionId: selectedAddressId,
-        costoEnvio: 0,
+        costoEnvio: deliveryFee,
         observaciones: observaciones.trim() || undefined,
         metodoPago: paymentMethod,
       });
@@ -332,10 +356,29 @@ export const CheckoutPage: React.FC = () => {
 
         {/* Resumen Final y Botón de Pago */}
         <Card className="p-6 space-y-4 bg-gray-900 text-white">
-          <div className="flex justify-between items-baseline">
+          <div className="space-y-2 border-b border-gray-800 pb-4">
+            <div className="flex justify-between text-xs text-gray-400">
+              <span>Subtotal Productos ({items.length} {items.length === 1 ? 'ítem' : 'ítems'})</span>
+              <span className="font-semibold text-gray-200">{formatCurrency(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-xs text-gray-400">
+              <span className="flex items-center gap-1.5">
+                Tarifa Domicilio FastGo
+                <span className="text-[10px] bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded font-mono">
+                  ~{estimatedDistance} km
+                </span>
+              </span>
+              <span className="font-semibold text-emerald-400">{formatCurrency(deliveryFee)}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
             <div>
-              <p className="text-xs uppercase font-bold tracking-wider text-gray-400">Total a Pagar</p>
-              <p className="text-2xl font-black text-emerald-400">{formatCurrency(subtotal)}</p>
+              <p className="text-xs uppercase font-bold tracking-wider text-gray-400">Total Final a Pagar</p>
+              <p className="text-2xl font-black text-emerald-400">{formatCurrency(finalTotal)}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Método de pago: <span className="text-emerald-400 font-bold">{paymentMethod}</span>
+              </p>
             </div>
             <Button
               variant="primary"
@@ -344,7 +387,7 @@ export const CheckoutPage: React.FC = () => {
               isLoading={isLoading}
               disabled={addresses.length === 0 || !isStoreOpen}
             >
-              {!isStoreOpen ? 'Comercio Cerrado' : 'Confirmar y Crear Pedido'}
+              {!isStoreOpen ? 'Comercio Cerrado' : `Aceptar y Pagar ${formatCurrency(finalTotal)}`}
             </Button>
           </div>
         </Card>

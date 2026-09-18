@@ -103,4 +103,22 @@ public class Pedido {
 
     public LocalDateTime getCreadoEn() { return creadoEn; }
     public void setCreadoEn(LocalDateTime creadoEn) { this.creadoEn = creadoEn; }
+
+    @Transient
+    private String clienteNombre;
+
+    @Transient
+    private String clienteTelefono;
+
+    @Transient
+    private String direccionTexto;
+
+    public String getClienteNombre() { return clienteNombre; }
+    public void setClienteNombre(String clienteNombre) { this.clienteNombre = clienteNombre; }
+
+    public String getClienteTelefono() { return clienteTelefono; }
+    public void setClienteTelefono(String clienteTelefono) { this.clienteTelefono = clienteTelefono; }
+
+    public String getDireccionTexto() { return direccionTexto; }
+    public void setDireccionTexto(String direccionTexto) { this.direccionTexto = direccionTexto; }
 }
