@@ -173,6 +173,15 @@ export const LoginPage: React.FC = () => {
               required
             />
 
+            <div className="flex justify-end pt-0.5">
+              <Link
+                to={APP_ROUTES.FORGOT_PASSWORD}
+                className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </Link>
+            </div>
+
             <Button type="submit" variant="primary" size="lg" className="w-full" isLoading={isLoading}>
               Iniciar Sesión
             </Button>

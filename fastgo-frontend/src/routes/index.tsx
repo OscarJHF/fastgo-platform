@@ -8,6 +8,8 @@ import { RoleRoute } from '../components/guards/RoleRoute';
 import { HomePage } from '../pages/client/HomePage';
 import { LoginPage } from '../pages/auth/LoginPage';
 import { RegisterPage } from '../pages/auth/RegisterPage';
+import { ForgotPasswordPage } from '../pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from '../pages/auth/ResetPasswordPage';
 import { CommerceDetailPage } from '../pages/client/CommerceDetailPage';
 import { CartPage } from '../pages/client/CartPage';
 import { CheckoutPage } from '../pages/client/CheckoutPage';
@@ -43,6 +45,10 @@ export const AppRoutes: React.FC = () => {
         <Route path={APP_ROUTES.HOME} element={<HomePage />} />
         <Route path={APP_ROUTES.LOGIN} element={<LoginPage />} />
         <Route path={APP_ROUTES.REGISTER} element={<RegisterPage />} />
+        <Route path={APP_ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
+        <Route path={APP_ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path={APP_ROUTES.COMMERCE_DETAIL} element={<CommerceDetailPage />} />
         <Route path={APP_ROUTES.CART} element={<CartPage />} />
 

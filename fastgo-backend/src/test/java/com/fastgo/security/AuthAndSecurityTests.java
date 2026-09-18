@@ -54,6 +54,9 @@ class AuthAndSecurityTests {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private com.fastgo.repository.PasswordResetTokenRepository passwordResetTokenRepository;
+
     @Value("${fastgo.jwt.secret}")
     private String jwtSecret;
 
@@ -97,11 +100,12 @@ class AuthAndSecurityTests {
                     u.setNombre("Cliente");
                     u.setApellido("Auth");
                     u.setCorreo("test.auth.cliente@fastgo.com");
-                    u.setPassword(passwordEncoder.encode("Password123"));
                     u.setRol(rolCliente);
                     u.setEstado(true);
-                    return usuarioRepository.save(u);
+                    return u;
                 });
+        clienteTest.setPassword(passwordEncoder.encode("Password123"));
+        clienteTest = usuarioRepository.save(clienteTest);
 
         adminTest = usuarioRepository.findByCorreo("test.auth.admin@fastgo.com")
                 .orElseGet(() -> {
@@ -379,5 +383,108 @@ class AuthAndSecurityTests {
     void testRutaPublicaSinToken() throws Exception {
         mockMvc.perform(get("/api/test/publico"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("Recuperación de contraseña responde mensaje idéntico para usuario existente o inexistente (evita enumeración)")
+    void testRecuperacionPasswordNoEnumeracion() throws Exception {
+        com.fastgo.dto.ForgotPasswordRequest reqExistente = new com.fastgo.dto.ForgotPasswordRequest(clienteTest.getCorreo());
+        com.fastgo.dto.ForgotPasswordRequest reqInexistente = new com.fastgo.dto.ForgotPasswordRequest("inexistente." + System.currentTimeMillis() + "@fastgo.com");
+
+        final String esperado = "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.";
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reqExistente)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is(esperado)));
+
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reqInexistente)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", is(esperado)));
+    }
+
+    @Test
+    @DisplayName("Reset de contraseña con token válido actualiza las credenciales")
+    void testResetPasswordFlujoExitoso() throws Exception {
+        String correoReset = "reset.user." + System.currentTimeMillis() + "@fastgo.com";
+        Usuario resetUser = new Usuario();
+        resetUser.setNombre("User");
+        resetUser.setApellido("Reset");
+        resetUser.setCorreo(correoReset);
+        resetUser.setPassword(passwordEncoder.encode("PasswordOriginal123"));
+        resetUser.setRol(rolRepository.findByNombreIgnoreCase("CLIENTE").orElseThrow());
+        resetUser.setEstado(true);
+        resetUser = usuarioRepository.save(resetUser);
+
+        com.fastgo.dto.ForgotPasswordRequest req = new com.fastgo.dto.ForgotPasswordRequest(correoReset);
+        mockMvc.perform(post("/api/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
+
+        java.util.List<com.fastgo.entity.PasswordResetToken> tokens =
+                passwordResetTokenRepository.findByUsuarioAndUtilizadoFalse(resetUser);
+        org.junit.jupiter.api.Assertions.assertFalse(tokens.isEmpty(), "Debe existir al menos un token generado");
+        String token = tokens.get(0).getToken();
+
+        com.fastgo.dto.ResetPasswordRequest resetReq = new com.fastgo.dto.ResetPasswordRequest(token, "NuevaPasswordSegura123");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message", containsString("actualizada")));
+
+        // Intentar autenticar con la nueva contraseña
+        com.fastgo.dto.LoginRequest loginReq = new com.fastgo.dto.LoginRequest(correoReset, "NuevaPasswordSegura123");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").exists());
+    }
+
+    @Test
+    @DisplayName("Reset de contraseña falla con token expirado")
+    void testResetPasswordTokenExpirado() throws Exception {
+        String tokenExpirado = java.util.UUID.randomUUID().toString();
+        com.fastgo.entity.PasswordResetToken expired = new com.fastgo.entity.PasswordResetToken(
+                clienteTest,
+                tokenExpirado,
+                java.time.LocalDateTime.now().minusMinutes(5)
+        );
+        passwordResetTokenRepository.save(expired);
+
+        com.fastgo.dto.ResetPasswordRequest resetReq = new com.fastgo.dto.ResetPasswordRequest(tokenExpirado, "PasswordTest123");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetReq)))
+                .andExpect(status().is4xxClientError());
+    }
+
+    @Test
+    @DisplayName("Token de recuperación es de un solo uso y no puede reutilizarse")
+    void testResetPasswordTokenUnicoUso() throws Exception {
+        String token = java.util.UUID.randomUUID().toString();
+        com.fastgo.entity.PasswordResetToken resetToken = new com.fastgo.entity.PasswordResetToken(
+                clienteTest,
+                token,
+                java.time.LocalDateTime.now().plusMinutes(30)
+        );
+        passwordResetTokenRepository.save(resetToken);
+
+        com.fastgo.dto.ResetPasswordRequest resetReq = new com.fastgo.dto.ResetPasswordRequest(token, "PasswordValida1");
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetReq)))
+                .andExpect(status().isOk());
+
+        // Segundo intento con el mismo token debe ser rechazado
+        mockMvc.perform(post("/api/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(resetReq)))
+                .andExpect(status().is4xxClientError());
     }
 }

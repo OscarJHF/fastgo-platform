@@ -131,8 +131,16 @@ export default function App() {
   // Autenticación
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authMode, setAuthMode] = useState<"login" | "register" | "forgot_password" | "reset_password">("login");
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+
+  // Recuperación de Contraseña State
+  const [forgotEmail, setForgotEmail] = useState<string>("");
+  const [resetToken, setResetToken] = useState<string>("");
+  const [resetNewPassword, setResetNewPassword] = useState<string>("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState<string>("");
+  const [showResetPassword, setShowResetPassword] = useState<boolean>(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState<boolean>(false);
 
   // Multi-Rol y Selector
   const [showRoleModal, setShowRoleModal] = useState<boolean>(false);
@@ -461,6 +469,76 @@ export default function App() {
         }
       } else {
         Alert.alert("Acceso Denegado", "Correo o contraseña incorrectos.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error de Red", "No se pudo contactar al servidor: " + (e.message || ""));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail.trim()) {
+      Alert.alert("Atención", "Por favor ingresa tu correo electrónico.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ correo: forgotEmail.trim() }),
+      });
+      const data = await res.json();
+      Alert.alert(
+        "Instrucciones Enviadas",
+        data.message || "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.",
+        [
+          { text: "Ingresar Token", onPress: () => setAuthMode("reset_password") },
+          { text: "Volver al Login", onPress: () => setAuthMode("login") },
+        ]
+      );
+    } catch (e: any) {
+      Alert.alert("Error de Red", "No se pudo contactar al servidor: " + (e.message || ""));
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetToken.trim()) {
+      Alert.alert("Atención", "Por favor ingresa el token de recuperación recibido.");
+      return;
+    }
+    if (resetNewPassword.length < 6) {
+      Alert.alert("Atención", "La nueva contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      Alert.alert("Atención", "Las contraseñas no coinciden.");
+      return;
+    }
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/auth/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: resetToken.trim(), nuevaPassword: resetNewPassword }),
+      });
+      if (res.ok) {
+        Alert.alert(
+          "¡Contraseña Restablecida!",
+          "Tu contraseña ha sido actualizada con éxito. Ahora puedes iniciar sesión con tu nueva clave.",
+          [{ text: "Iniciar Sesión", onPress: () => {
+            setResetToken("");
+            setResetNewPassword("");
+            setResetConfirmPassword("");
+            setAuthMode("login");
+          }}]
+        );
+      } else {
+        const err = await res.json();
+        Alert.alert("Error", err.message || "El token es inválido o ha expirado.");
       }
     } catch (e: any) {
       Alert.alert("Error de Red", "No se pudo contactar al servidor: " + (e.message || ""));
@@ -2140,27 +2218,29 @@ export default function App() {
             ) : (
               /* Modal / Formulario de Inicio de Sesión o Registro */
               <View>
-                <View style={styles.authToggleRow}>
-                  <TouchableOpacity
-                    style={[styles.authToggleBtn, authMode === "login" && styles.authToggleBtnActive]}
-                    onPress={() => setAuthMode("login")}
-                  >
-                    <Text style={[styles.authToggleText, authMode === "login" && styles.authToggleTextActive]}>
-                      Iniciar Sesión
-                    </Text>
-                  </TouchableOpacity>
+                {(authMode === "login" || authMode === "register") && (
+                  <View style={styles.authToggleRow}>
+                    <TouchableOpacity
+                      style={[styles.authToggleBtn, authMode === "login" && styles.authToggleBtnActive]}
+                      onPress={() => setAuthMode("login")}
+                    >
+                      <Text style={[styles.authToggleText, authMode === "login" && styles.authToggleTextActive]}>
+                        Iniciar Sesión
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.authToggleBtn, authMode === "register" && styles.authToggleBtnActive]}
-                    onPress={() => setAuthMode("register")}
-                  >
-                    <Text style={[styles.authToggleText, authMode === "register" && styles.authToggleTextActive]}>
-                      Crear Cuenta
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                    <TouchableOpacity
+                      style={[styles.authToggleBtn, authMode === "register" && styles.authToggleBtnActive]}
+                      onPress={() => setAuthMode("register")}
+                    >
+                      <Text style={[styles.authToggleText, authMode === "register" && styles.authToggleTextActive]}>
+                        Crear Cuenta
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
 
-                {authMode === "login" ? (
+                {authMode === "login" && (
                   /* Formulario de Login Limpio con Eye Toggle */
                   <View style={{ marginTop: 16 }}>
                     <Text style={styles.inputLabel}>Correo Electrónico:</Text>
@@ -2203,8 +2283,19 @@ export default function App() {
                         <Text style={styles.solidBtnText}>Entrar a FASTGO</Text>
                       )}
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ marginTop: 14, alignItems: "center" }}
+                      onPress={() => setAuthMode("forgot_password")}
+                    >
+                      <Text style={{ fontSize: 13, color: Theme.primary, fontWeight: "600" }}>
+                        ¿Olvidaste tu contraseña?
+                      </Text>
+                    </TouchableOpacity>
                   </View>
-                ) : (
+                )}
+
+                {authMode === "register" && (
                   /* Formulario de Registro con Selección de Rol, Reutilización de Datos y Confirmación */
                   <View style={{ marginTop: 16 }}>
                     {/* Correo Electrónico Primero para Detectar Cuenta Existente */}
@@ -2369,6 +2460,134 @@ export default function App() {
                             : `Registrarme como ${regRol}`}
                         </Text>
                       )}
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {authMode === "forgot_password" && (
+                  /* Formulario de Recuperación de Contraseña */
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 4 }]}>Recuperar Contraseña</Text>
+                    <Text style={{ fontSize: 13, color: Theme.textMuted, marginBottom: 16 }}>
+                      Ingresa el correo asociado a tu cuenta FASTGO para recibir las instrucciones de recuperación.
+                    </Text>
+
+                    <Text style={styles.inputLabel}>Correo Electrónico:</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="ejemplo@correo.com"
+                      placeholderTextColor="#94A3B8"
+                      value={forgotEmail}
+                      onChangeText={setForgotEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                    />
+
+                    <TouchableOpacity
+                      style={[styles.solidBtn, { marginTop: 18 }]}
+                      onPress={handleForgotPassword}
+                      disabled={authLoading}
+                    >
+                      {authLoading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.solidBtnText}>Enviar Enlace de Recuperación</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ marginTop: 14, alignItems: "center" }}
+                      onPress={() => setAuthMode("reset_password")}
+                    >
+                      <Text style={{ fontSize: 13, color: Theme.primary, fontWeight: "600" }}>
+                        ¿Ya tienes un token? Restablecer aquí
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ marginTop: 12, alignItems: "center" }}
+                      onPress={() => setAuthMode("login")}
+                    >
+                      <Text style={{ fontSize: 13, color: Theme.textMuted }}>
+                        ← Volver a Iniciar Sesión
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {authMode === "reset_password" && (
+                  /* Formulario de Restablecimiento con Token y Eye Toggles */
+                  <View style={{ marginTop: 16 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 4 }]}>Restablecer Contraseña</Text>
+                    <Text style={{ fontSize: 13, color: Theme.textMuted, marginBottom: 16 }}>
+                      Ingresa el token de recuperación y define tu nueva contraseña (mínimo 8 caracteres).
+                    </Text>
+
+                    <Text style={styles.inputLabel}>Token de Recuperación:</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Pega aquí tu token"
+                      placeholderTextColor="#94A3B8"
+                      value={resetToken}
+                      onChangeText={setResetToken}
+                      autoCapitalize="none"
+                    />
+
+                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nueva Contraseña:</Text>
+                    <View style={styles.passwordInputRow}>
+                      <TextInput
+                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                        placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
+                        value={resetNewPassword}
+                        onChangeText={setResetNewPassword}
+                        secureTextEntry={!showResetPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowResetPassword((prev) => !prev)}
+                      >
+                        <Text style={styles.eyeIcon}>{showResetPassword ? "👁️" : "🔒"}</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Confirmar Nueva Contraseña:</Text>
+                    <View style={styles.passwordInputRow}>
+                      <TextInput
+                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                        placeholder="••••••••"
+                        placeholderTextColor="#94A3B8"
+                        value={resetConfirmPassword}
+                        onChangeText={setResetConfirmPassword}
+                        secureTextEntry={!showResetConfirmPassword}
+                      />
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setShowResetConfirmPassword((prev) => !prev)}
+                      >
+                        <Text style={styles.eyeIcon}>{showResetConfirmPassword ? "👁️" : "🔒"}</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.solidBtn, { marginTop: 18 }]}
+                      onPress={handleResetPassword}
+                      disabled={authLoading}
+                    >
+                      {authLoading ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.solidBtnText}>Actualizar Contraseña</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={{ marginTop: 14, alignItems: "center" }}
+                      onPress={() => setAuthMode("login")}
+                    >
+                      <Text style={{ fontSize: 13, color: Theme.textMuted }}>
+                        ← Volver a Iniciar Sesión
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 )}

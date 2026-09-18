@@ -10,8 +10,10 @@ import { Spinner } from '../../components/common/Spinner';
 import { Badge } from '../../components/common/Badge';
 import { formatCurrency } from '../../utils/formatters';
 import { APP_ROUTES } from '../../constants/routes';
+import { useAuth } from '../../context/AuthContext';
 
 export const HomePage: React.FC = () => {
+  const { isAuthenticated } = useAuth();
   const [commerces, setCommerces] = useState<Comercio[]>([]);
   const [categories, setCategories] = useState<CategoriaComercio[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Producto[]>([]);
@@ -248,75 +250,77 @@ export const HomePage: React.FC = () => {
         )}
       </section>
 
-      {/* Official FastGo Partner Programs */}
-      <section className="pt-6 border-t border-gray-100 space-y-6">
-        <div>
-          <h2 className="text-2xl font-black text-gray-900 tracking-tight">Haz parte del ecosistema FASTGO</h2>
-          <p className="text-sm text-gray-500 mt-1">Opciones y servicios especializados para potenciar tus ventas y entregas</p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Card 1: Registra tu comercio */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
-            <div className="space-y-4">
-              <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
-                <img 
-                  src="/assets/images/registra-tu-comercio.png" 
-                  alt="Registra tu comercio" 
-                  className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
-                />
-              </div>
-              <h3 className="text-lg font-black text-gray-900">Registra tu Comercio</h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Vende más y llega a miles de clientes locales en tu ciudad. Gestiona tus sucursales, productos y pedidos con panel en tiempo real.
-              </p>
-            </div>
-            <Link to={APP_ROUTES.REGISTER} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
-              Comenzar Ahora →
-            </Link>
+      {/* Official FastGo Partner Programs (Visible solo para visitantes no autenticados) */}
+      {!isAuthenticated && (
+        <section className="pt-6 border-t border-gray-100 space-y-6">
+          <div>
+            <h2 className="text-2xl font-black text-gray-900 tracking-tight">Haz parte del ecosistema FASTGO</h2>
+            <p className="text-sm text-gray-500 mt-1">Opciones y servicios especializados para potenciar tus ventas y entregas</p>
           </div>
 
-          {/* Card 2: Únete como domiciliario */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
-            <div className="space-y-4">
-              <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
-                <img 
-                  src="/assets/images/Unirse-domiciliario.png" 
-                  alt="Únete como domiciliario" 
-                  className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
-                />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Card 1: Registra tu comercio */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
+                  <img 
+                    src="/assets/images/registra-tu-comercio.png" 
+                    alt="Registra tu comercio" 
+                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
+                  />
+                </div>
+                <h3 className="text-lg font-black text-gray-900">Registra tu Comercio</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Vende más y llega a miles de clientes locales en tu ciudad. Gestiona tus sucursales, productos y pedidos con panel en tiempo real.
+                </p>
               </div>
-              <h3 className="text-lg font-black text-gray-900">Únete como Domiciliario</h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                Genera ingresos con flexibilidad total de horarios. App móvil optimizada con navegación GPS y pagos puntuales garantizados.
-              </p>
+              <Link to={APP_ROUTES.REGISTER} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                Comenzar Ahora →
+              </Link>
             </div>
-            <Link to={APP_ROUTES.REGISTER} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
-              Quiero Repartir →
-            </Link>
-          </div>
 
-          {/* Card 3: Solicita un domiciliario */}
-          <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
-            <div className="space-y-4">
-              <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
-                <img 
-                  src="/assets/images/solcita-un-domiciliario.png" 
-                  alt="Solicita un domiciliario express" 
-                  className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
-                />
+            {/* Card 2: Únete como domiciliario */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
+                  <img 
+                    src="/assets/images/Unirse-domiciliario.png" 
+                    alt="Únete como domiciliario" 
+                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
+                  />
+                </div>
+                <h3 className="text-lg font-black text-gray-900">Únete como Domiciliario</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Genera ingresos con flexibilidad total de horarios. App móvil optimizada con navegación GPS y pagos puntuales garantizados.
+                </p>
               </div>
-              <h3 className="text-lg font-black text-gray-900">Envíos Corporativos Express</h3>
-              <p className="text-xs text-gray-500 leading-relaxed">
-                ¿Necesitas mandar llaves, documentos o paquetería urgente? Servicio de mensajería empresarial y personal puerta a puerta.
-              </p>
+              <Link to={APP_ROUTES.REGISTER} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                Quiero Repartir →
+              </Link>
             </div>
-            <Link to={APP_ROUTES.REGISTER} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
-              Solicitar Mensajero →
-            </Link>
+
+            {/* Card 3: Solicita un domiciliario express */}
+            <div className="bg-white rounded-3xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group">
+              <div className="space-y-4">
+                <div className="h-44 rounded-2xl overflow-hidden bg-emerald-50/50 flex items-center justify-center p-3 border border-emerald-100/50">
+                  <img 
+                    src="/assets/images/solcita-un-domiciliario.png" 
+                    alt="Solicita un domiciliario express" 
+                    className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform" 
+                  />
+                </div>
+                <h3 className="text-lg font-black text-gray-900">Envíos Corporativos Express</h3>
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  ¿Necesitas mandar llaves, documentos o paquetería urgente? Servicio de mensajería empresarial y personal puerta a puerta.
+                </p>
+              </div>
+              <Link to={APP_ROUTES.ENCOMIENDAS} className="mt-5 inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">
+                Solicitar Mensajero →
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
     </div>
   );
 };

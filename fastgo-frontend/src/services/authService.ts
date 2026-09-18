@@ -35,6 +35,16 @@ export const authService = {
     return response.data;
   },
 
+  async forgotPassword(correo: string): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>('/api/auth/forgot-password', { correo });
+    return response.data;
+  },
+
+  async resetPassword(token: string, nuevaPassword: string): Promise<{ message: string }> {
+    const response = await apiClient.post<{ message: string }>('/api/auth/reset-password', { token, nuevaPassword });
+    return response.data;
+  },
+
   logout(): void {
     localStorage.removeItem(TOKEN_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent('fastgo:auth:unauthorized'));

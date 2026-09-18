@@ -17,16 +17,22 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final com.fastgo.repository.RolRepository rolRepository;
+    private final com.fastgo.repository.PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
 
     public AuthService(
             UsuarioRepository usuarioRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            com.fastgo.repository.RolRepository rolRepository) {
+            com.fastgo.repository.RolRepository rolRepository,
+            com.fastgo.repository.PasswordResetTokenRepository passwordResetTokenRepository,
+            EmailService emailService) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.rolRepository = rolRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailService = emailService;
     }
 
     public com.fastgo.dto.LoginResponse autenticar(LoginRequest request) {
@@ -173,5 +179,71 @@ public class AuthService {
             roles.add("CLIENTE");
         }
         return new java.util.ArrayList<>(roles);
+    }
+
+    public String solicitarRecuperacionPassword(String correo) {
+        final String mensajeGenerico = "Si el correo está registrado, recibirás instrucciones para recuperar tu contraseña.";
+        if (correo == null || correo.isBlank()) {
+            return mensajeGenerico;
+        }
+
+        String correoNorm = correo.trim().toLowerCase();
+        java.util.Optional<Usuario> usuarioOpt = usuarioRepository.findByCorreo(correoNorm);
+
+        if (usuarioOpt.isEmpty()) {
+            return mensajeGenerico;
+        }
+
+        Usuario usuario = usuarioOpt.get();
+        if (!Boolean.TRUE.equals(usuario.getEstado())) {
+            return mensajeGenerico;
+        }
+
+        // Invalidar tokens previos sin utilizar para este usuario
+        java.util.List<com.fastgo.entity.PasswordResetToken> previos =
+                passwordResetTokenRepository.findByUsuarioAndUtilizadoFalse(usuario);
+        for (com.fastgo.entity.PasswordResetToken p : previos) {
+            p.setUtilizado(true);
+            passwordResetTokenRepository.save(p);
+        }
+
+        // Generar nuevo token seguro con expiración de 60 minutos
+        String token = java.util.UUID.randomUUID().toString();
+        java.time.LocalDateTime expiraEn = java.time.LocalDateTime.now().plusMinutes(60);
+
+        com.fastgo.entity.PasswordResetToken resetToken =
+                new com.fastgo.entity.PasswordResetToken(usuario, token, expiraEn);
+        passwordResetTokenRepository.save(resetToken);
+
+        emailService.enviarCorreoRecuperacion(usuario.getCorreo(), usuario.getNombre(), token);
+
+        return mensajeGenerico;
+    }
+
+    public String resetearPassword(String token, String nuevaPassword) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("El token de recuperación es obligatorio");
+        }
+        if (nuevaPassword == null || nuevaPassword.length() < 6) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 6 caracteres");
+        }
+
+        com.fastgo.entity.PasswordResetToken resetToken = passwordResetTokenRepository.findByTokenAndUtilizadoFalse(token.trim())
+                .orElseThrow(() -> new IllegalArgumentException("El token es inválido o ya ha sido utilizado"));
+
+        if (resetToken.getExpiraEn().isBefore(java.time.LocalDateTime.now())) {
+            resetToken.setUtilizado(true);
+            passwordResetTokenRepository.save(resetToken);
+            throw new IllegalArgumentException("El token ha expirado. Por favor solicita uno nuevo.");
+        }
+
+        Usuario usuario = resetToken.getUsuario();
+        usuario.setPassword(passwordEncoder.encode(nuevaPassword));
+        usuarioRepository.save(usuario);
+
+        resetToken.setUtilizado(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        return "Contraseña actualizada correctamente.";
     }
 }

@@ -2,6 +2,8 @@ export const APP_ROUTES = {
   HOME: '/',
   LOGIN: '/login',
   REGISTER: '/registro',
+  FORGOT_PASSWORD: '/forgot-password',
+  RESET_PASSWORD: '/reset-password',
   COMMERCE_DETAIL: '/comercio/:id',
   CART: '/carrito',
   CHECKOUT: '/checkout',
