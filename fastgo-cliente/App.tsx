@@ -14,6 +14,7 @@ import {
   Platform,
   RefreshControl,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // URL Oficial de Producción en Render
 const DEFAULT_API_URL = "https://fastgo-backend-lp2j.onrender.com";
@@ -115,6 +116,57 @@ interface DetallePedidoItem {
 }
 
 // ==========================================
+// SESIÓN PERSISTENTE SEGURA
+// ==========================================
+const STORAGE_KEYS = {
+  TOKEN: "fastgo_auth_token",
+  USER: "fastgo_auth_user",
+};
+
+const getStoredSession = async (): Promise<{ token: string; user: UserProfile } | null> => {
+  try {
+    let savedToken: string | null = null;
+    let savedUserStr: string | null = null;
+    if (AsyncStorage) {
+      savedToken = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
+      savedUserStr = await AsyncStorage.getItem(STORAGE_KEYS.USER);
+    }
+    if (!savedToken && typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+      savedToken = (globalThis as any).localStorage.getItem(STORAGE_KEYS.TOKEN);
+      savedUserStr = (globalThis as any).localStorage.getItem(STORAGE_KEYS.USER);
+    }
+    if (savedToken && savedUserStr) {
+      return { token: savedToken, user: JSON.parse(savedUserStr) };
+    }
+  } catch {}
+  return null;
+};
+
+const persistSession = async (jwt: string | null, profile: UserProfile | null) => {
+  try {
+    if (jwt && profile) {
+      if (AsyncStorage) {
+        await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, jwt);
+        await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(profile));
+      }
+      if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+        (globalThis as any).localStorage.setItem(STORAGE_KEYS.TOKEN, jwt);
+        (globalThis as any).localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(profile));
+      }
+    } else {
+      if (AsyncStorage) {
+        await AsyncStorage.removeItem(STORAGE_KEYS.TOKEN);
+        await AsyncStorage.removeItem(STORAGE_KEYS.USER);
+      }
+      if (typeof globalThis !== "undefined" && (globalThis as any).localStorage) {
+        (globalThis as any).localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        (globalThis as any).localStorage.removeItem(STORAGE_KEYS.USER);
+      }
+    }
+  } catch {}
+};
+
+// ==========================================
 // COMPONENTE PRINCIPAL FASTGO
 // ==========================================
 export default function App() {
@@ -133,6 +185,7 @@ export default function App() {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "register" | "forgot_password" | "reset_password">("login");
   const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
 
   // Recuperación de Contraseña State
   const [forgotEmail, setForgotEmail] = useState<string>("");
@@ -270,22 +323,33 @@ export default function App() {
     setNetworkStatus("loading");
     const tStart = Date.now();
     try {
-      const res = await fetch(`${targetUrl}/api/comercios`, {
+      const healthRes = await fetch(`${targetUrl}/api/health`, {
         headers: { Accept: "application/json" },
       });
       const dur = Date.now() - tStart;
       setLatency(dur);
-      if (res.ok) {
-        const data = await res.json();
-        setComercios(data);
+      if (healthRes.ok) {
         setNetworkStatus("connected");
-        loadProducts(targetUrl);
+        loadComercios(targetUrl);
       } else {
         setNetworkStatus("error");
       }
     } catch {
       setNetworkStatus("error");
     }
+  };
+
+  const loadComercios = async (baseUrl = apiUrl) => {
+    try {
+      const res = await fetch(`${baseUrl}/api/comercios`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setComercios(data);
+        loadProducts(baseUrl);
+      }
+    } catch {}
   };
 
   const loadProducts = async (baseUrl: string) => {
@@ -301,7 +365,43 @@ export default function App() {
   };
 
   useEffect(() => {
-    checkConnection(apiUrl);
+    const initApp = async () => {
+      checkConnection(apiUrl);
+
+      const saved = await getStoredSession();
+      if (saved && saved.token) {
+        try {
+          const meRes = await fetch(`${apiUrl}/api/usuarios/me`, {
+            headers: { Authorization: `Bearer ${saved.token}`, Accept: "application/json" },
+          });
+          if (meRes.ok) {
+            const profile: UserProfile = await meRes.json();
+            setToken(saved.token);
+            setUser(profile);
+            persistSession(saved.token, profile);
+            routeUserToDashboard(profile.activeRole || profile.rol, saved.token);
+            setIsInitializing(false);
+            return;
+          } else {
+            persistSession(null, null);
+          }
+        } catch {
+          if (saved.user) {
+            setToken(saved.token);
+            setUser(saved.user);
+            routeUserToDashboard(saved.user.activeRole || saved.user.rol, saved.token);
+            setIsInitializing(false);
+            return;
+          }
+        }
+      }
+
+      setToken(null);
+      setUser(null);
+      setIsInitializing(false);
+    };
+
+    initApp();
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -365,6 +465,7 @@ export default function App() {
         if (meRes.ok) {
           const profile: UserProfile = await meRes.json();
           setUser(profile);
+          persistSession(data.token, profile);
           setShowRoleModal(false);
           routeUserToDashboard(targetRole, data.token);
           Alert.alert("Perfil Actualizado", `Has ingresado con éxito como ${targetRole}.`);
@@ -455,6 +556,7 @@ export default function App() {
         if (meRes.ok) {
           const profile: UserProfile = await meRes.json();
           setUser(profile);
+          persistSession(jwt, profile);
           setLoginEmail("");
           setLoginPassword("");
 
@@ -628,6 +730,7 @@ export default function App() {
           if (meRes.ok) {
             const profile: UserProfile = await meRes.json();
             setUser(profile);
+            persistSession(jwt, profile);
             // Limpiar formulario
             setRegNombre("");
             setRegApellido("");
@@ -638,13 +741,7 @@ export default function App() {
             setReusableData(null);
 
             // Redirección inmediata según el rol
-            if (profile.rol === "COMERCIO") {
-              navigateTo("comercio_cocina");
-            } else if (profile.rol === "DOMICILIARIO") {
-              navigateTo("domi_disponibles");
-            } else {
-              navigateTo("explorar");
-            }
+            routeUserToDashboard(profile.activeRole || profile.rol, jwt);
           }
         }
       } else {
@@ -780,12 +877,15 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    persistSession(null, null);
     setToken(null);
     setUser(null);
     setCart([]);
     setSelectedPedido(null);
     setSelectedComercio(null);
-    navigateTo("explorar");
+    setActiveTab("explorar");
+    setAuthMode("login");
+    setShowRoleModal(false);
   };
 
   // ==========================================
@@ -1036,6 +1136,474 @@ export default function App() {
 
   const categories = ["Todos", "Restaurantes", "Comidas Rápidas", "Supermercado", "Café", "Bebidas"];
 
+  if (isInitializing) {
+    return (
+      <SafeAreaView style={styles.splashContainer}>
+        <StatusBar barStyle="light-content" backgroundColor={Theme.primaryDark} />
+        <View style={styles.splashContent}>
+          <View style={styles.splashLogoBadge}>
+            <Text style={styles.splashLogoEmoji}>⚡</Text>
+          </View>
+          <Text style={styles.splashBrandTitle}>
+            FAST<Text style={{ color: Theme.accent }}>GO</Text>
+          </Text>
+          <Text style={styles.splashBrandSlogan}>Cerca de ti en cada pedido</Text>
+          <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 28 }} />
+          <Text style={styles.splashLoadingText}>Conectando con FASTGO...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!user || !token) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" backgroundColor={Theme.primaryDark} />
+        <ScrollView
+          contentContainerStyle={styles.authScrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header Superior con Logo e Identidad Visual Oficial FastGo */}
+          <View style={styles.authTopSection}>
+            <View style={styles.authLogoBadge}>
+              <Text style={styles.authLogoBadgeEmoji}>⚡</Text>
+            </View>
+            <Text style={styles.authMainTitle}>
+              FAST<Text style={{ color: Theme.primary }}>GO</Text>
+            </Text>
+            <Text style={styles.authMainSubtitle}>Cerca de ti en cada pedido</Text>
+
+            {/* Indicador de Estado de Servidor */}
+            <View style={[
+              styles.connectionIndicator,
+              {
+                backgroundColor: networkStatus === "connected" ? "#DCFCE7" : networkStatus === "loading" ? "#FEF3C7" : "#FEE2E2",
+                alignSelf: "center",
+                marginTop: 10,
+              }
+            ]}>
+              <View style={[
+                styles.connectionDot,
+                { backgroundColor: networkStatus === "connected" ? Theme.accent : networkStatus === "loading" ? Theme.warning : Theme.danger }
+              ]} />
+              <Text style={[
+                styles.connectionText,
+                { color: networkStatus === "connected" ? "#166534" : networkStatus === "loading" ? "#92400E" : "#991B1B" }
+              ]}>
+                {networkStatus === "connected" ? `En línea (${latency || 120}ms)` : networkStatus === "loading" ? "Conectando..." : "Offline"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Tarjeta Blanca de Autenticación */}
+          <View style={styles.authCard}>
+            {/* Si está en Login o Register: Switch tabs arriba */}
+            {(authMode === "login" || authMode === "register") && (
+              <View style={styles.authToggleRow}>
+                <TouchableOpacity
+                  style={[styles.authToggleBtn, authMode === "login" && styles.authToggleBtnActive]}
+                  onPress={() => setAuthMode("login")}
+                >
+                  <Text style={[styles.authToggleText, authMode === "login" && styles.authToggleTextActive]}>
+                    Iniciar Sesión
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.authToggleBtn, authMode === "register" && styles.authToggleBtnActive]}
+                  onPress={() => setAuthMode("register")}
+                >
+                  <Text style={[styles.authToggleText, authMode === "register" && styles.authToggleTextActive]}>
+                    Registrarse
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* MODO: INICIAR SESIÓN */}
+            {authMode === "login" && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.authSectionHeading}>Iniciar Sesión</Text>
+                <Text style={styles.authSectionSub}>Ingresa tus credenciales para acceder a FASTGO</Text>
+
+                <Text style={styles.inputLabel}>Correo Electrónico</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="ejemplo@correo.com"
+                  placeholderTextColor="#94A3B8"
+                  value={loginEmail}
+                  onChangeText={setLoginEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Contraseña</Text>
+                <View style={styles.passwordInputRow}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94A3B8"
+                    value={loginPassword}
+                    onChangeText={setLoginPassword}
+                    secureTextEntry={!showLoginPassword}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowLoginPassword((prev) => !prev)}
+                  >
+                    <Text style={styles.eyeIcon}>{showLoginPassword ? "👁️" : "🔒"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ alignItems: "flex-end", marginTop: 8 }}>
+                  <TouchableOpacity onPress={() => setAuthMode("forgot_password")}>
+                    <Text style={{ fontSize: 12, color: Theme.primaryDark, fontWeight: "600" }}>
+                      ¿Olvidaste tu contraseña?
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.solidBtn, { marginTop: 20 }]}
+                  onPress={handleLogin}
+                  disabled={authLoading}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.solidBtnText}>Iniciar Sesión</Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={{ marginTop: 18, alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, color: Theme.textMuted }}>
+                    ¿No tienes una cuenta?{" "}
+                    <Text
+                      style={{ color: Theme.primaryDark, fontWeight: "bold" }}
+                      onPress={() => setAuthMode("register")}
+                    >
+                      Regístrate aquí
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* MODO: REGISTRARSE */}
+            {authMode === "register" && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.authSectionHeading}>Crear Cuenta</Text>
+                <Text style={styles.authSectionSub}>Únete a FASTGO y disfruta de la mejor experiencia</Text>
+
+                {/* Correo Electrónico Primero para Detectar Cuenta Existente */}
+                <Text style={styles.inputLabel}>Correo Electrónico</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="tu.correo@ejemplo.com"
+                  placeholderTextColor="#94A3B8"
+                  value={regCorreo}
+                  onChangeText={(v) => {
+                    setRegCorreo(v);
+                    checkReusableData(v);
+                  }}
+                  onBlur={() => checkReusableData(regCorreo)}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                {/* Banner de Reutilización Inteligente de Datos */}
+                {reusableData && (
+                  <View style={styles.reusableBanner}>
+                    <Text style={styles.reusableBannerTitle}>✨ ¡Cuenta existente detectada!</Text>
+                    <Text style={styles.reusableBannerSub}>
+                      Se han precargado tus datos personales. Tu correo ya cuenta con rol(es):{" "}
+                      <Text style={{ fontWeight: "bold" }}>{reusableData.rolesExistentes.join(", ")}</Text>.
+                      Puedes crear un nuevo rol manteniendo tu misma cuenta.
+                    </Text>
+                  </View>
+                )}
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>¿Cómo deseas unirte a FASTGO?</Text>
+                <View style={styles.roleSelectionRow}>
+                  <TouchableOpacity
+                    style={[styles.roleSelectCard, regRol === "CLIENTE" && styles.roleSelectCardActive]}
+                    onPress={() => setRegRol("CLIENTE")}
+                  >
+                    <Text style={styles.roleEmoji}>👤</Text>
+                    <Text style={[styles.roleCardTitle, regRol === "CLIENTE" && styles.roleCardTitleActive]}>
+                      Cliente
+                    </Text>
+                    {reusableData?.rolesExistentes?.includes("CLIENTE") && (
+                      <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.roleSelectCard, regRol === "COMERCIO" && styles.roleSelectCardActive]}
+                    onPress={() => setRegRol("COMERCIO")}
+                  >
+                    <Text style={styles.roleEmoji}>🏪</Text>
+                    <Text style={[styles.roleCardTitle, regRol === "COMERCIO" && styles.roleCardTitleActive]}>
+                      Comercio
+                    </Text>
+                    {reusableData?.rolesExistentes?.includes("COMERCIO") && (
+                      <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.roleSelectCard, regRol === "DOMICILIARIO" && styles.roleSelectCardActive]}
+                    onPress={() => setRegRol("DOMICILIARIO")}
+                  >
+                    <Text style={styles.roleEmoji}>🛵</Text>
+                    <Text style={[styles.roleCardTitle, regRol === "DOMICILIARIO" && styles.roleCardTitleActive]}>
+                      Domiciliario
+                    </Text>
+                    {reusableData?.rolesExistentes?.includes("DOMICILIARIO") && (
+                      <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {reusableData?.rolesExistentes?.includes(regRol) && (
+                  <Text style={{ fontSize: 11, color: Theme.warning, fontWeight: "bold", marginTop: 4 }}>
+                    ⚠️ Ya estás registrado como {regRol}. Selecciona otro rol o inicia sesión.
+                  </Text>
+                )}
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nombre</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Juan"
+                  placeholderTextColor="#94A3B8"
+                  value={regNombre}
+                  onChangeText={setRegNombre}
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Apellido</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Pérez"
+                  placeholderTextColor="#94A3B8"
+                  value={regApellido}
+                  onChangeText={setRegApellido}
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Teléfono Celular</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="3001234567"
+                  placeholderTextColor="#94A3B8"
+                  value={regTelefono}
+                  onChangeText={setRegTelefono}
+                  keyboardType="phone-pad"
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Contraseña (mínimo 8 caracteres)</Text>
+                <View style={styles.passwordInputRow}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94A3B8"
+                    value={regPassword}
+                    onChangeText={setRegPassword}
+                    secureTextEntry={!showRegPassword}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowRegPassword((prev) => !prev)}
+                  >
+                    <Text style={styles.eyeIcon}>{showRegPassword ? "👁️" : "🔒"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.inputLabel, { marginTop: 10 }]}>Confirmar Contraseña</Text>
+                <View style={styles.passwordInputRow}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94A3B8"
+                    value={regConfirmPassword}
+                    onChangeText={setRegConfirmPassword}
+                    secureTextEntry={!showRegConfirmPassword}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowRegConfirmPassword((prev) => !prev)}
+                  >
+                    <Text style={styles.eyeIcon}>{showResetConfirmPassword ? "👁️" : "🔒"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[
+                    styles.solidBtn,
+                    {
+                      marginTop: 20,
+                      backgroundColor: reusableData?.rolesExistentes?.includes(regRol) ? "#94A3B8" : Theme.primary,
+                    },
+                  ]}
+                  onPress={handleRegister}
+                  disabled={authLoading || Boolean(reusableData?.rolesExistentes?.includes(regRol))}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.solidBtnText}>
+                      {reusableData?.rolesExistentes?.includes(regRol)
+                        ? `Ya Registrado como ${regRol}`
+                        : `Registrarme como ${regRol}`}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+
+                <View style={{ marginTop: 18, alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, color: Theme.textMuted }}>
+                    ¿Ya tienes una cuenta?{" "}
+                    <Text
+                      style={{ color: Theme.primaryDark, fontWeight: "bold" }}
+                      onPress={() => setAuthMode("login")}
+                    >
+                      Inicia sesión aquí
+                    </Text>
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* MODO: RECUPERAR CONTRASEÑA */}
+            {authMode === "forgot_password" && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.authSectionHeading}>Recuperar Contraseña</Text>
+                <Text style={styles.authSectionSub}>
+                  Ingresa el correo asociado a tu cuenta FASTGO para recibir las instrucciones de recuperación.
+                </Text>
+
+                <Text style={styles.inputLabel}>Correo Electrónico</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="ejemplo@correo.com"
+                  placeholderTextColor="#94A3B8"
+                  value={forgotEmail}
+                  onChangeText={setForgotEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+
+                <TouchableOpacity
+                  style={[styles.solidBtn, { marginTop: 20 }]}
+                  onPress={handleForgotPassword}
+                  disabled={authLoading}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.solidBtnText}>Enviar Enlace de Recuperación</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ marginTop: 16, alignItems: "center" }}
+                  onPress={() => setAuthMode("reset_password")}
+                >
+                  <Text style={{ fontSize: 13, color: Theme.primaryDark, fontWeight: "600" }}>
+                    ¿Ya tienes un token? Restablecer aquí
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ marginTop: 14, alignItems: "center" }}
+                  onPress={() => setAuthMode("login")}
+                >
+                  <Text style={{ fontSize: 13, color: Theme.textMuted }}>
+                    ← Volver a Iniciar Sesión
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* MODO: RESTABLECER CONTRASEÑA */}
+            {authMode === "reset_password" && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.authSectionHeading}>Restablecer Contraseña</Text>
+                <Text style={styles.authSectionSub}>
+                  Ingresa el token de recuperación recibido por correo y define tu nueva contraseña.
+                </Text>
+
+                <Text style={styles.inputLabel}>Token de Recuperación</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Pega aquí tu token"
+                  placeholderTextColor="#94A3B8"
+                  value={resetToken}
+                  onChangeText={setResetToken}
+                  autoCapitalize="none"
+                />
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nueva Contraseña (mínimo 8 caracteres)</Text>
+                <View style={styles.passwordInputRow}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94A3B8"
+                    value={resetNewPassword}
+                    onChangeText={setResetNewPassword}
+                    secureTextEntry={!showResetPassword}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowResetPassword((prev) => !prev)}
+                  >
+                    <Text style={styles.eyeIcon}>{showResetPassword ? "👁️" : "🔒"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>Confirmar Nueva Contraseña</Text>
+                <View style={styles.passwordInputRow}>
+                  <TextInput
+                    style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
+                    placeholder="••••••••"
+                    placeholderTextColor="#94A3B8"
+                    value={resetConfirmPassword}
+                    onChangeText={setResetConfirmPassword}
+                    secureTextEntry={!showResetConfirmPassword}
+                  />
+                  <TouchableOpacity
+                    style={styles.eyeBtn}
+                    onPress={() => setShowResetConfirmPassword((prev) => !prev)}
+                  >
+                    <Text style={styles.eyeIcon}>{showResetConfirmPassword ? "👁️" : "🔒"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.solidBtn, { marginTop: 20 }]}
+                  onPress={handleResetPassword}
+                  disabled={authLoading}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.solidBtnText}>Actualizar Contraseña</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ marginTop: 16, alignItems: "center" }}
+                  onPress={() => setAuthMode("login")}
+                >
+                  <Text style={{ fontSize: 13, color: Theme.textMuted }}>
+                    ← Volver a Iniciar Sesión
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={Theme.primaryDark} />
@@ -1060,23 +1628,45 @@ export default function App() {
           <View style={styles.topRightRow}>
             <View style={[
               styles.connectionIndicator,
-              { backgroundColor: networkStatus === "connected" ? "#DCFCE7" : "#FEE2E2" }
+              {
+                backgroundColor: networkStatus === "connected"
+                  ? "#DCFCE7"
+                  : networkStatus === "loading"
+                  ? "#FEF3C7"
+                  : "#FEE2E2",
+              }
             ]}>
               <View style={[
                 styles.connectionDot,
-                { backgroundColor: networkStatus === "connected" ? Theme.accent : Theme.danger }
+                {
+                  backgroundColor: networkStatus === "connected"
+                    ? Theme.accent
+                    : networkStatus === "loading"
+                    ? Theme.warning
+                    : Theme.danger,
+                }
               ]} />
               <Text style={[
                 styles.connectionText,
-                { color: networkStatus === "connected" ? "#166534" : "#991B1B" }
+                {
+                  color: networkStatus === "connected"
+                    ? "#166534"
+                    : networkStatus === "loading"
+                    ? "#92400E"
+                    : "#991B1B",
+                }
               ]}>
-                {networkStatus === "connected" ? `${latency || 120}ms` : "Offline"}
+                {networkStatus === "connected"
+                  ? `${latency || 120}ms`
+                  : networkStatus === "loading"
+                  ? "Conectando..."
+                  : "Offline"}
               </Text>
             </View>
 
             {user && (
               <View style={styles.userRoleTag}>
-                <Text style={styles.userRoleTagText}>{user.rol}</Text>
+                <Text style={styles.userRoleTagText}>{user.activeRole || user.rol}</Text>
               </View>
             )}
           </View>
@@ -1202,8 +1792,16 @@ export default function App() {
                 <Text style={styles.sectionTitle}>Comercios Aliados ({comercios.length})</Text>
                 {comercios.length === 0 ? (
                   <View style={styles.emptyCard}>
-                    <Text style={styles.emptyCardTitle}>Conectando con la red FastGo...</Text>
-                    <Text style={styles.emptyCardText}>Cargando aliados en línea desde Render Cloud</Text>
+                    <Text style={styles.emptyCardTitle}>
+                      {networkStatus === "loading"
+                        ? "Conectando con la red FastGo..."
+                        : "No hay comercios registrados aún"}
+                    </Text>
+                    <Text style={styles.emptyCardText}>
+                      {networkStatus === "loading"
+                        ? "Cargando aliados en línea desde Render Cloud"
+                        : "Pronto se sumarán nuevos aliados a tu zona."}
+                    </Text>
                   </View>
                 ) : (
                   comercios.map((c) => (
@@ -2153,454 +2751,75 @@ export default function App() {
         {/* ====================================================
             VISTA: PERFIL Y AUTENTICACIÓN
            ==================================================== */}
-        {activeTab === "perfil" && (
+        {/* ====================================================
+            VISTA: PERFIL DE USUARIO
+           ==================================================== */}
+        {activeTab === "perfil" && user && (
           <View style={styles.cardContainer}>
-            {user ? (
-              /* Perfil de Usuario Conectado */
-              <View>
-                <View style={styles.profileHeader}>
-                  <View style={styles.profileAvatarBig}>
-                    <Text style={styles.profileAvatarBigText}>{user.nombre.charAt(0)}</Text>
-                  </View>
-                  <Text style={styles.profileFullName}>{user.nombre} {user.apellido || ""}</Text>
-                  <Text style={styles.profileEmailText}>{user.correo}</Text>
-                  <View style={[styles.statusPill, { backgroundColor: Theme.primaryLight, marginTop: 8 }]}>
-                    <Text style={{ color: Theme.primaryDark, fontSize: 12, fontWeight: "bold" }}>
-                      ROL: {user.rol}
-                    </Text>
-                  </View>
-                </View>
-
-                {user.telefono && (
-                  <View style={styles.infoRow}>
-                    <Text style={styles.infoLabel}>Teléfono:</Text>
-                    <Text style={styles.infoValue}>{user.telefono}</Text>
-                  </View>
-                )}
-
-                {/* Perfiles Asociados y Cambio de Rol */}
-                {user.availableRoles && user.availableRoles.length > 1 && (
-                  <View style={{ marginTop: 16, padding: 14, backgroundColor: "#F8FAFC", borderRadius: 14, borderWidth: 1, borderColor: Theme.border }}>
-                    <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text, marginBottom: 4 }}>
-                      🔄 Cambiar de Perfil / Rol
-                    </Text>
-                    <Text style={{ fontSize: 11, color: Theme.textMuted, marginBottom: 10 }}>
-                      Tu cuenta cuenta con múltiples perfiles autorizados. Toca para cambiar de modo:
-                    </Text>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                      {user.availableRoles.map((r) => {
-                        const isActive = (user.activeRole || user.rol) === r;
-                        return (
-                          <TouchableOpacity
-                            key={r}
-                            onPress={() => !isActive && handleSwitchRole(r)}
-                            disabled={switchingRole}
-                            style={[
-                              styles.roleChoiceBtn,
-                              isActive && { backgroundColor: Theme.primary, borderColor: Theme.primary },
-                            ]}
-                          >
-                            <Text style={{ fontSize: 12, fontWeight: "bold", color: isActive ? "#FFFFFF" : Theme.text }}>
-                              {r === "CLIENTE" ? "🛍️ Cliente" : r === "COMERCIO" ? "🏪 Comercio" : r === "DOMICILIARIO" ? "🛵 Domiciliario" : "⚙️ Admin"}
-                              {isActive ? " (Activo)" : ""}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  </View>
-                )}
-
-                <TouchableOpacity style={[styles.outlineBtn, { marginTop: 24, borderColor: Theme.danger }]} onPress={handleLogout}>
-                  <Text style={{ color: Theme.danger, fontWeight: "bold" }}>Cerrar Sesión</Text>
-                </TouchableOpacity>
+            <View style={styles.profileHeader}>
+              <View style={styles.profileAvatarBig}>
+                <Text style={styles.profileAvatarBigText}>{user.nombre.charAt(0)}</Text>
               </View>
-            ) : (
-              /* Modal / Formulario de Inicio de Sesión o Registro */
-              <View>
-                {(authMode === "login" || authMode === "register") && (
-                  <View style={styles.authToggleRow}>
-                    <TouchableOpacity
-                      style={[styles.authToggleBtn, authMode === "login" && styles.authToggleBtnActive]}
-                      onPress={() => setAuthMode("login")}
-                    >
-                      <Text style={[styles.authToggleText, authMode === "login" && styles.authToggleTextActive]}>
-                        Iniciar Sesión
-                      </Text>
-                    </TouchableOpacity>
+              <Text style={styles.profileFullName}>{user.nombre} {user.apellido || ""}</Text>
+              <Text style={styles.profileEmailText}>{user.correo}</Text>
+              <View style={[styles.statusPill, { backgroundColor: Theme.primaryLight, marginTop: 8 }]}>
+                <Text style={{ color: Theme.primaryDark, fontSize: 12, fontWeight: "bold" }}>
+                  ROL: {user.activeRole || user.rol}
+                </Text>
+              </View>
+            </View>
 
-                    <TouchableOpacity
-                      style={[styles.authToggleBtn, authMode === "register" && styles.authToggleBtnActive]}
-                      onPress={() => setAuthMode("register")}
-                    >
-                      <Text style={[styles.authToggleText, authMode === "register" && styles.authToggleTextActive]}>
-                        Crear Cuenta
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {authMode === "login" && (
-                  /* Formulario de Login Limpio con Eye Toggle */
-                  <View style={{ marginTop: 16 }}>
-                    <Text style={styles.inputLabel}>Correo Electrónico:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="ejemplo@correo.com"
-                      placeholderTextColor="#94A3B8"
-                      value={loginEmail}
-                      onChangeText={setLoginEmail}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-
-                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Contraseña:</Text>
-                    <View style={styles.passwordInputRow}>
-                      <TextInput
-                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
-                        placeholder="••••••••"
-                        placeholderTextColor="#94A3B8"
-                        value={loginPassword}
-                        onChangeText={setLoginPassword}
-                        secureTextEntry={!showLoginPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setShowLoginPassword((prev) => !prev)}
-                      >
-                        <Text style={styles.eyeIcon}>{showLoginPassword ? "👁️" : "🔒"}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity
-                      style={[styles.solidBtn, { marginTop: 18 }]}
-                      onPress={handleLogin}
-                      disabled={authLoading}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.solidBtnText}>Entrar a FASTGO</Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ marginTop: 14, alignItems: "center" }}
-                      onPress={() => setAuthMode("forgot_password")}
-                    >
-                      <Text style={{ fontSize: 13, color: Theme.primary, fontWeight: "600" }}>
-                        ¿Olvidaste tu contraseña?
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {authMode === "register" && (
-                  /* Formulario de Registro con Selección de Rol, Reutilización de Datos y Confirmación */
-                  <View style={{ marginTop: 16 }}>
-                    {/* Correo Electrónico Primero para Detectar Cuenta Existente */}
-                    <Text style={styles.inputLabel}>Correo Electrónico:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="tu.correo@ejemplo.com"
-                      placeholderTextColor="#94A3B8"
-                      value={regCorreo}
-                      onChangeText={(v) => {
-                        setRegCorreo(v);
-                        checkReusableData(v);
-                      }}
-                      onBlur={() => checkReusableData(regCorreo)}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-
-                    {/* Banner de Reutilización Inteligente de Datos */}
-                    {reusableData && (
-                      <View style={styles.reusableBanner}>
-                        <Text style={styles.reusableBannerTitle}>✨ ¡Cuenta existente detectada!</Text>
-                        <Text style={styles.reusableBannerSub}>
-                          Se han precargado tus datos personales. Tu correo ya cuenta con rol(es):{" "}
-                          <Text style={{ fontWeight: "bold" }}>{reusableData.rolesExistentes.join(", ")}</Text>.
-                          Puedes crear un nuevo rol manteniendo tu misma cuenta.
-                        </Text>
-                      </View>
-                    )}
-
-                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>¿Cómo deseas unirte a FASTGO?</Text>
-                    <View style={styles.roleSelectionRow}>
-                      <TouchableOpacity
-                        style={[styles.roleSelectCard, regRol === "CLIENTE" && styles.roleSelectCardActive]}
-                        onPress={() => setRegRol("CLIENTE")}
-                      >
-                        <Text style={styles.roleEmoji}>👤</Text>
-                        <Text style={[styles.roleCardTitle, regRol === "CLIENTE" && styles.roleCardTitleActive]}>
-                          Cliente
-                        </Text>
-                        {reusableData?.rolesExistentes?.includes("CLIENTE") && (
-                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
-                        )}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.roleSelectCard, regRol === "COMERCIO" && styles.roleSelectCardActive]}
-                        onPress={() => setRegRol("COMERCIO")}
-                      >
-                        <Text style={styles.roleEmoji}>🏪</Text>
-                        <Text style={[styles.roleCardTitle, regRol === "COMERCIO" && styles.roleCardTitleActive]}>
-                          Comercio
-                        </Text>
-                        {reusableData?.rolesExistentes?.includes("COMERCIO") && (
-                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
-                        )}
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[styles.roleSelectCard, regRol === "DOMICILIARIO" && styles.roleSelectCardActive]}
-                        onPress={() => setRegRol("DOMICILIARIO")}
-                      >
-                        <Text style={styles.roleEmoji}>🛵</Text>
-                        <Text style={[styles.roleCardTitle, regRol === "DOMICILIARIO" && styles.roleCardTitleActive]}>
-                          Domiciliario
-                        </Text>
-                        {reusableData?.rolesExistentes?.includes("DOMICILIARIO") && (
-                          <Text style={{ fontSize: 9, color: Theme.textMuted, fontWeight: "bold" }}>(Registrado)</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-
-                    {reusableData?.rolesExistentes?.includes(regRol) && (
-                      <Text style={{ fontSize: 11, color: Theme.warning, fontWeight: "bold", marginTop: 4 }}>
-                        ⚠️ Ya estás registrado como {regRol}. Selecciona otro rol o inicia sesión.
-                      </Text>
-                    )}
-
-                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nombre:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Juan"
-                      placeholderTextColor="#94A3B8"
-                      value={regNombre}
-                      onChangeText={setRegNombre}
-                    />
-
-                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Apellido:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Pérez"
-                      placeholderTextColor="#94A3B8"
-                      value={regApellido}
-                      onChangeText={setRegApellido}
-                    />
-
-                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Teléfono Celular:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="3001234567"
-                      placeholderTextColor="#94A3B8"
-                      value={regTelefono}
-                      onChangeText={setRegTelefono}
-                      keyboardType="phone-pad"
-                    />
-
-                    {/* Contraseña con Eye Toggle */}
-                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Contraseña (mínimo 8 caracteres):</Text>
-                    <View style={styles.passwordInputRow}>
-                      <TextInput
-                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
-                        placeholder="••••••••"
-                        placeholderTextColor="#94A3B8"
-                        value={regPassword}
-                        onChangeText={setRegPassword}
-                        secureTextEntry={!showRegPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setShowRegPassword((prev) => !prev)}
-                      >
-                        <Text style={styles.eyeIcon}>{showRegPassword ? "👁️" : "🔒"}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {/* Confirmar Contraseña con Eye Toggle */}
-                    <Text style={[styles.inputLabel, { marginTop: 10 }]}>Confirmar Contraseña:</Text>
-                    <View style={styles.passwordInputRow}>
-                      <TextInput
-                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
-                        placeholder="••••••••"
-                        placeholderTextColor="#94A3B8"
-                        value={regConfirmPassword}
-                        onChangeText={setRegConfirmPassword}
-                        secureTextEntry={!showRegConfirmPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setShowRegConfirmPassword((prev) => !prev)}
-                      >
-                        <Text style={styles.eyeIcon}>{showRegConfirmPassword ? "👁️" : "🔒"}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity
-                      style={[
-                        styles.solidBtn,
-                        {
-                          marginTop: 18,
-                          backgroundColor: reusableData?.rolesExistentes?.includes(regRol) ? "#94A3B8" : Theme.primary,
-                        },
-                      ]}
-                      onPress={handleRegister}
-                      disabled={authLoading || Boolean(reusableData?.rolesExistentes?.includes(regRol))}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.solidBtnText}>
-                          {reusableData?.rolesExistentes?.includes(regRol)
-                            ? `Ya Registrado como ${regRol}`
-                            : `Registrarme como ${regRol}`}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {authMode === "forgot_password" && (
-                  /* Formulario de Recuperación de Contraseña */
-                  <View style={{ marginTop: 16 }}>
-                    <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 4 }]}>Recuperar Contraseña</Text>
-                    <Text style={{ fontSize: 13, color: Theme.textMuted, marginBottom: 16 }}>
-                      Ingresa el correo asociado a tu cuenta FASTGO para recibir las instrucciones de recuperación.
-                    </Text>
-
-                    <Text style={styles.inputLabel}>Correo Electrónico:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="ejemplo@correo.com"
-                      placeholderTextColor="#94A3B8"
-                      value={forgotEmail}
-                      onChangeText={setForgotEmail}
-                      autoCapitalize="none"
-                      keyboardType="email-address"
-                    />
-
-                    <TouchableOpacity
-                      style={[styles.solidBtn, { marginTop: 18 }]}
-                      onPress={handleForgotPassword}
-                      disabled={authLoading}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.solidBtnText}>Enviar Enlace de Recuperación</Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ marginTop: 14, alignItems: "center" }}
-                      onPress={() => setAuthMode("reset_password")}
-                    >
-                      <Text style={{ fontSize: 13, color: Theme.primary, fontWeight: "600" }}>
-                        ¿Ya tienes un token? Restablecer aquí
-                      </Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ marginTop: 12, alignItems: "center" }}
-                      onPress={() => setAuthMode("login")}
-                    >
-                      <Text style={{ fontSize: 13, color: Theme.textMuted }}>
-                        ← Volver a Iniciar Sesión
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-                {authMode === "reset_password" && (
-                  /* Formulario de Restablecimiento con Token y Eye Toggles */
-                  <View style={{ marginTop: 16 }}>
-                    <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 4 }]}>Restablecer Contraseña</Text>
-                    <Text style={{ fontSize: 13, color: Theme.textMuted, marginBottom: 16 }}>
-                      Ingresa el token de recuperación y define tu nueva contraseña (mínimo 8 caracteres).
-                    </Text>
-
-                    <Text style={styles.inputLabel}>Token de Recuperación:</Text>
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Pega aquí tu token"
-                      placeholderTextColor="#94A3B8"
-                      value={resetToken}
-                      onChangeText={setResetToken}
-                      autoCapitalize="none"
-                    />
-
-                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Nueva Contraseña:</Text>
-                    <View style={styles.passwordInputRow}>
-                      <TextInput
-                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
-                        placeholder="••••••••"
-                        placeholderTextColor="#94A3B8"
-                        value={resetNewPassword}
-                        onChangeText={setResetNewPassword}
-                        secureTextEntry={!showResetPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setShowResetPassword((prev) => !prev)}
-                      >
-                        <Text style={styles.eyeIcon}>{showResetPassword ? "👁️" : "🔒"}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <Text style={[styles.inputLabel, { marginTop: 12 }]}>Confirmar Nueva Contraseña:</Text>
-                    <View style={styles.passwordInputRow}>
-                      <TextInput
-                        style={[styles.textInput, { flex: 1, paddingRight: 40 }]}
-                        placeholder="••••••••"
-                        placeholderTextColor="#94A3B8"
-                        value={resetConfirmPassword}
-                        onChangeText={setResetConfirmPassword}
-                        secureTextEntry={!showResetConfirmPassword}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setShowResetConfirmPassword((prev) => !prev)}
-                      >
-                        <Text style={styles.eyeIcon}>{showResetConfirmPassword ? "👁️" : "🔒"}</Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    <TouchableOpacity
-                      style={[styles.solidBtn, { marginTop: 18 }]}
-                      onPress={handleResetPassword}
-                      disabled={authLoading}
-                    >
-                      {authLoading ? (
-                        <ActivityIndicator color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.solidBtnText}>Actualizar Contraseña</Text>
-                      )}
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                      style={{ marginTop: 14, alignItems: "center" }}
-                      onPress={() => setAuthMode("login")}
-                    >
-                      <Text style={{ fontSize: 13, color: Theme.textMuted }}>
-                        ← Volver a Iniciar Sesión
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+            {user.telefono && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Teléfono:</Text>
+                <Text style={styles.infoValue}>{user.telefono}</Text>
               </View>
             )}
+
+            {/* Perfiles Asociados y Cambio de Rol */}
+            {user.availableRoles && user.availableRoles.length > 1 && (
+              <View style={{ marginTop: 16, padding: 14, backgroundColor: "#F8FAFC", borderRadius: 14, borderWidth: 1, borderColor: Theme.border }}>
+                <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text, marginBottom: 4 }}>
+                  🔄 Cambiar de Perfil / Rol
+                </Text>
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginBottom: 10 }}>
+                  Tu cuenta cuenta con múltiples perfiles autorizados. Toca para cambiar de modo:
+                </Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                  {user.availableRoles.map((r) => {
+                    const isActive = (user.activeRole || user.rol) === r;
+                    return (
+                      <TouchableOpacity
+                        key={r}
+                        onPress={() => !isActive && handleSwitchRole(r)}
+                        disabled={switchingRole}
+                        style={[
+                          styles.roleChoiceBtn,
+                          isActive && { backgroundColor: Theme.primary, borderColor: Theme.primary },
+                        ]}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "bold", color: isActive ? "#FFFFFF" : Theme.text }}>
+                          {r === "CLIENTE" ? "🛍️ Cliente" : r === "COMERCIO" ? "🏪 Comercio" : r === "DOMICILIARIO" ? "🛵 Domiciliario" : "⚙️ Admin"}
+                          {isActive ? " (Activo)" : ""}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.outlineBtn, { marginTop: 24, borderColor: Theme.danger }]} onPress={handleLogout}>
+              <Text style={{ color: Theme.danger, fontWeight: "bold" }}>Cerrar Sesión</Text>
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
 
       {/* BARRA DE NAVEGACIÓN INFERIOR ADAPTATIVA POR ROL */}
       <View style={styles.bottomNav}>
-        {/* Visitante o Rol CLIENTE */}
-        {(!user || user.rol === "CLIENTE") && (
+        {/* Rol CLIENTE */}
+        {(user?.activeRole || user?.rol) === "CLIENTE" && (
           <>
             <TouchableOpacity
               style={styles.navItem}
@@ -2652,15 +2871,13 @@ export default function App() {
               onPress={() => navigateTo("perfil")}
             >
               <Text style={[styles.navIcon, activeTab === "perfil" && styles.navIconActive]}>👤</Text>
-              <Text style={[styles.navText, activeTab === "perfil" && styles.navTextActive]}>
-                {user ? "Mi Perfil" : "Ingresar"}
-              </Text>
+              <Text style={[styles.navText, activeTab === "perfil" && styles.navTextActive]}>Mi Perfil</Text>
             </TouchableOpacity>
           </>
         )}
 
         {/* Rol COMERCIO */}
-        {user?.rol === "COMERCIO" && (
+        {(user?.activeRole || user?.rol) === "COMERCIO" && (
           <>
             <TouchableOpacity
               style={styles.navItem}
@@ -2692,7 +2909,7 @@ export default function App() {
         )}
 
         {/* Rol DOMICILIARIO */}
-        {user?.rol === "DOMICILIARIO" && (
+        {(user?.activeRole || user?.rol) === "DOMICILIARIO" && (
           <>
             <TouchableOpacity
               style={styles.navItem}
@@ -2716,7 +2933,7 @@ export default function App() {
         )}
 
         {/* Rol ADMINISTRADOR */}
-        {user?.rol === "ADMIN" && (
+        {(user?.activeRole || user?.rol) === "ADMIN" && (
           <>
             <TouchableOpacity
               style={styles.navItem}
@@ -2837,6 +3054,106 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: Theme.background,
+  },
+  splashContainer: {
+    flex: 1,
+    backgroundColor: Theme.primaryDark,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  splashContent: {
+    alignItems: "center",
+    padding: 24,
+  },
+  splashLogoBadge: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  splashLogoEmoji: {
+    fontSize: 44,
+  },
+  splashBrandTitle: {
+    fontSize: 38,
+    fontWeight: "900",
+    color: "#FFFFFF",
+    letterSpacing: 1,
+    marginTop: 16,
+  },
+  splashBrandSlogan: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.85)",
+    fontWeight: "500",
+    marginTop: 4,
+  },
+  splashLoadingText: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.75)",
+    marginTop: 12,
+  },
+  authScrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "android" ? 30 : 20,
+    paddingBottom: 40,
+    backgroundColor: Theme.background,
+  },
+  authTopSection: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  authLogoBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 20,
+    backgroundColor: Theme.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  authLogoBadgeEmoji: {
+    fontSize: 32,
+  },
+  authMainTitle: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: Theme.secondary,
+    letterSpacing: 0.5,
+    marginTop: 10,
+  },
+  authMainSubtitle: {
+    fontSize: 13,
+    color: Theme.textMuted,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  authCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+  },
+  authSectionHeading: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: Theme.text,
+    marginBottom: 2,
+  },
+  authSectionSub: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    marginBottom: 16,
   },
   topHeader: {
     backgroundColor: Theme.primary,
