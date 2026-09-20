@@ -222,25 +222,40 @@ export const HomePage: React.FC = () => {
                         <Store className="w-10 h-10 text-gray-300" />
                       )}
                       <div className="absolute top-3 right-3">
-                        <Badge variant="success">Abierto</Badge>
+                        <Badge variant={commerce.pausaManual ? 'warning' : commerce.abierto !== false ? 'success' : 'danger'}>
+                          {commerce.pausaManual ? 'Pausa' : commerce.abierto !== false ? 'Abierto' : 'Cerrado'}
+                        </Badge>
                       </div>
+                      {commerce.logo && (
+                        <div className="absolute bottom-2 left-3 w-10 h-10 rounded-xl bg-white shadow-md overflow-hidden p-0.5 border border-gray-100">
+                          <img src={commerce.logo} alt={commerce.nombre} className="w-full h-full object-cover rounded-lg" />
+                        </div>
+                      )}
                     </div>
                     <div>
-                      <h3 className="font-extrabold text-base text-gray-900 group-hover:text-emerald-700 transition-colors">
-                        {commerce.nombre}
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-extrabold text-base text-gray-900 group-hover:text-emerald-700 transition-colors">
+                          {commerce.nombre}
+                        </h3>
+                        {commerce.categoria && (
+                          <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full">
+                            {commerce.categoria}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 line-clamp-2 mt-1">
-                        {commerce.descripcion || 'Especialistas en la mejor comida y productos locales.'}
+                        {commerce.descripcion || 'Productos de alta calidad con entrega inmediata.'}
                       </p>
                     </div>
                   </div>
 
                   <div className="pt-3 border-t border-gray-100 mt-4 flex items-center justify-between text-xs text-gray-500">
-                    <span className="font-medium flex items-center gap-1">
-                      <MapPin className="w-3.5 h-3.5 text-gray-400" /> Cobertura local
+                    <span className="font-medium flex items-center gap-1 truncate max-w-[60%]">
+                      <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />{' '}
+                      {commerce.direccion ? `${commerce.direccion}, ${commerce.ciudad || 'Bogotá'}` : 'Cobertura local'}
                     </span>
-                    <span className="font-bold text-emerald-700 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
-                      Ver menú <ChevronRight className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-emerald-700 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform shrink-0">
+                      Ver catálogo <ChevronRight className="w-4 h-4 text-emerald-600" />
                     </span>
                   </div>
                 </Card>

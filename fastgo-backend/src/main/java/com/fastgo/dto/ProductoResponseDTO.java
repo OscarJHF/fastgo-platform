@@ -15,6 +15,7 @@ public class ProductoResponseDTO {
     private Boolean disponible;
     private Boolean destacado;
     private Integer stock;
+    private String categoriaNombre;
 
     public ProductoResponseDTO() {
     }
@@ -141,4 +142,7 @@ public class ProductoResponseDTO {
 
     public Integer getStock() { return stock; }
     public void setStock(Integer stock) { this.stock = stock; }
+
+    public String getCategoriaNombre() { return categoriaNombre; }
+    public void setCategoriaNombre(String categoriaNombre) { this.categoriaNombre = categoriaNombre; }
 }

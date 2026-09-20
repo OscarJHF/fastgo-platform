@@ -84,6 +84,16 @@ public class ProductoService {
     }
 
     public ProductoResponseDTO guardar(ProductoRequestDTO datos) {
+        if (datos != null && datos.getSucursalId() == null) {
+            Usuario u = usuario();
+            Comercio c = comercioRepository.findByUsuarioId(u.getId())
+                    .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+            List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
+            if (sucursales.isEmpty()) {
+                throw new RuntimeException("El comercio no tiene sucursales configuradas");
+            }
+            datos.setSucursalId(sucursales.get(0).getId());
+        }
         Sucursal sucursal = obtenerSucursalPropia(datos.getSucursalId());
         validarDatos(datos);
 
@@ -276,8 +286,7 @@ public class ProductoService {
     }
 
     private ProductoResponseDTO toDto(Producto producto) {
-
-        return new ProductoResponseDTO(
+        ProductoResponseDTO dto = new ProductoResponseDTO(
                 producto.getId(),
                 producto.getSucursalId(),
                 producto.getCategoriaId(),
@@ -290,5 +299,10 @@ public class ProductoService {
                 producto.getDestacado(),
                 producto.getStock()
         );
+        if (producto.getCategoriaId() != null) {
+            categoriaRepository.findById(producto.getCategoriaId())
+                    .ifPresent(cat -> dto.setCategoriaNombre(cat.getNombre()));
+        }
+        return dto;
     }
 }

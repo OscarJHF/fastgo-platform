@@ -12,6 +12,9 @@ public class ComercioResponseDTO {
     private String nit;
     private Boolean activo;
     private String categoria;
+    private Integer categoriaId;
+    private String direccion;
+    private String ciudad;
     private String metodosPago;
     private String horaApertura;
     private String horaCierre;
@@ -147,4 +150,13 @@ public class ComercioResponseDTO {
 
     public Boolean getAbierto() { return abierto; }
     public void setAbierto(Boolean abierto) { this.abierto = abierto; }
+
+    public Integer getCategoriaId() { return categoriaId; }
+    public void setCategoriaId(Integer categoriaId) { this.categoriaId = categoriaId; }
+
+    public String getDireccion() { return direccion; }
+    public void setDireccion(String direccion) { this.direccion = direccion; }
+
+    public String getCiudad() { return ciudad; }
+    public void setCiudad(String ciudad) { this.ciudad = ciudad; }
 }

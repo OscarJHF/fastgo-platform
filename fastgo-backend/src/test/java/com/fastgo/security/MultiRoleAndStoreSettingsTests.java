@@ -42,6 +42,9 @@ public class MultiRoleAndStoreSettingsTests {
     @Autowired
     private RolRepository rolRepository;
 
+    @Autowired
+    private com.fastgo.repository.CategoriaComercioRepository categoriaComercioRepository;
+
     @BeforeEach
     void setUp() {
         for (String roleName : new String[]{"CLIENTE", "COMERCIO", "DOMICILIARIO"}) {
@@ -50,6 +53,13 @@ public class MultiRoleAndStoreSettingsTests {
                 r.setNombre(roleName);
                 rolRepository.save(r);
             }
+        }
+        if (categoriaComercioRepository.count() == 0) {
+            com.fastgo.entity.CategoriaComercio cat = new com.fastgo.entity.CategoriaComercio();
+            cat.setNombre("Moda y Accesorios");
+            cat.setDescripcion("Tiendas de ropa y calzado");
+            cat.setActivo(true);
+            categoriaComercioRepository.save(cat);
         }
     }
 
@@ -129,5 +139,148 @@ public class MultiRoleAndStoreSettingsTests {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(regComercio)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Debe permitir al rol COMERCIO crear tienda, auto-crear sucursal, crear categoría de producto, producto y filtrar por activo")
+    void testCommerceStoreProfileAndCatalogFlow() throws Exception {
+        String correo = "store.test." + UUID.randomUUID().toString().substring(0, 8) + "@fastgo.com";
+
+        // 1. Registro como COMERCIO
+        RegistroUsuarioRequest regComercio = new RegistroUsuarioRequest();
+        regComercio.setNombre("Mariana");
+        regComercio.setApellido("Diseños");
+        regComercio.setCorreo(correo);
+        regComercio.setTelefono("3159988776");
+        regComercio.setPassword("Password123!");
+        regComercio.setRol("COMERCIO");
+
+        mockMvc.perform(post("/api/usuarios")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regComercio)))
+                .andExpect(status().isOk());
+
+        // 2. Login
+        LoginRequest loginReq = new LoginRequest();
+        loginReq.setCorreo(correo);
+        loginReq.setPassword("Password123!");
+
+        MvcResult loginRes = mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        String token = objectMapper.readTree(loginRes.getResponse().getContentAsString()).get("token").asText();
+
+        // 3. Antes de configurar tienda, /api/comercios/propio debe retornar 204 No Content
+        mockMvc.perform(get("/api/comercios/propio")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isNoContent());
+
+        // 4. Crear tienda con dirección, ciudad, categoría y activo = true
+        Integer catId = categoriaComercioRepository.findAll().get(0).getId();
+        String nombreComercio = "Boutique " + UUID.randomUUID().toString().substring(0, 6);
+        com.fastgo.dto.ComercioRequestDTO storeReq = new com.fastgo.dto.ComercioRequestDTO();
+        storeReq.setNombre(nombreComercio);
+        storeReq.setCategoriaId(catId);
+        storeReq.setDescripcion("Ropa de moda y accesorios premium");
+        storeReq.setTelefono("3159988776");
+        storeReq.setDireccion("Av. 19 # 104-50");
+        storeReq.setCiudad("Bogotá");
+        storeReq.setHoraApertura("09:00");
+        storeReq.setHoraCierre("20:00");
+        storeReq.setDiasAtencion("Lunes a Sábado");
+        storeReq.setTiempoPreparacionMin(15);
+        storeReq.setActivo(true);
+
+        MvcResult storeRes = mockMvc.perform(post("/api/comercios")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(storeReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.nombre").value(nombreComercio))
+                .andExpect(jsonPath("$.direccion").value("Av. 19 # 104-50"))
+                .andExpect(jsonPath("$.ciudad").value("Bogotá"))
+                .andExpect(jsonPath("$.activo").value(true))
+                .andReturn();
+
+        Integer storeId = objectMapper.readTree(storeRes.getResponse().getContentAsString()).get("id").asInt();
+
+        // 5. Verificar que /api/comercios/propio ahora devuelve la tienda configurada
+        mockMvc.perform(get("/api/comercios/propio")
+                .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(storeId))
+                .andExpect(jsonPath("$.nombre").value(nombreComercio))
+                .andExpect(jsonPath("$.direccion").value("Av. 19 # 104-50"));
+
+        // 6. Verificar que la sucursal por defecto "Sede Principal" fue auto-creada
+        MvcResult sucsRes = mockMvc.perform(get("/api/sucursales/comercio/" + storeId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].nombre").value("Sede Principal"))
+                .andExpect(jsonPath("$[0].direccion").value("Av. 19 # 104-50"))
+                .andReturn();
+
+        Integer sucursalId = objectMapper.readTree(sucsRes.getResponse().getContentAsString()).get(0).get("id").asInt();
+
+        // 7. Crear categoría de producto como COMERCIO (permitido)
+        com.fastgo.entity.CategoriaProducto prodCat = new com.fastgo.entity.CategoriaProducto();
+        prodCat.setNombre("Vestidos y Conjuntos");
+        prodCat.setDescripcion("Colección verano e invierno");
+        prodCat.setActivo(true);
+
+        MvcResult catRes = mockMvc.perform(post("/api/categorias-producto")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(prodCat)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.nombre").value("Vestidos y Conjuntos"))
+                .andReturn();
+
+        Integer catProdId = objectMapper.readTree(catRes.getResponse().getContentAsString()).get("id").asInt();
+
+        // 8. Crear producto con sucursalId auto-resuelto
+        com.fastgo.dto.ProductoRequestDTO prodReq = new com.fastgo.dto.ProductoRequestDTO();
+        prodReq.setNombre("Vestido Floral Elegance");
+        prodReq.setDescripcion("Vestido en seda natural estampado");
+        prodReq.setPrecio(new java.math.BigDecimal("120000"));
+        prodReq.setCategoriaId(catProdId);
+        prodReq.setStock(15);
+        prodReq.setTiempoPreparacion(10);
+        prodReq.setDisponible(true);
+
+        mockMvc.perform(post("/api/productos")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(prodReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andExpect(jsonPath("$.nombre").value("Vestido Floral Elegance"))
+                .andExpect(jsonPath("$.sucursalId").value(sucursalId))
+                .andExpect(jsonPath("$.stock").value(15))
+                .andExpect(jsonPath("$.categoriaNombre").value("Vestidos y Conjuntos"));
+
+        // 9. Listado público /api/comercios debe incluir la tienda activa
+        mockMvc.perform(get("/api/comercios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.nombre == '" + nombreComercio + "')]").exists());
+
+        // 10. Actualizar tienda para ponerla en modo borrador (activo = false)
+        storeReq.setActivo(false);
+        mockMvc.perform(put("/api/comercios/" + storeId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(storeReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.activo").value(false));
+
+        // 11. Listado público ya NO debe mostrar la tienda oculta
+        mockMvc.perform(get("/api/comercios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.nombre == '" + nombreComercio + "')]").doesNotExist());
     }
 }

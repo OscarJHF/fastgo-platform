@@ -126,11 +126,19 @@ export const Navbar: React.FC = () => {
               </>
             )}
 
-            {role === 'COMERCIO' && (
-              <Link to={APP_ROUTES.COMMERCE_DASHBOARD} className="text-sm font-semibold text-purple-600 hover:text-purple-800 transition-colors flex items-center gap-1.5">
-                <Store className="w-4 h-4" />
-                Panel Comercio
-              </Link>
+            {(currentRole === 'COMERCIO' || role === 'COMERCIO') && (
+              <>
+                <Link to={APP_ROUTES.COMMERCE_DASHBOARD} className="text-sm font-semibold text-purple-600 hover:text-purple-800 transition-colors flex items-center gap-1.5">
+                  <Store className="w-4 h-4" />
+                  Panel Comercio
+                </Link>
+                <Link to={APP_ROUTES.COMMERCE_STORE} className="text-sm font-semibold text-gray-600 hover:text-black transition-colors">
+                  Mi Tienda
+                </Link>
+                <Link to={APP_ROUTES.COMMERCE_PRODUCTS} className="text-sm font-semibold text-gray-600 hover:text-black transition-colors">
+                  Productos
+                </Link>
+              </>
             )}
 
             {role === 'DOMICILIARIO' && (
@@ -258,14 +266,30 @@ export const Navbar: React.FC = () => {
             </>
           )}
 
-          {role === 'COMERCIO' && (
-            <Link
-              to={APP_ROUTES.COMMERCE_DASHBOARD}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-lg text-base font-semibold text-purple-700 hover:bg-purple-50"
-            >
-              Panel Comercio
-            </Link>
+          {(currentRole === 'COMERCIO' || role === 'COMERCIO') && (
+            <>
+              <Link
+                to={APP_ROUTES.COMMERCE_DASHBOARD}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-base font-semibold text-purple-700 hover:bg-purple-50"
+              >
+                Panel Comercio
+              </Link>
+              <Link
+                to={APP_ROUTES.COMMERCE_STORE}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-base font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Configurar Mi Tienda
+              </Link>
+              <Link
+                to={APP_ROUTES.COMMERCE_PRODUCTS}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-base font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Catálogo de Productos
+              </Link>
+            </>
           )}
 
           {role === 'DOMICILIARIO' && (

@@ -18,6 +18,8 @@ export interface Comercio {
   activo: boolean;
   categoria?: string;
   categoriaId?: number;
+  direccion?: string;
+  ciudad?: string;
   metodosPago?: string;
   horaApertura?: string;
   horaCierre?: string;
@@ -34,6 +36,8 @@ export interface ComercioRequest {
   descripcion?: string;
   telefono?: string;
   correo?: string;
+  direccion?: string;
+  ciudad?: string;
   logo?: string;
   banner?: string;
   nit?: string;

@@ -19,8 +19,8 @@ import { OrderDetailPage } from '../pages/client/OrderDetailPage';
 import { ProfilePage } from '../pages/client/ProfilePage';
 import { EncomiendasPage } from '../pages/client/EncomiendasPage';
 
-// Commerce Pages
 import { CommerceDashboardPage } from '../pages/commerce/CommerceDashboardPage';
+import { CommerceStoreConfigPage } from '../pages/commerce/CommerceStoreConfigPage';
 import { CommerceOrdersPage } from '../pages/commerce/CommerceOrdersPage';
 import { CommerceProductsPage } from '../pages/commerce/CommerceProductsPage';
 import { CommerceBranchesPage } from '../pages/commerce/CommerceBranchesPage';
@@ -108,6 +108,14 @@ export const AppRoutes: React.FC = () => {
           element={
             <RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}>
               <CommerceDashboardPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path={APP_ROUTES.COMMERCE_STORE}
+          element={
+            <RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}>
+              <CommerceStoreConfigPage />
             </RoleRoute>
           }
         />

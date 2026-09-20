@@ -4,9 +4,11 @@ import com.fastgo.dto.ComercioRequestDTO;
 import com.fastgo.dto.ComercioResponseDTO;
 import com.fastgo.entity.CategoriaComercio;
 import com.fastgo.entity.Comercio;
+import com.fastgo.entity.Sucursal;
 import com.fastgo.entity.Usuario;
 import com.fastgo.repository.CategoriaComercioRepository;
 import com.fastgo.repository.ComercioRepository;
+import com.fastgo.repository.SucursalRepository;
 import com.fastgo.repository.UsuarioRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,18 +23,21 @@ public class ComercioService {
     private final ComercioRepository comercioRepository;
     private final UsuarioRepository usuarioRepository;
     private final CategoriaComercioRepository categoriaRepository;
+    private final SucursalRepository sucursalRepository;
 
     public ComercioService(
             ComercioRepository c,
             UsuarioRepository u,
-            CategoriaComercioRepository cat) {
+            CategoriaComercioRepository cat,
+            SucursalRepository suc) {
         this.comercioRepository = c;
         this.usuarioRepository = u;
         this.categoriaRepository = cat;
+        this.sucursalRepository = suc;
     }
 
     public List<ComercioResponseDTO> listarComercios() {
-        return comercioRepository.findAll().stream().map(this::dto).toList();
+        return comercioRepository.findByActivoTrue().stream().map(this::dto).toList();
     }
 
     public ComercioResponseDTO buscarPorId(Integer id) {
@@ -57,7 +62,22 @@ public class ComercioService {
         Comercio c = new Comercio();
         c.setUsuario(u);
         copiar(d, c);
-        return dto(comercioRepository.save(c));
+        Comercio saved = comercioRepository.save(c);
+
+        List<Sucursal> sucursales = sucursalRepository.findByComercioId(saved.getId());
+        if (sucursales.isEmpty()) {
+            Sucursal s = new Sucursal();
+            s.setComercioId(saved.getId());
+            s.setNombre("Sede Principal");
+            s.setDireccion((d.getDireccion() != null && !d.getDireccion().isBlank()) ? d.getDireccion().trim() : "Dirección principal");
+            s.setCiudad((d.getCiudad() != null && !d.getCiudad().isBlank()) ? d.getCiudad().trim() : "Bogotá");
+            s.setDepartamento("Cundinamarca");
+            s.setTelefono(saved.getTelefono());
+            s.setAbierta(true);
+            sucursalRepository.save(s);
+        }
+
+        return dto(saved);
     }
 
     public ComercioResponseDTO actualizar(Integer id, ComercioRequestDTO d) {
@@ -65,7 +85,34 @@ public class ComercioService {
         Usuario u = usuario();
         Comercio c = propio(id, u);
         copiar(d, c);
-        return dto(comercioRepository.save(c));
+        Comercio saved = comercioRepository.save(c);
+
+        List<Sucursal> sucursales = sucursalRepository.findByComercioId(saved.getId());
+        if (sucursales.isEmpty()) {
+            Sucursal s = new Sucursal();
+            s.setComercioId(saved.getId());
+            s.setNombre("Sede Principal");
+            s.setDireccion((d.getDireccion() != null && !d.getDireccion().isBlank()) ? d.getDireccion().trim() : "Dirección principal");
+            s.setCiudad((d.getCiudad() != null && !d.getCiudad().isBlank()) ? d.getCiudad().trim() : "Bogotá");
+            s.setDepartamento("Cundinamarca");
+            s.setTelefono(saved.getTelefono());
+            s.setAbierta(true);
+            sucursalRepository.save(s);
+        } else if ((d.getDireccion() != null && !d.getDireccion().isBlank()) || (d.getCiudad() != null && !d.getCiudad().isBlank())) {
+            Sucursal s = sucursales.get(0);
+            if (d.getDireccion() != null && !d.getDireccion().isBlank()) {
+                s.setDireccion(d.getDireccion().trim());
+            }
+            if (d.getCiudad() != null && !d.getCiudad().isBlank()) {
+                s.setCiudad(d.getCiudad().trim());
+            }
+            if (saved.getTelefono() != null) {
+                s.setTelefono(saved.getTelefono());
+            }
+            sucursalRepository.save(s);
+        }
+
+        return dto(saved);
     }
 
     public ComercioResponseDTO togglePausaManual(Integer id) {
@@ -156,6 +203,7 @@ public class ComercioService {
                 c.getActivo(),
                 c.getCategoria() != null ? c.getCategoria().getNombre() : null
         );
+        r.setCategoriaId(c.getCategoria() != null ? c.getCategoria().getId() : null);
         r.setMetodosPago(c.getMetodosPago());
         r.setHoraApertura(c.getHoraApertura() != null ? c.getHoraApertura().toString() : null);
         r.setHoraCierre(c.getHoraCierre() != null ? c.getHoraCierre().toString() : null);
@@ -163,6 +211,14 @@ public class ComercioService {
         r.setTiempoPreparacionMin(c.getTiempoPreparacionMin());
         r.setPausaManual(c.getPausaManual());
         r.setAbierto(c.isAbierto());
+
+        List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
+        if (!sucursales.isEmpty()) {
+            Sucursal s = sucursales.get(0);
+            r.setDireccion(s.getDireccion());
+            r.setCiudad(s.getCiudad());
+        }
+
         return r;
     }
 }

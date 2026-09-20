@@ -30,6 +30,10 @@ public class ComercioRequestDTO {
     private String diasAtencion;
     private Integer tiempoPreparacionMin;
     private Boolean pausaManual;
+    @Size(max=255, message="La dirección no puede superar 255 caracteres")
+    private String direccion;
+    @Size(max=100, message="La ciudad no puede superar 100 caracteres")
+    private String ciudad;
 
     public ComercioRequestDTO(){}
     public Integer getCategoriaId(){return categoriaId;} public void setCategoriaId(Integer v){categoriaId=v;}
@@ -47,4 +51,6 @@ public class ComercioRequestDTO {
     public String getDiasAtencion(){return diasAtencion;} public void setDiasAtencion(String v){diasAtencion=v;}
     public Integer getTiempoPreparacionMin(){return tiempoPreparacionMin;} public void setTiempoPreparacionMin(Integer v){tiempoPreparacionMin=v;}
     public Boolean getPausaManual(){return pausaManual;} public void setPausaManual(Boolean v){pausaManual=v;}
+    public String getDireccion(){return direccion;} public void setDireccion(String v){direccion=v;}
+    public String getCiudad(){return ciudad;} public void setCiudad(String v){ciudad=v;}
 }

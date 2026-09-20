@@ -9,7 +9,7 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public class ProductoRequestDTO {
-    @NotNull(message="La sucursal es obligatoria") @Positive(message="La sucursal no es válida")
+    @Positive(message="La sucursal no es válida")
     private Integer sucursalId;
     @NotNull(message="La categoría es obligatoria") @Positive(message="La categoría no es válida")
     private Integer categoriaId;

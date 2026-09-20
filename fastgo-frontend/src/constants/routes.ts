@@ -15,6 +15,7 @@ export const APP_ROUTES = {
 
   // Comercio
   COMMERCE_DASHBOARD: '/comercio-panel',
+  COMMERCE_STORE: '/comercio-panel/mi-tienda',
   COMMERCE_PRODUCTS: '/comercio-panel/productos',
   COMMERCE_ORDERS: '/comercio-panel/pedidos',
   COMMERCE_BRANCHES: '/comercio-panel/sucursales',

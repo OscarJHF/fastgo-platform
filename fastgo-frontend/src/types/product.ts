@@ -18,6 +18,7 @@ export interface Producto {
   disponible: boolean;
   stock?: number;
   destacado?: boolean;
+  categoriaNombre?: string;
   creadoEn?: string;
   actualizadoEn?: string;
 }

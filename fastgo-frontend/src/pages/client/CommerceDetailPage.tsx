@@ -1,6 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Store, MapPin, Phone, Mail, Plus, Minus, Check, ShoppingBag, ArrowLeft, Utensils } from 'lucide-react';
+import {
+  Store,
+  MapPin,
+  Phone,
+  Plus,
+  Minus,
+  ShoppingBag,
+  ArrowLeft,
+  Package,
+  Clock,
+  CheckCircle,
+} from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
 import { productoService } from '../../services/productoService';
@@ -102,7 +113,7 @@ export const CommerceDetailPage: React.FC = () => {
     return (
       <div className="min-h-[50vh] flex flex-col items-center justify-center">
         <Spinner size="lg" />
-        <p className="mt-3 text-sm text-gray-500 font-semibold">Cargando menú y sucursales...</p>
+        <p className="mt-3 text-sm text-gray-500 font-semibold">Cargando catálogo y sucursales...</p>
       </div>
     );
   }
@@ -124,86 +135,115 @@ export const CommerceDetailPage: React.FC = () => {
         <ArrowLeft className="w-4 h-4" /> Volver a comercios
       </Link>
 
-      {/* Commerce Header Card */}
-      <div className="bg-white rounded-3xl border border-gray-100 p-6 sm:p-8 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-emerald-600 flex items-center justify-center font-black text-2xl text-white shadow-md shadow-emerald-600/20 shrink-0">
-              {commerce.nombre.charAt(0)}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl sm:text-3xl font-black text-gray-900">{commerce.nombre}</h1>
-                <Badge variant="success">Abierto</Badge>
+      {/* Commerce Header Card with Banner and Logo */}
+      <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm">
+        {commerce.banner && (
+          <div className="h-44 sm:h-56 w-full bg-slate-100 overflow-hidden">
+            <img src={commerce.banner} alt={commerce.nombre} className="w-full h-full object-cover" />
+          </div>
+        )}
+
+        <div className="p-6 sm:p-8 space-y-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-purple-600 flex items-center justify-center font-black text-2xl text-white shadow-md shadow-purple-600/20 shrink-0 overflow-hidden">
+                {commerce.logo ? (
+                  <img src={commerce.logo} alt={commerce.nombre} className="w-full h-full object-cover" />
+                ) : (
+                  commerce.nombre.charAt(0)
+                )}
               </div>
-              <p className="text-sm text-gray-500 mt-1">{commerce.descripcion || 'Especialistas en comida y víveres'}</p>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-2xl sm:text-3xl font-black text-gray-900">{commerce.nombre}</h1>
+                  {commerce.categoria && (
+                    <span className="text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                      {commerce.categoria}
+                    </span>
+                  )}
+                  <Badge variant={commerce.pausaManual ? 'warning' : commerce.abierto !== false ? 'success' : 'danger'}>
+                    {commerce.pausaManual ? 'Pausa Manual' : commerce.abierto !== false ? 'Abierto' : 'Cerrado'}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {commerce.descripcion || 'Comercio aliado con entregas y pedidos inmediatos.'}
+                </p>
+              </div>
             </div>
+
+            {/* Sucursales Selector */}
+            {branches.length > 0 && (
+              <div className="w-full sm:w-auto bg-gray-50 p-2 rounded-2xl border border-gray-100">
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">
+                  Punto de Despacho
+                </label>
+                <select
+                  value={selectedBranch?.id || ''}
+                  onChange={(e) => handleBranchChange(Number(e.target.value))}
+                  className="w-full bg-white border border-gray-200 text-xs font-bold text-gray-800 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      📍 {b.nombre} - {b.direccion} ({b.ciudad})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
-          {/* Sucursales Selector */}
-          {branches.length > 0 && (
-            <div className="w-full sm:w-auto bg-gray-50 p-2 rounded-2xl border border-gray-100">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 px-1">
-                Selecciona Sucursal
-              </label>
-              <select
-                value={selectedBranch?.id || ''}
-                onChange={(e) => handleBranchChange(Number(e.target.value))}
-                className="w-full bg-white border border-gray-200 text-xs font-bold text-gray-800 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    📍 {b.nombre} - {b.direccion} ({b.ciudad})
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        {/* Selected Branch Details */}
-        {selectedBranch && (
+          {/* Selected Branch Details & Schedule */}
           <div className="pt-4 border-t border-gray-100 flex flex-wrap gap-4 text-xs text-gray-600">
-            <span className="flex items-center gap-1.5 font-medium">
-              <MapPin className="w-4 h-4 text-gray-400" /> {selectedBranch.direccion}, {selectedBranch.ciudad}
-            </span>
-            {selectedBranch.telefono && (
+            {selectedBranch && (
+              <span className="flex items-center gap-1.5 font-medium">
+                <MapPin className="w-4 h-4 text-gray-400" /> {selectedBranch.direccion}, {selectedBranch.ciudad}
+              </span>
+            )}
+            {selectedBranch?.telefono && (
               <span className="flex items-center gap-1.5 font-medium">
                 <Phone className="w-4 h-4 text-gray-400" /> {selectedBranch.telefono}
               </span>
             )}
             <span className="flex items-center gap-1.5 font-medium">
-              🛵 Radio de entrega: {selectedBranch.radioEntregaKm || 5} km
+              <Clock className="w-4 h-4 text-gray-400" /> Horario: {commerce.horaApertura || '08:00'} - {commerce.horaCierre || '20:00'}
+            </span>
+            <span className="flex items-center gap-1.5 font-medium text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full font-bold">
+              ⚡ Alistamiento: ~{commerce.tiempoPreparacionMin || 20} min
             </span>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Menu Products Grid */}
+      {/* Catalog Products Grid */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-            <Utensils className="w-5 h-5 text-gray-800" /> Carta y Productos ({products.length})
+            <Package className="w-5 h-5 text-gray-800" /> Catálogo de Productos ({products.length})
           </h2>
         </div>
 
         {products.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 p-8">
-            <Utensils className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-gray-700">Esta sucursal aún no tiene productos registrados.</p>
+            <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+            <p className="text-sm font-bold text-gray-700">Esta sede aún no tiene productos disponibles.</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {products.map((p) => {
               const qty = quantities[p.id] || 1;
               return (
-                <Card key={p.id} className="flex flex-col justify-between h-full">
+                <Card key={p.id} className="flex flex-col justify-between h-full hover:shadow-md transition-shadow">
                   <div className="space-y-3">
                     <div className="h-44 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-300">
                       {p.imagenPrincipal ? (
-                        <img src={p.imagenPrincipal} alt={p.nombre} className="w-full h-full object-cover" />
+                        <img
+                          src={p.imagenPrincipal}
+                          alt={p.nombre}
+                          className="w-full h-full object-cover"
+                          onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                        />
                       ) : (
-                        <Utensils className="w-10 h-10" />
+                        <Package className="w-10 h-10 text-gray-300" />
                       )}
                     </div>
                     <div>
@@ -213,7 +253,9 @@ export const CommerceDetailPage: React.FC = () => {
                           {formatCurrency(p.precio)}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-1">{p.descripcion || 'Preparado fresco.'}</p>
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                        {p.descripcion || 'Producto disponible para entrega inmediata.'}
+                      </p>
                     </div>
                   </div>
 
@@ -241,9 +283,9 @@ export const CommerceDetailPage: React.FC = () => {
                       size="sm"
                       onClick={() => handleAddToCart(p)}
                       icon={<ShoppingBag className="w-4 h-4" />}
-                      disabled={!p.disponible}
+                      disabled={!p.disponible || commerce.pausaManual}
                     >
-                      {p.disponible ? 'Agregar' : 'Agotado'}
+                      {commerce.pausaManual ? 'Pausado' : p.disponible ? 'Agregar' : 'Agotado'}
                     </Button>
                   </div>
                 </Card>

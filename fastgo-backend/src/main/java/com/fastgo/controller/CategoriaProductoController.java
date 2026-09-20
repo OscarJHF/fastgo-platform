@@ -49,7 +49,7 @@ public class CategoriaProductoController {
 
     // Crear categoría
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIO')")
     public ResponseEntity<CategoriaProducto> guardarCategoria(
             @Valid @RequestBody CategoriaProducto categoria) {
 
