@@ -1,5 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Bike, Package, Check, ArrowRight, Navigation, MapPin, Layers, Clock, Send, ShieldCheck } from 'lucide-react';
+import {
+  Bike,
+  Package,
+  Check,
+  ArrowRight,
+  Navigation,
+  MapPin,
+  Layers,
+  Clock,
+  Send,
+  ShieldCheck,
+  DollarSign,
+  Store,
+  Building2,
+} from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { encomiendaService } from '../../services/encomiendaService';
 import { Pedido, Encomienda, EstadoEncomienda } from '../../types';
@@ -47,15 +61,17 @@ export const DeliveryDashboardPage: React.FC = () => {
     loadDeliveryData();
   }, []);
 
-  // Handlers para Pedidos de Comercio
+  // Handlers para Pedidos de Comercio con Aceptación Atómica
   const handleClaimOrder = async (id: number) => {
     setIsClaiming(id);
     try {
       await pedidoService.claimOrder(id);
-      success(`¡Has tomado el pedido #${id}!`);
+      success(`¡Has tomado el domicilio del pedido #${id}!`);
       await loadDeliveryData();
-    } catch (err) {
-      showError('No fue posible tomar el pedido. Puede que ya haya sido tomado.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Este domicilio ya fue tomado por otro domiciliario.';
+      showError(msg);
+      await loadDeliveryData();
     } finally {
       setIsClaiming(null);
     }
@@ -228,10 +244,24 @@ export const DeliveryDashboardPage: React.FC = () => {
                           </div>
                         </div>
 
-                        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-[11px] text-gray-500 flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-amber-500 shrink-0" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-gray-50/80 p-3 rounded-xl border border-gray-100">
                           <div>
-                            <span className="font-bold text-gray-700">Ruta de Entrega:</span> Destino asignado para el pedido #{order.id}.
+                            <span className="font-bold text-purple-700 block text-[10px] uppercase flex items-center gap-1">
+                              <Building2 className="w-3 h-3" /> Recoger en (Comercio):
+                            </span>
+                            <span className="font-extrabold text-gray-900">{order.comercioNombre || 'Comercio FastGo'}</span>
+                            <p className="text-[11px] text-gray-600">{order.comercioDireccion || 'Dirección de la sede'}</p>
+                          </div>
+                          <div>
+                            <span className="font-bold text-emerald-700 block text-[10px] uppercase flex items-center gap-1">
+                              <MapPin className="w-3 h-3" /> Entregar a (Cliente):
+                            </span>
+                            <span className="font-extrabold text-gray-900">{order.clienteNombre || 'Cliente'}</span>
+                            <p className="text-[11px] text-gray-600">{order.direccionTexto || 'Dirección de entrega'}</p>
+                          </div>
+                          <div className="sm:col-span-2 pt-1 border-t border-gray-200/50 flex items-center justify-between text-[11px]">
+                            <span className="text-gray-500">Ganancia domicilio: <strong className="text-emerald-700">{formatCurrency(order.costoEnvio)}</strong></span>
+                            <span className="text-gray-500">Cobro total: <strong className="text-gray-900">{formatCurrency(order.total)}</strong> ({order.metodoPago || 'EFECTIVO'})</span>
                           </div>
                         </div>
 
@@ -260,27 +290,77 @@ export const DeliveryDashboardPage: React.FC = () => {
                 <p className="text-xs text-gray-400 mt-0.5">Los nuevos pedidos listos para entrega aparecerán aquí automáticamente.</p>
               </Card>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {availableOrders.map((order) => (
-                  <Card key={order.id} className="p-5 flex items-center justify-between">
-                    <div className="space-y-1">
+                  <Card key={order.id} className="p-5 space-y-4 hover:shadow-md transition-shadow border-l-4 border-l-amber-500">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-black text-base text-gray-900">Pedido #{order.id}</span>
-                        <Badge variant="warning">Listo para entrega</Badge>
+                        <span className="font-black text-lg text-gray-900">Pedido #{order.id}</span>
+                        <Badge variant="warning">Listo en Cocina / Mostrador</Badge>
                       </div>
-                      <p className="text-xs text-gray-500">Hora: {formatDate(order.creadoEn)}</p>
-                      <p className="text-xs font-black text-gray-900">Total: {formatCurrency(order.total)}</p>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{formatDate(order.creadoEn)}</span>
+                      </div>
                     </div>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleClaimOrder(order.id)}
-                      isLoading={isClaiming === order.id}
-                      icon={<Bike className="w-4 h-4" />}
-                    >
-                      Tomar Pedido
-                    </Button>
+                    {/* Origen vs Destino vs Ganancia */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs bg-gray-50/80 p-3.5 rounded-xl border border-gray-100">
+                      {/* Origen */}
+                      <div className="space-y-1">
+                        <p className="font-bold text-gray-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                          <Building2 className="w-3.5 h-3.5 text-purple-600" /> Origen (Recogida)
+                        </p>
+                        <p className="font-extrabold text-gray-900 text-sm">{order.comercioNombre || 'Comercio FastGo'}</p>
+                        <p className="text-gray-600 text-[11px] flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-gray-400 shrink-0" />
+                          {order.comercioDireccion || 'Dirección de sede comercial'}
+                        </p>
+                      </div>
+
+                      {/* Destino */}
+                      <div className="space-y-1">
+                        <p className="font-bold text-gray-500 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Destino (Cliente)
+                        </p>
+                        <p className="font-extrabold text-gray-900 text-sm">{order.clienteNombre || 'Cliente'}</p>
+                        <p className="text-gray-600 text-[11px]">
+                          {order.direccionTexto || 'Dirección de entrega asignada'}
+                        </p>
+                      </div>
+
+                      {/* Ganancia del Domiciliario */}
+                      <div className="space-y-1 bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                        <p className="font-bold text-emerald-800 uppercase tracking-wider text-[10px] flex items-center gap-1">
+                          <DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Ganancia por Domicilio
+                        </p>
+                        <p className="font-black text-emerald-700 text-lg">
+                          {formatCurrency(order.costoEnvio)}
+                        </p>
+                        <p className="text-[10px] text-emerald-600">Tarifa fija fijada por el comercio</p>
+                      </div>
+                    </div>
+
+                    {order.observaciones && (
+                      <div className="p-2.5 rounded-xl bg-amber-50 text-xs text-amber-900 border border-amber-200">
+                        <span className="font-bold">Observaciones: </span> {order.observaciones}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                      <span className="text-xs text-gray-500">
+                        Cobro total: <strong className="text-gray-800">{formatCurrency(order.total)}</strong> ({order.metodoPago || 'EFECTIVO'})
+                      </span>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleClaimOrder(order.id)}
+                        isLoading={isClaiming === order.id}
+                        icon={<Bike className="w-4 h-4" />}
+                        className="bg-emerald-600 hover:bg-emerald-700 font-black tracking-wider uppercase"
+                      >
+                        ACEPTAR DOMICILIO
+                      </Button>
+                    </div>
                   </Card>
                 ))}
               </div>

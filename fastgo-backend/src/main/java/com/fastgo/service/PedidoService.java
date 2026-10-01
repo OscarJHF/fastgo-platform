@@ -2,13 +2,25 @@ package com.fastgo.service;
 
 import com.fastgo.entity.*;
 import com.fastgo.repository.*;
+import com.fastgo.util.FileValidationUtils;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.MalformedURLException;
+import java.nio.file.*;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 public class PedidoService {
@@ -24,6 +36,8 @@ public class PedidoService {
     private final ProductoRepository productoRepository;
     private final TarifaService tarifaService;
     private final PagoRepository pagoRepository;
+    private final Path uploadDir;
+    private final Path proofsDir;
 
     public PedidoService(
             PedidoRepository pedidoRepository,
@@ -36,7 +50,8 @@ public class PedidoService {
             ComercioRepository comercioRepository,
             ProductoRepository productoRepository,
             TarifaService tarifaService,
-            PagoRepository pagoRepository) {
+            PagoRepository pagoRepository,
+            @Value("${fastgo.upload.dir:uploads}") String uploadDirPath) {
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
         this.carritoService = carritoService;
@@ -48,6 +63,13 @@ public class PedidoService {
         this.productoRepository = productoRepository;
         this.tarifaService = tarifaService;
         this.pagoRepository = pagoRepository;
+        this.uploadDir = Paths.get(uploadDirPath != null ? uploadDirPath : "uploads").toAbsolutePath().normalize();
+        this.proofsDir = this.uploadDir.resolve("payment-proofs").normalize();
+        try {
+            Files.createDirectories(this.proofsDir);
+        } catch (IOException e) {
+            throw new RuntimeException("No se pudo inicializar el directorio de comprobantes: " + this.proofsDir, e);
+        }
     }
 
     @Transactional
@@ -56,7 +78,7 @@ public class PedidoService {
             Integer direccionId,
             BigDecimal costoEnvio,
             String observaciones) {
-        return crearPedido(carritoId, direccionId, costoEnvio, observaciones, "EFECTIVO");
+        return crearPedido(carritoId, direccionId, costoEnvio, observaciones, "EFECTIVO", null);
     }
 
     @Transactional
@@ -66,6 +88,29 @@ public class PedidoService {
             BigDecimal costoEnvio,
             String observaciones,
             String metodoPago) {
+        return crearPedido(carritoId, direccionId, costoEnvio, observaciones, metodoPago, null);
+    }
+
+    @Transactional
+    public Pedido crearPedido(
+            Integer carritoId,
+            Integer direccionId,
+            BigDecimal costoEnvio,
+            String observaciones,
+            String metodoPago,
+            String comprobantePagoUrl) {
+        return crearPedido(carritoId, direccionId, costoEnvio, observaciones, metodoPago, comprobantePagoUrl, null);
+    }
+
+    @Transactional
+    public Pedido crearPedido(
+            Integer carritoId,
+            Integer direccionId,
+            BigDecimal costoEnvio,
+            String observaciones,
+            String metodoPago,
+            String comprobantePagoUrl,
+            MultipartFile comprobanteArchivo) {
 
         Usuario usuario = usuario();
 
@@ -100,6 +145,17 @@ public class PedidoService {
             throw new IllegalArgumentException("El comercio no acepta el método de pago: " + metodoNormalizado);
         }
 
+        // Validar comprobante y estado de pago para Bancolombia
+        String estadoPago = "APROBADO";
+        if ("BANCOLOMBIA".equals(metodoNormalizado)) {
+            boolean hasUrl = comprobantePagoUrl != null && !comprobantePagoUrl.isBlank();
+            boolean hasFile = comprobanteArchivo != null && !comprobanteArchivo.isEmpty();
+            if (!hasUrl && !hasFile) {
+                throw new IllegalArgumentException("El comprobante de pago es obligatorio para compras con Bancolombia");
+            }
+            estadoPago = "PENDIENTE_VERIFICACION";
+        }
+
         BigDecimal distanciaKm = BigDecimal.ONE;
         if (sucursal.getLatitud() != null && sucursal.getLongitud() != null
                 && direccion.getLatitud() != null && direccion.getLongitud() != null) {
@@ -108,7 +164,12 @@ public class PedidoService {
                     direccion.getLatitud(), direccion.getLongitud());
         }
 
-        costoEnvio = tarifaService.calcularTarifaPorDistancia(distanciaKm);
+        // NUEVA REGLA: Tarifa de domicilio configurada por el comercio (mínimo $2.000 COP)
+        BigDecimal tarifaComercio = comercio.getTarifaDomicilio();
+        if (tarifaComercio == null || tarifaComercio.compareTo(BigDecimal.valueOf(2000)) < 0) {
+            tarifaComercio = BigDecimal.valueOf(2000);
+        }
+        costoEnvio = tarifaComercio;
 
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CarritoDetalle detalleCarrito : detalles) {
@@ -143,9 +204,26 @@ public class PedidoService {
         pedido.setTarifaAceptada(true);
         pedido.setTotal(subtotal.add(costoEnvio));
         pedido.setMetodoPago(metodoNormalizado);
+        pedido.setEstadoPago(estadoPago);
+        pedido.setComprobantePagoUrl(comprobantePagoUrl != null && !comprobantePagoUrl.isBlank() ? comprobantePagoUrl.trim() : null);
         pedido.setObservaciones(normalizarObservaciones(observaciones));
 
         pedido = pedidoRepository.save(pedido);
+
+        if (comprobanteArchivo != null && !comprobanteArchivo.isEmpty()) {
+            FileValidationUtils.validatePaymentProof(comprobanteArchivo);
+            String extension = FileValidationUtils.getCleanExtension(comprobanteArchivo.getOriginalFilename());
+            String secureFilename = "proof_" + pedido.getId() + "_" + UUID.randomUUID() + "." + extension;
+            Path targetPath = this.proofsDir.resolve(secureFilename).normalize();
+            try {
+                Files.copy(comprobanteArchivo.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException e) {
+                throw new RuntimeException("Error al guardar el comprobante: " + e.getMessage(), e);
+            }
+            String publicUrl = "/api/pedidos/" + pedido.getId() + "/comprobante";
+            pedido.setComprobantePagoUrl(publicUrl);
+            pedido = pedidoRepository.save(pedido);
+        }
 
         for (CarritoDetalle detalleCarrito : detalles) {
             Producto producto = productoRepository.findById(detalleCarrito.getProductoId())
@@ -173,7 +251,8 @@ public class PedidoService {
         Pago pago = new Pago();
         pago.setPedidoId(pedido.getId());
         pago.setMetodo(metodoNormalizado);
-        pago.setEstado("PENDIENTE");
+        pago.setEstado("BANCOLOMBIA".equals(metodoNormalizado) ? "PENDIENTE" : "APROBADO");
+        pago.setReferencia(pedido.getComprobantePagoUrl());
         pago.setFechaPago(java.time.LocalDateTime.now());
         pagoRepository.save(pago);
 
@@ -299,6 +378,18 @@ public class PedidoService {
                 p.setDireccionTexto(dir);
             });
         }
+        if (p.getSucursalId() != null) {
+            sucursalRepository.findById(p.getSucursalId()).ifPresent(s -> {
+                p.setSucursalNombre(s.getNombre());
+                String dir = s.getDireccion() + (s.getCiudad() != null && !s.getCiudad().isBlank() ? ", " + s.getCiudad() : "");
+                p.setComercioDireccion(dir);
+                if (s.getComercioId() != null) {
+                    comercioRepository.findById(s.getComercioId()).ifPresent(c -> {
+                        p.setComercioNombre(c.getNombre());
+                    });
+                }
+            });
+        }
         return p;
     }
 
@@ -322,6 +413,49 @@ public class PedidoService {
         return cambiarEstadoComercio(id, "LISTO");
     }
 
+    @Transactional
+    public Pedido aprobarPago(Integer id) {
+        Pedido pedido = pedido(id);
+        Usuario usuario = usuario();
+        exigirComercioPropietario(pedido, usuario);
+
+        if ("CANCELADO".equalsIgnoreCase(pedido.getEstado()) || "ENTREGADO".equalsIgnoreCase(pedido.getEstado())) {
+            throw new IllegalStateException("No se puede verificar el pago de un pedido en estado " + pedido.getEstado());
+        }
+
+        pedido.setEstadoPago("APROBADO");
+        List<Pago> pagos = pagoRepository.findByPedidoId(pedido.getId());
+        for (Pago p : pagos) {
+            p.setEstado("APROBADO");
+            pagoRepository.save(p);
+        }
+        return enriquecerPedido(pedidoRepository.save(pedido));
+    }
+
+    @Transactional
+    public Pedido rechazarPago(Integer id, String motivo) {
+        Pedido pedido = pedido(id);
+        Usuario usuario = usuario();
+        exigirComercioPropietario(pedido, usuario);
+
+        if ("ENTREGADO".equalsIgnoreCase(pedido.getEstado())) {
+            throw new IllegalStateException("No se puede rechazar el pago de un pedido ya entregado");
+        }
+
+        pedido.setEstadoPago("RECHAZADO");
+        pedido.setEstado("CANCELADO");
+        String obs = pedido.getObservaciones() == null ? "" : pedido.getObservaciones() + " | ";
+        pedido.setObservaciones(obs + "Pago rechazado por el comercio: " + (motivo == null || motivo.isBlank() ? "Comprobante inválido o no recibido" : motivo.trim()));
+        restaurarStock(pedido.getId());
+
+        List<Pago> pagos = pagoRepository.findByPedidoId(pedido.getId());
+        for (Pago p : pagos) {
+            p.setEstado("RECHAZADO");
+            pagoRepository.save(p);
+        }
+        return enriquecerPedido(pedidoRepository.save(pedido));
+    }
+
     private Pedido cambiarEstadoComercio(
             Integer id,
             String nuevoEstado) {
@@ -339,6 +473,14 @@ public class PedidoService {
                             + pedido.getEstado()
                             + " → "
                             + nuevoEstado);
+        }
+
+        // REGLA CRÍTICA: Un pedido pagado con BANCOLOMBIA que esté en PENDIENTE_VERIFICACION NO PUEDE pasar a LISTO (despachado)
+        if ("LISTO".equalsIgnoreCase(nuevoEstado)) {
+            if ("BANCOLOMBIA".equalsIgnoreCase(pedido.getMetodoPago())
+                    && !"APROBADO".equalsIgnoreCase(pedido.getEstadoPago())) {
+                throw new IllegalStateException("No se puede despachar el pedido: el pago por Bancolombia está pendiente de verificación.");
+            }
         }
 
         pedido.setEstado(nuevoEstado);
@@ -359,7 +501,7 @@ public class PedidoService {
 
         int actualizadas = pedidoRepository.asignarPedidoAtomicamente(id, usuario.getId());
         if (actualizadas != 1) {
-            throw new RuntimeException("El pedido ya no está disponible para ser asignado");
+            throw new com.fastgo.exception.PedidoYaAsignadoException("Este domicilio ya fue tomado por otro domiciliario.");
         }
 
         return pedido(id);
@@ -557,5 +699,134 @@ public class PedidoService {
         return usuario.getRol() == null
                 ? ""
                 : usuario.getRol().getNombre();
+    }
+
+    public record ComprobanteResourceInfo(Resource resource, MediaType mediaType) {}
+
+    public ComprobanteResourceInfo obtenerComprobante(Integer id) {
+        Usuario usuario = usuario();
+        Pedido pedido = pedido(id);
+
+        String rol = rol(usuario);
+        if ("DOMICILIARIO".equalsIgnoreCase(rol)) {
+            throw new RuntimeException("No tienes permiso para consultar el comprobante de este pedido");
+        }
+
+        if ("CLIENTE".equalsIgnoreCase(rol)) {
+            if (!pedido.getUsuarioId().equals(usuario.getId())) {
+                throw new RuntimeException("No tienes permiso para consultar el comprobante de este pedido");
+            }
+        } else if ("COMERCIO".equalsIgnoreCase(rol)) {
+            if (!esComercioPropietario(pedido, usuario)) {
+                throw new RuntimeException("No tienes permiso para consultar el comprobante de este pedido");
+            }
+        } else if (!"ADMIN".equalsIgnoreCase(rol)) {
+            throw new RuntimeException("No tienes permiso para consultar el comprobante de este pedido");
+        }
+
+        String comprobanteUrl = pedido.getComprobantePagoUrl();
+        if (comprobanteUrl == null || comprobanteUrl.isBlank()) {
+            throw new RuntimeException("El comprobante no existe o no ha sido cargado para este pedido");
+        }
+
+        Path filePath = null;
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.proofsDir, "proof_" + pedido.getId() + "_*")) {
+            for (Path p : stream) {
+                if (Files.isReadable(p)) {
+                    filePath = p;
+                    break;
+                }
+            }
+        } catch (IOException ignored) {}
+
+        if (filePath == null) {
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.proofsDir, "proof_" + pedido.getId() + ".*")) {
+                for (Path p : stream) {
+                    if (Files.isReadable(p)) {
+                        filePath = p;
+                        break;
+                    }
+                }
+            } catch (IOException ignored) {}
+        }
+
+        if (filePath == null) {
+            String filename = Paths.get(comprobanteUrl).getFileName().toString();
+            Path candidate = this.proofsDir.resolve(filename).normalize();
+            if (Files.exists(candidate) && Files.isReadable(candidate)) {
+                filePath = candidate;
+            } else {
+                candidate = this.uploadDir.resolve(filename).normalize();
+                if (Files.exists(candidate) && Files.isReadable(candidate)) {
+                    filePath = candidate;
+                }
+            }
+        }
+
+        if (filePath == null || !Files.exists(filePath) || !Files.isReadable(filePath)) {
+            throw new RuntimeException("El archivo del comprobante no existe en el servidor");
+        }
+
+        try {
+            Resource resource = new UrlResource(filePath.toUri());
+            if (!resource.exists() || !resource.isReadable()) {
+                throw new RuntimeException("El archivo del comprobante no existe en el servidor");
+            }
+
+            MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+            String lower = filePath.getFileName().toString().toLowerCase();
+            if (lower.endsWith(".png")) mediaType = MediaType.IMAGE_PNG;
+            else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mediaType = MediaType.IMAGE_JPEG;
+            else if (lower.endsWith(".webp")) mediaType = MediaType.parseMediaType("image/webp");
+            else if (lower.endsWith(".pdf")) mediaType = MediaType.APPLICATION_PDF;
+
+            return new ComprobanteResourceInfo(resource, mediaType);
+        } catch (MalformedURLException e) {
+            throw new RuntimeException("Error al leer el archivo del comprobante", e);
+        }
+    }
+
+    @Transactional
+    public Map<String, Object> subirComprobante(Integer id, MultipartFile file) {
+        Usuario usuario = usuario();
+        Pedido pedido = pedido(id);
+
+        if (!pedido.getUsuarioId().equals(usuario.getId())) {
+            throw new RuntimeException("No tienes permiso para subir el comprobante de este pedido");
+        }
+
+        FileValidationUtils.validatePaymentProof(file);
+
+        String extension = FileValidationUtils.getCleanExtension(file.getOriginalFilename());
+        String secureFilename = "proof_" + pedido.getId() + "_" + UUID.randomUUID() + "." + extension;
+        Path targetPath = this.proofsDir.resolve(secureFilename).normalize();
+
+        if (!targetPath.getParent().equals(this.proofsDir)) {
+            throw new SecurityException("Intento de navegación de directorios no permitido.");
+        }
+
+        try {
+            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            throw new RuntimeException("Error al guardar el comprobante en el servidor: " + e.getMessage(), e);
+        }
+
+        String publicUrl = "/api/pedidos/" + pedido.getId() + "/comprobante";
+        pedido.setComprobantePagoUrl(publicUrl);
+        pedidoRepository.save(pedido);
+
+        List<Pago> pagos = pagoRepository.findByPedidoId(pedido.getId());
+        if (pagos != null && !pagos.isEmpty()) {
+            for (Pago p : pagos) {
+                p.setReferencia(publicUrl);
+                pagoRepository.save(p);
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("url", publicUrl);
+        response.put("filename", secureFilename);
+        response.put("mensaje", "Comprobante subido exitosamente");
+        return response;
     }
 }

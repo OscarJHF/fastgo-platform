@@ -304,7 +304,7 @@ public class EndToEndOfficialFlowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estado", is("PENDIENTE")))
                 .andExpect(jsonPath("$.subtotal", is(36000.0)))
-                .andExpect(jsonPath("$.costoEnvio", greaterThanOrEqualTo(2000)))
+                .andExpect(jsonPath("$.costoEnvio", greaterThanOrEqualTo(2000.0)))
                 .andExpect(jsonPath("$.total", greaterThan(36000.0)))
                 .andReturn();
 
@@ -364,11 +364,11 @@ public class EndToEndOfficialFlowTests {
                 .andExpect(jsonPath("$.estado", is("EN_CAMINO")))
                 .andExpect(jsonPath("$.domiciliarioId", is(domiciliarioUserA.getId())));
 
-        // Domiciliario B intenta tomar el mismo pedido ya asignado -> DEBE FALLAR con 400 Bad Request
+        // Domiciliario B intenta tomar el mismo pedido ya asignado -> DEBE FALLAR con 409 Conflict
         mockMvc.perform(put("/api/pedidos/" + pedidoId + "/tomar")
                         .header("Authorization", "Bearer " + tokenDomiciliarioB))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message", containsString("El pedido ya no está disponible")));
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message", containsString("Este domicilio ya fue tomado por otro domiciliario.")));
 
         // K. Domiciliario A entrega el pedido: EN_CAMINO -> ENTREGADO
         mockMvc.perform(put("/api/pedidos/" + pedidoId + "/entregar")

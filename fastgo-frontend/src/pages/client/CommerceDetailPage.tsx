@@ -11,13 +11,15 @@ import {
   Package,
   Clock,
   CheckCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
 import { productoService } from '../../services/productoService';
+import { categoriaService } from '../../services/categoriaService';
 import { useCart } from '../../context/CartContext';
 import { useToast } from '../../context/ToastContext';
-import { Comercio, Sucursal, Producto } from '../../types';
+import { Comercio, Sucursal, Producto, CategoriaProducto } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -33,6 +35,8 @@ export const CommerceDetailPage: React.FC = () => {
   const [branches, setBranches] = useState<Sucursal[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<Sucursal | null>(null);
   const [products, setProducts] = useState<Producto[]>([]);
+  const [categories, setCategories] = useState<CategoriaProducto[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<number | 'ALL'>('ALL');
   const [isLoading, setIsLoading] = useState(true);
 
   // Cantidad seleccionada temporal por producto
@@ -48,11 +52,15 @@ export const CommerceDetailPage: React.FC = () => {
     }
     const loadCommerce = async () => {
       try {
-        const c = await commerceService.getCommerce(commerceId);
-        setCommerce(c);
+        const [c, sucursales, cats] = await Promise.all([
+          commerceService.getCommerce(commerceId),
+          sucursalService.listByCommerce(commerceId),
+          categoriaService.listActiveProductCategories().catch(() => []),
+        ]);
 
-        const sucursales = await sucursalService.listByCommerce(commerceId);
+        setCommerce(c);
         setBranches(sucursales);
+        setCategories(cats);
 
         if (sucursales.length > 0) {
           const firstBranch = sucursales[0];
@@ -214,8 +222,60 @@ export const CommerceDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Closed / Paused Store Alert Banner */}
+      {(!commerce.abierto || commerce.pausaManual) && (
+        <div className="p-4 sm:p-5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start gap-3 shadow-xs">
+          <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-black text-sm">Este comercio se encuentra actualmente cerrado</h4>
+            <p className="text-xs text-rose-700 mt-1">
+              {commerce.nombre} no está recibiendo pedidos en este momento.{' '}
+              {commerce.pausaManual
+                ? 'La tienda está pausada temporalmente.'
+                : commerce.mensajeEstado ||
+                  `Horario de atención: ${commerce.horaApertura || '08:00'} a ${commerce.horaCierre || '20:00'} (${commerce.diasAtencion || 'Todos los días'}).`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Category Filter Pills */}
+      {categories.length > 0 && products.length > 0 && (
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('ALL')}
+            className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+              selectedCategory === 'ALL'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+            }`}
+          >
+            Todos ({products.length})
+          </button>
+          {categories.map((c) => {
+            const count = products.filter((p) => p.categoriaId === c.id).length;
+            if (count === 0) return null; // No mostrar categorías sin productos de forma rota
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCategory(c.id)}
+                className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                  selectedCategory === c.id
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                {c.nombre} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Catalog Products Grid */}
-      <section className="space-y-4">
+      <section className="space-y-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
             <Package className="w-5 h-5 text-gray-800" /> Catálogo de Productos ({products.length})
@@ -227,70 +287,231 @@ export const CommerceDetailPage: React.FC = () => {
             <Package className="w-10 h-10 text-gray-300 mx-auto mb-2" />
             <p className="text-sm font-bold text-gray-700">Esta sede aún no tiene productos disponibles.</p>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((p) => {
-              const qty = quantities[p.id] || 1;
+        ) : selectedCategory === 'ALL' ? (
+          <div className="space-y-8">
+            {categories.map((cat) => {
+              const prodsInCat = products.filter((p) => p.categoriaId === cat.id);
+              if (prodsInCat.length === 0) return null;
               return (
-                <Card key={p.id} className="flex flex-col justify-between h-full hover:shadow-md transition-shadow">
-                  <div className="space-y-3">
-                    <div className="h-44 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-300">
-                      {p.imagenPrincipal ? (
-                        <img
-                          src={p.imagenPrincipal}
-                          alt={p.nombre}
-                          className="w-full h-full object-cover"
-                          onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                        />
-                      ) : (
-                        <Package className="w-10 h-10 text-gray-300" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
-                        <span className="font-black text-base text-gray-900 shrink-0">
-                          {formatCurrency(p.precio)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-1">
-                        {p.descripcion || 'Producto disponible para entrega inmediata.'}
-                      </p>
-                    </div>
+                <div key={cat.id} className="space-y-4">
+                  <div className="border-b border-gray-100 pb-2">
+                    <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block"></span>
+                      {cat.nombre} <span className="text-xs font-normal text-gray-500">({prodsInCat.length})</span>
+                    </h3>
                   </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {prodsInCat.map((p) => {
+                      const qty = quantities[p.id] || 1;
+                      return (
+                        <Card key={p.id} className="flex flex-col justify-between h-full hover:shadow-md transition-shadow">
+                          <div className="space-y-3">
+                            <div className="h-44 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-300">
+                              {p.imagenPrincipal ? (
+                                <img
+                                  src={p.imagenPrincipal}
+                                  alt={p.nombre}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                                />
+                              ) : (
+                                <Package className="w-10 h-10 text-gray-300" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                <span className="font-black text-base text-gray-900 shrink-0">
+                                  {formatCurrency(p.precio)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                                {p.descripcion || 'Producto disponible para entrega inmediata.'}
+                              </p>
+                            </div>
+                          </div>
 
-                  <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between gap-3">
-                    <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
-                      <button
-                        onClick={() => handleQuantityChange(p.id, -1)}
-                        className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
-                        aria-label="Disminuir"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="px-3 text-xs font-bold text-gray-900">{qty}</span>
-                      <button
-                        onClick={() => handleQuantityChange(p.id, 1)}
-                        className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
-                        aria-label="Aumentar"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                          <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
+                              <button
+                                onClick={() => handleQuantityChange(p.id, -1)}
+                                className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                                aria-label="Disminuir"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="px-3 text-xs font-bold text-gray-900">{qty}</span>
+                              <button
+                                onClick={() => handleQuantityChange(p.id, 1)}
+                                className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                                aria-label="Aumentar"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleAddToCart(p)}
-                      icon={<ShoppingBag className="w-4 h-4" />}
-                      disabled={!p.disponible || commerce.pausaManual}
-                    >
-                      {commerce.pausaManual ? 'Pausado' : p.disponible ? 'Agregar' : 'Agotado'}
-                    </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleAddToCart(p)}
+                              icon={<ShoppingBag className="w-4 h-4" />}
+                              disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                            >
+                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
                   </div>
-                </Card>
+                </div>
               );
             })}
+
+            {/* Productos sin categoría asignada */}
+            {products.filter((p) => !categories.some((c) => c.id === p.categoriaId)).length > 0 && (
+              <div className="space-y-4">
+                <div className="border-b border-gray-100 pb-2">
+                  <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block"></span>
+                    Otros Artículos
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {products
+                    .filter((p) => !categories.some((c) => c.id === p.categoriaId))
+                    .map((p) => {
+                      const qty = quantities[p.id] || 1;
+                      return (
+                        <Card key={p.id} className="flex flex-col justify-between h-full hover:shadow-md transition-shadow">
+                          <div className="space-y-3">
+                            <div className="h-44 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-300">
+                              {p.imagenPrincipal ? (
+                                <img
+                                  src={p.imagenPrincipal}
+                                  alt={p.nombre}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                                />
+                              ) : (
+                                <Package className="w-10 h-10 text-gray-300" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-start justify-between gap-2">
+                                <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                <span className="font-black text-base text-gray-900 shrink-0">
+                                  {formatCurrency(p.precio)}
+                                </span>
+                              </div>
+                              <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                                {p.descripcion || 'Producto disponible para entrega inmediata.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between gap-3">
+                            <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
+                              <button
+                                onClick={() => handleQuantityChange(p.id, -1)}
+                                className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                                aria-label="Disminuir"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="px-3 text-xs font-bold text-gray-900">{qty}</span>
+                              <button
+                                onClick={() => handleQuantityChange(p.id, 1)}
+                                className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                                aria-label="Aumentar"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => handleAddToCart(p)}
+                              icon={<ShoppingBag className="w-4 h-4" />}
+                              disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                            >
+                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                            </Button>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products
+              .filter((p) => p.categoriaId === selectedCategory)
+              .map((p) => {
+                const qty = quantities[p.id] || 1;
+                return (
+                  <Card key={p.id} className="flex flex-col justify-between h-full hover:shadow-md transition-shadow">
+                    <div className="space-y-3">
+                      <div className="h-44 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-300">
+                        {p.imagenPrincipal ? (
+                          <img
+                            src={p.imagenPrincipal}
+                            alt={p.nombre}
+                            className="w-full h-full object-cover"
+                            onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                          />
+                        ) : (
+                          <Package className="w-10 h-10 text-gray-300" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                          <span className="font-black text-base text-gray-900 shrink-0">
+                            {formatCurrency(p.precio)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                          {p.descripcion || 'Producto disponible para entrega inmediata.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-gray-100 mt-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden bg-gray-50">
+                        <button
+                          onClick={() => handleQuantityChange(p.id, -1)}
+                          className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                          aria-label="Disminuir"
+                        >
+                          <Minus className="w-3.5 h-3.5" />
+                        </button>
+                        <span className="px-3 text-xs font-bold text-gray-900">{qty}</span>
+                        <button
+                          onClick={() => handleQuantityChange(p.id, 1)}
+                          className="p-2 hover:bg-gray-200 transition-colors text-gray-600"
+                          aria-label="Aumentar"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => handleAddToCart(p)}
+                        icon={<ShoppingBag className="w-4 h-4" />}
+                        disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                      >
+                        {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
           </div>
         )}
       </section>

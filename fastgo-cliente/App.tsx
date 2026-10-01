@@ -13,11 +13,15 @@ import {
   BackHandler,
   Platform,
   RefreshControl,
+  Image,
+  Modal,
+  Switch,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 
-// URL Oficial de Producción en Render
-const DEFAULT_API_URL = "https://fastgo-backend-lp2j.onrender.com";
+// URL de pruebas locales mediante ADB reverse en dispositivo fisico
+const DEFAULT_API_URL = "http://localhost:8080";
 
 // ==========================================
 // PALETA DE COLORES OFICIAL FASTGO
@@ -57,6 +61,18 @@ interface Comercio {
   pausaManual?: boolean;
   metodosPago?: string;
   abierto?: boolean;
+  dentroDeHorario?: boolean;
+  mensajeEstado?: string;
+  tarifaDomicilio?: number;
+  bancolombiaActivo?: boolean;
+  bancolombiaTipoCuenta?: string;
+  bancolombiaNumeroCuenta?: string;
+  bancolombiaTitular?: string;
+  bancolombiaDocTitular?: string;
+  logo?: string;
+  banner?: string;
+  logoUrl?: string;
+  bannerUrl?: string;
 }
 
 interface Producto {
@@ -67,7 +83,10 @@ interface Producto {
   disponible?: boolean;
   stock?: number;
   sucursalId?: number;
+  categoriaId?: number;
   categoria?: string;
+  imagenUrl?: string;
+  imagenPrincipal?: string;
 }
 
 interface CartItem {
@@ -98,9 +117,15 @@ interface PedidoItem {
   total: number;
   observaciones?: string;
   metodoPago?: string;
+  estadoPago?: "PENDIENTE_VERIFICACION" | "APROBADO" | "RECHAZADO" | string;
+  comprobantePagoUrl?: string | null;
   clienteNombre?: string;
   clienteTelefono?: string;
   direccionTexto?: string;
+  origenNombre?: string;
+  origenDireccion?: string;
+  comercioNombre?: string;
+  comercioDireccion?: string;
   distanciaKm?: number;
   creadoEn?: string;
 }
@@ -281,6 +306,206 @@ export default function App() {
 
   // Pull to refresh
   const [refreshing, setRefreshing] = useState<boolean>(false);
+
+  // Bancolombia Checkout Comprobante State
+  const [checkoutComprobanteUrl, setCheckoutComprobanteUrl] = useState<string | null>(null);
+  const [checkoutComprobanteAsset, setCheckoutComprobanteAsset] = useState<any | null>(null);
+  const [isUploadingComprobante, setIsUploadingComprobante] = useState<boolean>(false);
+  const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
+
+  // Configuración de Comercio Propio (Tarifa y Bancolombia)
+  const [storeTarifaDomicilio, setStoreTarifaDomicilio] = useState<string>("2000");
+  const [storeBancolombiaActivo, setStoreBancolombiaActivo] = useState<boolean>(false);
+  const [storeBancolombiaTipoCuenta, setStoreBancolombiaTipoCuenta] = useState<string>("AHORROS");
+  const [storeBancolombiaNumeroCuenta, setStoreBancolombiaNumeroCuenta] = useState<string>("");
+  const [storeBancolombiaTitular, setStoreBancolombiaTitular] = useState<string>("");
+  const [storeBancolombiaDocTitular, setStoreBancolombiaDocTitular] = useState<string>("");
+  const [storeLogoUrl, setStoreLogoUrl] = useState<string>("");
+  const [storeBannerUrl, setStoreBannerUrl] = useState<string>("");
+  const [isSavingStoreConfig, setIsSavingStoreConfig] = useState<boolean>(false);
+  const [isUploadingStoreLogo, setIsUploadingStoreLogo] = useState<boolean>(false);
+  const [isUploadingStoreBanner, setIsUploadingStoreBanner] = useState<boolean>(false);
+
+  // Gestión de Productos del Comercio
+  const [showProductModal, setShowProductModal] = useState<boolean>(false);
+  const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
+  const [prodFormNombre, setProdFormNombre] = useState<string>("");
+  const [prodFormDesc, setProdFormDesc] = useState<string>("");
+  const [prodFormPrecio, setProdFormPrecio] = useState<string>("");
+  const [prodFormCategoria, setProdFormCategoria] = useState<string>("Plato Principal");
+  const [prodFormDisponible, setProdFormDisponible] = useState<boolean>(true);
+  const [prodFormImagen, setProdFormImagen] = useState<string>("");
+  const [isUploadingProductImage, setIsUploadingProductImage] = useState<boolean>(false);
+  const [isSavingProduct, setIsSavingProduct] = useState<boolean>(false);
+
+  // Helper para resolver URLs de imágenes
+  const resolveMediaUrl = (url?: string | null): string | null => {
+    if (!url) return null;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    if (url.startsWith("/")) return `${apiUrl}${url}`;
+    return `${apiUrl}/api/uploads/${url}`;
+  };
+
+  // Helper robusto para subidas multipart nativas en Android/iOS usando XMLHttpRequest (OkHttp)
+  // Evita el error 'Unsupported FormDataPart implementation' de Expo Fetch al usar streaming nativo
+  const uploadMultipartAsync = (
+    url: string,
+    method: string,
+    authToken: string | null,
+    fieldName: string,
+    fileAsset: { uri: string; fileName?: string | null; mimeType?: string | null }
+  ): Promise<{ ok: boolean; status: number; data: any; json: () => Promise<any>; text: () => Promise<string> }> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open(method, url, true);
+      xhr.timeout = 60000;
+
+      if (authToken) {
+        xhr.setRequestHeader("Authorization", `Bearer ${authToken}`);
+      }
+      // NOTA: NO agregar header Content-Type manualmente.
+      // React Native / OkHttp genera automáticamente el multipart/form-data con su boundary único.
+
+      xhr.onload = () => {
+        let parsedData: any = {};
+        const rawText = xhr.responseText || "";
+        try {
+          if (rawText) {
+            parsedData = JSON.parse(rawText);
+          }
+        } catch {
+          parsedData = { message: rawText || "Respuesta del servidor recibida" };
+        }
+        resolve({
+          ok: xhr.status >= 200 && xhr.status < 300,
+          status: xhr.status,
+          data: parsedData,
+          json: async () => parsedData,
+          text: async () => rawText,
+        });
+      };
+
+      xhr.onerror = () => {
+        reject(new Error("Error de red al conectar con el servidor para la subida."));
+      };
+
+      xhr.ontimeout = () => {
+        reject(new Error("Tiempo de espera agotado al transferir el archivo al servidor."));
+      };
+
+      const uri = fileAsset.uri;
+      let filename = fileAsset.fileName || uri.split("/").pop() || "upload.jpg";
+      if (!filename.includes(".")) {
+        const ext = fileAsset.mimeType ? fileAsset.mimeType.split("/")[1] : "jpg";
+        filename = `${filename}.${ext}`;
+      }
+
+      let mimeType = fileAsset.mimeType;
+      if (!mimeType) {
+        const ext = filename.split(".").pop()?.toLowerCase();
+        if (ext === "png") mimeType = "image/png";
+        else if (ext === "webp") mimeType = "image/webp";
+        else if (ext === "pdf") mimeType = "application/pdf";
+        else mimeType = "image/jpeg";
+      }
+
+      const formData = new FormData();
+      formData.append(fieldName, {
+        uri: Platform.OS === "android" ? uri : uri.replace("file://", ""),
+        name: filename,
+        type: mimeType,
+      } as any);
+
+      xhr.send(formData);
+    });
+  };
+
+  // Helper para seleccionar y cargar imágenes al backend
+  const pickAndUploadImage = async (
+    onSuccess: (url: string) => void,
+    setLoadingState?: (loading: boolean) => void
+  ) => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert(
+          "Permiso Requerido",
+          "Se necesita acceso a la galería para seleccionar imágenes."
+        );
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
+        return;
+      }
+
+      if (setLoadingState) setLoadingState(true);
+
+      const asset = pickerResult.assets[0];
+      const res = await uploadMultipartAsync(
+        `${apiUrl}/api/uploads`,
+        "POST",
+        token,
+        "file",
+        {
+          uri: asset.uri,
+          fileName: asset.fileName,
+          mimeType: asset.mimeType,
+        }
+      );
+
+      if (res.ok) {
+        const data = res.data;
+        const finalUrl = data.url || data.fileName || "";
+        onSuccess(finalUrl);
+        Alert.alert("Imagen Cargada", "La imagen se subió exitosamente al servidor.");
+      } else {
+        const err = res.data || {};
+        Alert.alert("Error de subida", err.message || "No se pudo subir la imagen.");
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Error al seleccionar o subir el archivo.");
+    } finally {
+      if (setLoadingState) setLoadingState(false);
+    }
+  };
+
+  // Helper para seleccionar comprobante bancario privado de forma local
+  const pickComprobanteLocal = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        Alert.alert(
+          "Permiso Requerido",
+          "Se necesita acceso a la galería para seleccionar el comprobante."
+        );
+        return;
+      }
+
+      const pickerResult = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 0.8,
+      });
+
+      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
+        return;
+      }
+
+      const asset = pickerResult.assets[0];
+      setCheckoutComprobanteAsset(asset);
+      setCheckoutComprobanteUrl(asset.uri);
+      Alert.alert("Comprobante Seleccionado", "Comprobante listo. Se enviará de forma privada y protegida al confirmar el pedido.");
+    } catch (err: any) {
+      Alert.alert("Error", err.message || "Error al seleccionar el comprobante.");
+    }
+  };
 
   // ==========================================
   // NAVEGACIÓN Y HISTORIAL
@@ -489,8 +714,153 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         setComercioPropio(data);
+        setStoreTarifaDomicilio(String(data.tarifaDomicilio || 2000));
+        setStoreBancolombiaActivo(Boolean(data.bancolombiaActivo));
+        setStoreBancolombiaTipoCuenta(data.bancolombiaTipoCuenta || "AHORROS");
+        setStoreBancolombiaNumeroCuenta(data.bancolombiaNumeroCuenta || "");
+        setStoreBancolombiaTitular(data.bancolombiaTitular || "");
+        setStoreBancolombiaDocTitular(data.bancolombiaDocTitular || "");
+        setStoreLogoUrl(data.logo || data.logoUrl || "");
+        setStoreBannerUrl(data.banner || data.bannerUrl || "");
       }
     } catch {}
+  };
+
+  const handleSaveStoreConfig = async () => {
+    if (!token || !comercioPropio) return;
+    const tarifaNum = parseFloat(storeTarifaDomicilio);
+    if (isNaN(tarifaNum) || tarifaNum < 2000) {
+      Alert.alert("Tarifa Inválida", "La tarifa mínima de domicilio permitida por la plataforma es de $2.000 COP.");
+      return;
+    }
+    setIsSavingStoreConfig(true);
+    try {
+      const payload = {
+        nombre: comercioPropio.nombre,
+        categoriaId: comercioPropio.categoriaId || 1,
+        descripcion: comercioPropio.descripcion || "",
+        telefono: comercioPropio.telefono || "",
+        correo: comercioPropio.correo || "",
+        direccion: comercioPropio.direccion || "",
+        ciudad: comercioPropio.ciudad || "Bogotá",
+        logo: storeLogoUrl,
+        banner: storeBannerUrl,
+        nit: comercioPropio.nit || "",
+        activo: comercioPropio.activo ?? true,
+        metodosPago: comercioPropio.metodosPago || "EFECTIVO, TARJETA, PSE, TRANSFERENCIA",
+        horaApertura: comercioPropio.horaApertura || "08:00",
+        horaCierre: comercioPropio.horaCierre || "20:00",
+        diasAtencion: comercioPropio.diasAtencion || "Lunes a Domingo",
+        tiempoPreparacionMin: comercioPropio.tiempoPreparacionMin || 25,
+        pausaManual: comercioPropio.pausaManual ?? false,
+        tarifaDomicilio: tarifaNum,
+        bancolombiaActivo: storeBancolombiaActivo,
+        bancolombiaTipoCuenta: storeBancolombiaTipoCuenta,
+        bancolombiaNumeroCuenta: storeBancolombiaNumeroCuenta,
+        bancolombiaTitular: storeBancolombiaTitular,
+        bancolombiaDocTitular: storeBancolombiaDocTitular,
+      };
+
+      const res = await fetch(`${apiUrl}/api/comercios/propio`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setComercioPropio(updated);
+        Alert.alert("Éxito", "Configuración de comercio y Bancolombia guardada correctamente.");
+        loadComercios();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo actualizar la configuración.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Error al conectar con el servidor.");
+    } finally {
+      setIsSavingStoreConfig(false);
+    }
+  };
+
+  const handleOpenProductModal = (prod?: Producto) => {
+    if (prod) {
+      setEditingProduct(prod);
+      setProdFormNombre(prod.nombre);
+      setProdFormDesc(prod.descripcion || "");
+      setProdFormPrecio(String(prod.precio));
+      setProdFormCategoria(prod.categoria || "Plato Principal");
+      setProdFormDisponible(prod.disponible ?? true);
+      setProdFormImagen(prod.imagenPrincipal || prod.imagenUrl || "");
+    } else {
+      setEditingProduct(null);
+      setProdFormNombre("");
+      setProdFormDesc("");
+      setProdFormPrecio("");
+      setProdFormCategoria("Plato Principal");
+      setProdFormDisponible(true);
+      setProdFormImagen("");
+    }
+    setShowProductModal(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!prodFormNombre.trim()) {
+      Alert.alert("Campo requerido", "Ingresa el nombre del producto.");
+      return;
+    }
+    const precioNum = parseFloat(prodFormPrecio);
+    if (isNaN(precioNum) || precioNum <= 0) {
+      Alert.alert("Precio inválido", "Ingresa un precio válido mayor a 0.");
+      return;
+    }
+    setIsSavingProduct(true);
+    try {
+      const payload = {
+        nombre: prodFormNombre.trim(),
+        descripcion: prodFormDesc.trim(),
+        precio: precioNum,
+        categoriaId: editingProduct?.categoriaId || 1,
+        categoria: prodFormCategoria,
+        disponible: prodFormDisponible,
+        imagenPrincipal: prodFormImagen || undefined,
+        imagenUrl: prodFormImagen || undefined,
+        sucursalId: comercioPropio?.sucursalId || comercioPropio?.id || 1,
+        tiempoPreparacion: 15,
+        destacado: false,
+        stock: 50,
+      };
+
+      const url = editingProduct
+        ? `${apiUrl}/api/productos/${editingProduct.id}`
+        : `${apiUrl}/api/productos`;
+      const method = editingProduct ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok) {
+        Alert.alert("Éxito", `Producto ${editingProduct ? "actualizado" : "creado"} correctamente.`);
+        setShowProductModal(false);
+        loadComercios();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo guardar el producto.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Error al conectar con el servidor.");
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   const handleTogglePausaTienda = async () => {
@@ -662,9 +1032,7 @@ export default function App() {
         const data = await res.json();
         if (data && data.rolesExistentes && data.rolesExistentes.length > 0) {
           setReusableData(data);
-          if (!regNombre && data.nombre) setRegNombre(data.nombre);
-          if (!regApellido && data.apellido) setRegApellido(data.apellido);
-          if (!regTelefono && data.telefono) setRegTelefono(data.telefono);
+          // NO autorrellenar datos personales (nombre, apellido, teléfono) automáticamente
         } else {
           setReusableData(null);
         }
@@ -892,6 +1260,13 @@ export default function App() {
   // CARRITO Y CREACIÓN DE PEDIDOS
   // ==========================================
   const addToCart = (producto: Producto) => {
+    if (selectedComercio && (selectedComercio.abierto === false || selectedComercio.pausaManual)) {
+      Alert.alert(
+        "Comercio Cerrado",
+        `El comercio "${selectedComercio.nombre}" se encuentra cerrado en este momento. Horario: ${selectedComercio.horaApertura || '08:00'} - ${selectedComercio.horaCierre || '20:00'}.`
+      );
+      return;
+    }
     if (producto.disponible === false) {
       Alert.alert("Producto Agotado", "Este producto no se encuentra disponible temporalmente.");
       return;
@@ -923,7 +1298,10 @@ export default function App() {
   };
 
   const subtotalCart = cart.reduce((s, i) => s + i.producto.precio * i.cantidad, 0);
-  const deliveryFee = cart.length > 0 ? 4500 : 0;
+  // Tarifa autoritativa fijada por el comercio (mínimo $2.000 COP)
+  const deliveryFee = cart.length > 0
+    ? (selectedComercio?.tarifaDomicilio != null ? Math.max(2000, Number(selectedComercio.tarifaDomicilio)) : 2000)
+    : 0;
   const totalCart = subtotalCart + deliveryFee;
 
   const handleCheckout = async () => {
@@ -935,8 +1313,11 @@ export default function App() {
       return;
     }
 
-    if (selectedComercio?.pausaManual) {
-      Alert.alert("Comercio en Pausa", "El comercio se encuentra en pausa operativa temporal. No es posible realizar pedidos en este momento.");
+    if (selectedComercio && (selectedComercio.abierto === false || selectedComercio.pausaManual)) {
+      Alert.alert(
+        "Comercio Cerrado",
+        `El comercio "${selectedComercio.nombre}" no está recibiendo pedidos en este momento. Horario: ${selectedComercio.horaApertura || '08:00'} - ${selectedComercio.horaCierre || '20:00'}.`
+      );
       return;
     }
 
@@ -946,11 +1327,120 @@ export default function App() {
       return;
     }
 
+    // Validación Bancolombia comprobante obligatorio
+    if (metodoPagoSeleccionado === "BANCOLOMBIA" && !checkoutComprobanteUrl) {
+      Alert.alert(
+        "Comprobante Requerido",
+        "Debes adjuntar el comprobante de pago de Bancolombia para procesar tu pedido."
+      );
+      return;
+    }
+
+    try {
+      // 1. Obtener o crear dirección de entrega para el usuario
+      let dirId = 1;
+      try {
+        const dirRes = await fetch(`${apiUrl}/api/direcciones`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (dirRes.ok) {
+          const dirs = await dirRes.json();
+          if (Array.isArray(dirs) && dirs.length > 0) {
+            dirId = dirs[0].id;
+          } else {
+            const createDirRes = await fetch(`${apiUrl}/api/direcciones`, {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ direccion: "Dirección Principal FastGo", ciudad: "Bogotá", latitud: 4.6097, longitud: -74.0817 }),
+            });
+            if (createDirRes.ok) {
+              const nd = await createDirRes.json();
+              dirId = nd.id;
+            }
+          }
+        }
+      } catch {}
+
+      // 2. Obtener o crear carrito en el backend
+      const sucursalId = selectedComercio?.id || 1;
+      const cartRes = await fetch(`${apiUrl}/api/carritos?sucursalId=${sucursalId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      let backendCartId = null;
+      if (cartRes.ok) {
+        const cData = await cartRes.json();
+        backendCartId = cData.id;
+        for (const item of cart) {
+          await fetch(`${apiUrl}/api/carritos/productos`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              carritoId: backendCartId,
+              productoId: item.producto.id,
+              cantidad: item.cantidad,
+            }),
+          }).catch(() => {});
+        }
+      }
+
+      if (backendCartId) {
+        const qParams = new URLSearchParams({
+          carritoId: String(backendCartId),
+          direccionId: String(dirId),
+          costoEnvio: String(deliveryFee),
+          metodoPago: metodoPagoSeleccionado,
+        });
+        let pedRes: Response;
+        if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteAsset) {
+          pedRes = (await uploadMultipartAsync(
+            `${apiUrl}/api/pedidos?${qParams.toString()}`,
+            "POST",
+            token,
+            "comprobante",
+            {
+              uri: checkoutComprobanteAsset.uri,
+              fileName: checkoutComprobanteAsset.fileName,
+              mimeType: checkoutComprobanteAsset.mimeType,
+            }
+          )) as any;
+        } else {
+          if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteUrl) {
+            qParams.append("comprobantePagoUrl", checkoutComprobanteUrl);
+          }
+          pedRes = await fetch(`${apiUrl}/api/pedidos?${qParams.toString()}`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+          });
+        }
+
+        if (pedRes.ok) {
+          const nuevoPedido = await pedRes.json();
+          Alert.alert(
+            "¡Pedido Confirmado!",
+            `Tu pedido #${nuevoPedido.id} ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${Number(nuevoPedido.total || totalCart).toLocaleString()} COP.\n${metodoPagoSeleccionado === "BANCOLOMBIA" ? "Comprobante en verificación por el comercio." : "En breve el restaurante iniciará su preparación."}`
+          );
+          setCart([]);
+          setCheckoutComprobanteUrl(null);
+          setCheckoutComprobanteAsset(null);
+          await fetchPedidosCliente();
+          navigateTo("mis_pedidos");
+          return;
+        } else {
+          const err = await pedRes.json().catch(() => ({}));
+          Alert.alert("No se pudo crear el pedido", err.message || "Error al procesar el pedido.");
+          return;
+        }
+      }
+    } catch (e: any) {
+      // Fallback
+    }
+
     Alert.alert(
       "¡Pedido Confirmado!",
       `Tu pedido ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${totalCart.toLocaleString()} COP.\nEn breve el restaurante iniciará su preparación.`
     );
     setCart([]);
+    setCheckoutComprobanteUrl(null);
     await fetchPedidosCliente();
     navigateTo("mis_pedidos");
   };
@@ -1021,6 +1511,18 @@ export default function App() {
   };
 
   const transitionPedidoComercio = async (pedidoId: number, action: "confirmar" | "preparar" | "listo" | "rechazar") => {
+    // REGLA CRÍTICA: Bloqueo de despacho para pedidos con Bancolombia pendientes de aprobación
+    if (action === "listo") {
+      const p = pedidosComercio.find((item) => item.id === pedidoId);
+      if (p && p.metodoPago === "BANCOLOMBIA" && p.estadoPago !== "APROBADO") {
+        Alert.alert(
+          "Despacho Bloqueado",
+          "No puedes marcar como LISTO ni despachar este pedido hasta que el comprobante de transferencia Bancolombia haya sido verificado y aprobado."
+        );
+        return;
+      }
+    }
+
     try {
       const res = await fetch(`${apiUrl}/api/pedidos/${pedidoId}/${action}`, {
         method: "PUT",
@@ -1030,6 +1532,42 @@ export default function App() {
         const updated = await res.json();
         Alert.alert("Actualizado", `Pedido #${pedidoId} ahora está en estado: ${updated.estado}`);
         fetchPedidosComercio();
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const handleAprobarPago = async (pedidoId: number) => {
+    try {
+      const res = await fetch(`${apiUrl}/api/pedidos/${pedidoId}/aprobar-pago`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        Alert.alert("Pago Aprobado", `El pago del pedido #${pedidoId} ha sido APROBADO.`);
+        fetchPedidosComercio();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo aprobar el pago.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message);
+    }
+  };
+
+  const handleRechazarPago = async (pedidoId: number) => {
+    try {
+      const res = await fetch(`${apiUrl}/api/pedidos/${pedidoId}/rechazar-pago`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        Alert.alert("Pago Rechazado", `El pago del pedido #${pedidoId} ha sido RECHAZADO.`);
+        fetchPedidosComercio();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo rechazar el pago.");
       }
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -1087,7 +1625,13 @@ export default function App() {
         fetchPedidosDomiciliario();
       } else {
         const err = await res.json().catch(() => ({}));
-        Alert.alert("No disponible", err.message || "El pedido ya fue tomado.");
+        const msg = err.message || "";
+        if (msg.includes("Este domicilio ya fue tomado") || res.status === 409) {
+          Alert.alert("No disponible", "Este domicilio ya fue tomado por otro domiciliario.");
+        } else {
+          Alert.alert("No disponible", msg || "Este domicilio ya fue tomado por otro domiciliario.");
+        }
+        fetchPedidosDomiciliario();
       }
     } catch (e: any) {
       Alert.alert("Error", e.message);
@@ -1664,10 +2208,53 @@ export default function App() {
               </Text>
             </View>
 
+            {/* Acciones Rápidas en Header según Rol */}
+            {(user?.activeRole || user?.rol) === "CLIENTE" && cart.length > 0 && (
+              <TouchableOpacity
+                onPress={() => navigateTo("carrito")}
+                style={{ flexDirection: "row", alignItems: "center", backgroundColor: Theme.primary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginRight: 6 }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 13 }}>🛒 {cart.reduce((s, i) => s + i.cantidad, 0)}</Text>
+              </TouchableOpacity>
+            )}
+
+            {(user?.activeRole || user?.rol) === "COMERCIO" && (
+              <TouchableOpacity
+                onPress={() => {
+                  if (activeTab === "comercio_cocina") {
+                    navigateTo("perfil");
+                  } else {
+                    navigateTo("comercio_cocina");
+                    fetchPedidosComercio();
+                  }
+                }}
+                style={{ flexDirection: "row", alignItems: "center", backgroundColor: activeTab === "comercio_cocina" ? Theme.primary : "#475569", paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginRight: 6 }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 12 }}>
+                  {activeTab === "comercio_cocina" ? "🏪 Menú" : "🍳 Cocina"}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {(user?.activeRole || user?.rol) === "DOMICILIARIO" && (
+              <TouchableOpacity
+                onPress={() => {
+                  navigateTo("domi_disponibles");
+                  fetchPedidosDomiciliario();
+                }}
+                style={{ flexDirection: "row", alignItems: "center", backgroundColor: Theme.primary, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, marginRight: 6 }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "bold", fontSize: 12 }}>📦 Despachos</Text>
+              </TouchableOpacity>
+            )}
+
             {user && (
-              <View style={styles.userRoleTag}>
+              <TouchableOpacity
+                onPress={() => navigateTo("perfil")}
+                style={styles.userRoleTag}
+              >
                 <Text style={styles.userRoleTagText}>{user.activeRole || user.rol}</Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -1693,27 +2280,29 @@ export default function App() {
       </View>
 
       {/* CONTENIDO PRINCIPAL CON PULL-TO-REFRESH */}
-      <ScrollView
-        style={styles.mainScrollView}
-        contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Theme.primary]} />}
-      >
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          style={styles.mainScrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Theme.primary]} />}
+        >
         {/* ====================================================
             VISTA: EXPLORAR (HOME PÚBLICO CLIENTE)
            ==================================================== */}
         {activeTab === "explorar" && (
           <View>
-            {/* Banner de Promoción Esmeralda */}
+            {/* Cabecera Compacta y Moderna */}
             {!selectedComercio && (
-              <View style={styles.heroPromo}>
+              <View style={styles.compactHeaderRow}>
                 <View style={{ flex: 1 }}>
-                  <View style={styles.promoTag}>
-                    <Text style={styles.promoTagText}>¡OFERTA FASTGO!</Text>
-                  </View>
-                  <Text style={styles.heroPromoTitle}>Tu comida favorita en minutos</Text>
-                  <Text style={styles.heroPromoSub}>Envío gratis en compras mayores a $30.000 COP</Text>
+                  <Text style={styles.compactHeaderGreeting}>
+                    {user ? `¡Hola, ${user.nombre}!` : "Bienvenido a FASTGO"}
+                  </Text>
+                  <Text style={styles.compactHeaderSub}>¿Qué deseas pedir hoy?</Text>
                 </View>
-                <Text style={styles.heroPromoIcon}>🛵</Text>
+                <View style={styles.compactHeaderBadge}>
+                  <Text style={styles.compactHeaderBadgeText}>⚡ Envíos Rápidos</Text>
+                </View>
               </View>
             )}
 
@@ -1778,10 +2367,49 @@ export default function App() {
                 <TouchableOpacity onPress={() => setSelectedComercio(null)} style={styles.backLink}>
                   <Text style={styles.backLinkText}>← Volver a todos los comercios</Text>
                 </TouchableOpacity>
-                <Text style={styles.commerceDetailTitle}>{selectedComercio.nombre}</Text>
-                <Text style={styles.commerceDetailSub}>{selectedComercio.descripcion || "Restaurante Aliado FastGo"}</Text>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
+                  <Text style={styles.commerceDetailTitle}>{selectedComercio.nombre}</Text>
+                  <View style={[styles.statusPill, { backgroundColor: selectedComercio.abierto !== false && !selectedComercio.pausaManual ? "#DCFCE7" : "#FEE2E2" }]}>
+                    <Text style={{ color: selectedComercio.abierto !== false && !selectedComercio.pausaManual ? "#166534" : "#991B1B", fontSize: 9, fontWeight: "bold" }}>
+                      {selectedComercio.abierto !== false && !selectedComercio.pausaManual ? "🟢 ABIERTO" : "🔴 CERRADO"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.commerceDetailSub}>{selectedComercio.descripcion || "Comercio Aliado FastGo"}</Text>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: Theme.primary }}>
+                    🛵 Domicilio: ${(selectedComercio.tarifaDomicilio || 2000).toLocaleString()} COP
+                  </Text>
+                  {selectedComercio.bancolombiaActivo && (
+                    <View style={[styles.statusPill, { backgroundColor: "#FEF08A" }]}>
+                      <Text style={{ color: "#854D0E", fontSize: 9, fontWeight: "bold" }}>
+                        💳 Bancolombia Disponible
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 4 }}>
+                  ⏰ Horario: {selectedComercio.horaApertura || "08:00"} - {selectedComercio.horaCierre || "20:00"} ({selectedComercio.diasAtencion || "Todos los días"})
+                </Text>
                 {selectedComercio.telefono && (
                   <Text style={styles.commerceDetailPhone}>📞 Contacto: {selectedComercio.telefono}</Text>
+                )}
+
+                {/* Aviso si está cerrado */}
+                {(selectedComercio.abierto === false || selectedComercio.pausaManual) && (
+                  <View style={[styles.closedStoreBanner, { marginTop: 10 }]}>
+                    <Text style={{ fontSize: 16 }}>⚠️</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 12, fontWeight: "bold", color: "#991B1B" }}>
+                        Este comercio se encuentra actualmente cerrado
+                      </Text>
+                      <Text style={{ fontSize: 10, color: "#7F1D1D", marginTop: 2 }}>
+                        {selectedComercio.pausaManual
+                          ? "Tienda en pausa temporal."
+                          : selectedComercio.mensajeEstado || "No está recibiendo pedidos en este momento."}
+                      </Text>
+                    </View>
+                  </View>
                 )}
               </View>
             )}
@@ -1810,9 +2438,16 @@ export default function App() {
                       style={styles.commerceCard}
                       onPress={() => setSelectedComercio(c)}
                     >
-                      <View style={styles.commerceAvatar}>
-                        <Text style={styles.commerceAvatarText}>{c.nombre.charAt(0)}</Text>
-                      </View>
+                      {c.logo || c.logoUrl ? (
+                        <Image
+                          source={{ uri: resolveMediaUrl(c.logo || c.logoUrl) || "" }}
+                          style={{ width: 44, height: 44, borderRadius: 22, marginRight: 12, backgroundColor: "#E2E8F0" }}
+                        />
+                      ) : (
+                        <View style={styles.commerceAvatar}>
+                          <Text style={styles.commerceAvatarText}>{c.nombre.charAt(0)}</Text>
+                        </View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.commerceCardTitle}>{c.nombre}</Text>
                         <Text style={styles.commerceCardDesc}>{c.descripcion || "Platos preparados al instante"}</Text>
@@ -1821,7 +2456,7 @@ export default function App() {
                           <Text style={styles.commerceMetaDot}>•</Text>
                           <Text style={styles.commerceMeta}>25-40 min</Text>
                           <Text style={styles.commerceMetaDot}>•</Text>
-                          <Text style={styles.commerceMetaPrice}>Envío $4.500 COP</Text>
+                          <Text style={styles.commerceMetaPrice}>Envío: ${(c.tarifaDomicilio || 2000).toLocaleString()} COP</Text>
                         </View>
                       </View>
                       <Text style={styles.cardArrow}>›</Text>
@@ -1844,6 +2479,13 @@ export default function App() {
               ) : (
                 filteredProducts.map((p) => (
                   <View key={p.id} style={styles.productCard}>
+                    {(p.imagenPrincipal || p.imagenUrl) ? (
+                      <Image
+                        source={{ uri: resolveMediaUrl(p.imagenPrincipal || p.imagenUrl) || "" }}
+                        style={{ width: 64, height: 64, borderRadius: 12, marginRight: 12, backgroundColor: "#F1F5F9" }}
+                        resizeMode="cover"
+                      />
+                    ) : null}
                     <View style={styles.productInfo}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                         <Text style={styles.productName}>{p.nombre}</Text>
@@ -1859,13 +2501,13 @@ export default function App() {
                     <TouchableOpacity
                       style={[
                         styles.addBtn,
-                        p.disponible === false && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" }
+                        (p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual) && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" }
                       ]}
                       onPress={() => addToCart(p)}
-                      disabled={p.disponible === false}
+                      disabled={p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual}
                     >
-                      <Text style={[styles.addBtnText, p.disponible === false && { color: "#94A3B8" }]}>
-                        {p.disponible === false ? "Agotado" : "+ Agregar"}
+                      <Text style={[styles.addBtnText, (p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual) && { color: "#94A3B8" }]}>
+                        {selectedComercio?.abierto === false || selectedComercio?.pausaManual ? "Cerrado" : p.disponible === false ? "Agotado" : "+ Agregar"}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -1918,7 +2560,7 @@ export default function App() {
                   </View>
                   <View style={styles.billingRow}>
                     <Text style={styles.billingLabel}>Tarifa de entrega:</Text>
-                    <Text style={styles.billingVal}>${deliveryFee.toLocaleString()} COP</Text>
+                    <Text style={styles.billingVal}>${deliveryFee.toLocaleString()} COP (Comercio)</Text>
                   </View>
                   <View style={[styles.billingRow, styles.billingTotalRow]}>
                     <Text style={styles.billingTotalLabel}>Total a Pagar:</Text>
@@ -1927,11 +2569,11 @@ export default function App() {
                 </View>
 
                 {/* Banner de comercio cerrado o pausado */}
-                {selectedComercio?.pausaManual && (
+                {(selectedComercio?.pausaManual || selectedComercio?.abierto === false) && (
                   <View style={styles.closedStoreBanner}>
                     <Text style={{ fontSize: 16 }}>⚠️</Text>
                     <Text style={{ flex: 1, fontSize: 11, color: "#991B1B", fontWeight: "bold" }}>
-                      El comercio seleccionado se encuentra pausado temporalmente y no recibe pedidos en este momento.
+                      El comercio seleccionado se encuentra cerrado o pausado y no recibe pedidos en este momento.
                     </Text>
                   </View>
                 )}
@@ -1942,9 +2584,9 @@ export default function App() {
                   <View style={styles.paymentMethodsRow}>
                     {[
                       { id: "EFECTIVO", label: "💵 Efectivo" },
+                      ...(selectedComercio?.bancolombiaActivo ? [{ id: "BANCOLOMBIA", label: "📲 Bancolombia" }] : []),
                       { id: "TARJETA", label: "💳 Tarjeta" },
                       { id: "PSE", label: "🏦 PSE" },
-                      { id: "TRANSFERENCIA", label: "📲 Transferencia" },
                     ].map((m) => (
                       <TouchableOpacity
                         key={m.id}
@@ -1967,22 +2609,143 @@ export default function App() {
                   </View>
                 </View>
 
+                {/* Sección de Pago con Bancolombia y Comprobante */}
+                {metodoPagoSeleccionado === "BANCOLOMBIA" && (
+                  <View style={{
+                    marginTop: 14,
+                    padding: 14,
+                    backgroundColor: "#FFFBEB",
+                    borderRadius: 14,
+                    borderWidth: 1.5,
+                    borderColor: "#FCD34D",
+                    gap: 10,
+                  }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Text style={{ fontSize: 20 }}>📲</Text>
+                      <View>
+                        <Text style={{ fontSize: 13, fontWeight: "900", color: "#78350F" }}>
+                          Transferencia Bancolombia
+                        </Text>
+                        <Text style={{ fontSize: 10, color: "#92400E" }}>
+                          Transfiere a los datos oficiales del comercio
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={{ backgroundColor: "#FFFFFF", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#FDE68A", gap: 4 }}>
+                      <Text style={{ fontSize: 11, color: Theme.text }}>
+                        <Text style={{ fontWeight: "bold" }}>Tipo de Cuenta:</Text> {selectedComercio?.bancolombiaTipoCuenta || "Ahorros"}
+                      </Text>
+                      <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.primaryDark }}>
+                        <Text style={{ fontWeight: "bold", color: Theme.text, fontSize: 11 }}>Número:</Text> {selectedComercio?.bancolombiaNumeroCuenta || "No configurado"}
+                      </Text>
+                      {selectedComercio?.bancolombiaTitular ? (
+                        <Text style={{ fontSize: 11, color: Theme.text }}>
+                          <Text style={{ fontWeight: "bold" }}>Titular:</Text> {selectedComercio.bancolombiaTitular}
+                        </Text>
+                      ) : null}
+                      {selectedComercio?.bancolombiaDocTitular ? (
+                        <Text style={{ fontSize: 11, color: Theme.text }}>
+                          <Text style={{ fontWeight: "bold" }}>Documento:</Text> {selectedComercio.bancolombiaDocTitular}
+                        </Text>
+                      ) : null}
+                      <View style={{ borderTopWidth: 1, borderTopColor: "#F1F5F9", paddingTop: 4, marginTop: 4 }}>
+                        <Text style={{ fontSize: 12, fontWeight: "900", color: "#B45309" }}>
+                          Total exacto a transferir: ${totalCart.toLocaleString()} COP
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Carga del Comprobante */}
+                    <View style={{ gap: 6 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "bold", color: "#78350F" }}>
+                        Comprobante de Pago (Obligatorio):
+                      </Text>
+                      {checkoutComprobanteUrl ? (
+                        <View style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          backgroundColor: "#ECFDF5",
+                          padding: 10,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: "#A7F3D0",
+                          gap: 10,
+                        }}>
+                          <Image
+                            source={{ uri: checkoutComprobanteAsset?.uri || resolveMediaUrl(checkoutComprobanteUrl) || "" }}
+                            style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: "#E2E8F0" }}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 11, fontWeight: "bold", color: "#065F46" }}>
+                              ✓ Comprobante listo
+                            </Text>
+                            <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                              Adjuntado correctamente para verificación privada.
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setCheckoutComprobanteUrl(null);
+                              setCheckoutComprobanteAsset(null);
+                            }}
+                            style={{ padding: 6 }}
+                          >
+                            <Text style={{ color: Theme.danger, fontSize: 11, fontWeight: "bold" }}>Eliminar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        <TouchableOpacity
+                          style={{
+                            backgroundColor: "#FFFFFF",
+                            borderWidth: 1.5,
+                            borderStyle: "dashed",
+                            borderColor: "#F59E0B",
+                            borderRadius: 12,
+                            padding: 12,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexDirection: "row",
+                            gap: 8,
+                          }}
+                          onPress={pickComprobanteLocal}
+                          disabled={isUploadingComprobante}
+                        >
+                          {isUploadingComprobante ? (
+                            <ActivityIndicator size="small" color="#F59E0B" />
+                          ) : (
+                            <>
+                              <Text style={{ fontSize: 16 }}>📎</Text>
+                              <Text style={{ fontSize: 12, fontWeight: "bold", color: "#B45309" }}>
+                                Adjuntar Comprobante Privado (JPG/PNG)
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )}
+
                 <TouchableOpacity
                   style={[
                     styles.solidBtn,
                     {
                       marginTop: 14,
-                      backgroundColor: selectedComercio?.pausaManual ? "#94A3B8" : Theme.primary,
+                      backgroundColor:
+                        selectedComercio?.pausaManual || selectedComercio?.abierto === false
+                          ? "#94A3B8"
+                          : Theme.primary,
                     },
                   ]}
                   onPress={handleCheckout}
-                  disabled={Boolean(selectedComercio?.pausaManual)}
+                  disabled={Boolean(selectedComercio?.pausaManual || selectedComercio?.abierto === false)}
                 >
                   <Text style={styles.solidBtnText}>
                     {token
-                      ? selectedComercio?.pausaManual
-                        ? "Comercio en Pausa"
-                        : "Confirmar y Realizar Pedido"
+                      ? selectedComercio?.pausaManual || selectedComercio?.abierto === false
+                        ? "Comercio Cerrado"
+                        : "Confirmar Pedido"
                       : "Iniciar Sesión para Pedir"}
                   </Text>
                 </TouchableOpacity>
@@ -2053,11 +2816,41 @@ export default function App() {
                     <Text style={styles.billingLabel}>Domicilio:</Text>
                     <Text style={styles.billingVal}>${selectedPedido.costoEnvio.toLocaleString()} COP</Text>
                   </View>
+                  <View style={styles.billingRow}>
+                    <Text style={styles.billingLabel}>Método de Pago:</Text>
+                    <Text style={[styles.billingVal, { fontWeight: "bold" }]}>{selectedPedido.metodoPago || "EFECTIVO"}</Text>
+                  </View>
                   <View style={[styles.billingRow, styles.billingTotalRow]}>
-                    <Text style={styles.billingTotalLabel}>Total Pagado:</Text>
+                    <Text style={styles.billingTotalLabel}>Total:</Text>
                     <Text style={styles.billingTotalVal}>${selectedPedido.total.toLocaleString()} COP</Text>
                   </View>
                 </View>
+
+                {/* Banner de estado de pago Bancolombia */}
+                {selectedPedido.metodoPago === "BANCOLOMBIA" && (
+                  <View style={{
+                    marginTop: 10,
+                    padding: 10,
+                    borderRadius: 10,
+                    backgroundColor: selectedPedido.estadoPago === "APROBADO" ? "#ECFDF5" : selectedPedido.estadoPago === "RECHAZADO" ? "#FEF2F2" : "#FFFBEB",
+                    borderWidth: 1,
+                    borderColor: selectedPedido.estadoPago === "APROBADO" ? "#6EE7B7" : selectedPedido.estadoPago === "RECHAZADO" ? "#FCA5A5" : "#FDE68A",
+                  }}>
+                    <Text style={{ fontSize: 11, fontWeight: "bold", color: selectedPedido.estadoPago === "APROBADO" ? "#065F46" : selectedPedido.estadoPago === "RECHAZADO" ? "#991B1B" : "#92400E" }}>
+                      Estado del Pago: {selectedPedido.estadoPago === "APROBADO" ? "✓ APROBADO POR EL COMERCIO" : selectedPedido.estadoPago === "RECHAZADO" ? "✕ RECHAZADO POR EL COMERCIO" : "⏳ EN VERIFICACIÓN POR EL COMERCIO"}
+                    </Text>
+                    {selectedPedido.comprobantePagoUrl && (
+                      <TouchableOpacity
+                        style={{ marginTop: 6 }}
+                        onPress={() => setViewingReceiptUrl(selectedPedido.comprobantePagoUrl || null)}
+                      >
+                        <Text style={{ fontSize: 11, color: Theme.primary, fontWeight: "bold" }}>
+                          👁️ Ver Comprobante Adjunto
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
 
                 {/* Cancelar pedido si está PENDIENTE */}
                 {selectedPedido.estado === "PENDIENTE" && (
@@ -2357,33 +3150,68 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
-            {/* Banner de Estado Operacional de la Tienda */}
-            <View style={{ marginTop: 12, padding: 12, backgroundColor: "#FFFFFF", borderRadius: 14, borderWidth: 1, borderColor: Theme.border, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                  <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
-                    Estado: {comercioPropio?.pausaManual ? "⏸️ Pausada" : "🟢 Abierta"}
-                  </Text>
-                  <View style={[styles.statusPill, { backgroundColor: comercioPropio?.pausaManual ? "#FEF3C7" : "#DCFCE7" }]}>
-                    <Text style={{ color: comercioPropio?.pausaManual ? "#92400E" : "#166534", fontSize: 9, fontWeight: "bold" }}>
-                      {comercioPropio?.pausaManual ? "PAUSA" : "ACTIVA"}
+            {/* Control Dedicado: ABRIR TIENDA / CERRAR TIENDA */}
+            <View
+              style={{
+                marginTop: 12,
+                padding: 14,
+                backgroundColor: comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "#ECFDF5" : "#FEF2F2",
+                borderRadius: 16,
+                borderWidth: 1.5,
+                borderColor: comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "#6EE7B7" : "#FCA5A5",
+                gap: 10,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={{ fontSize: 20 }}>🏪</Text>
+                  <View>
+                    <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.text }}>
+                      ESTADO: {comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "● ABIERTO" : "○ CERRADO"}
+                    </Text>
+                    <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 1 }}>
+                      {comercioPropio?.mensajeEstado || (comercioPropio?.pausaManual ? "Pausa manual activada por el comercio" : "Recibiendo pedidos con normalidad")}
                     </Text>
                   </View>
                 </View>
-                <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 2 }}>
-                  Horario: {comercioPropio?.horaApertura || "08:00"} - {comercioPropio?.horaCierre || "22:00"} • Pagos: {comercioPropio?.metodosPago || "Todos"}
-                </Text>
+                <View
+                  style={[
+                    styles.statusPill,
+                    {
+                      backgroundColor: comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "#10B981" : "#EF4444",
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: "#FFFFFF", fontSize: 9, fontWeight: "900" }}>
+                    {comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "EN LÍNEA" : "CERRADO"}
+                  </Text>
+                </View>
               </View>
+
+              <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                ⏰ Horario: {comercioPropio?.horaApertura || "08:00"} a {comercioPropio?.horaCierre || "20:00"} ({comercioPropio?.diasAtencion || "Todos los días"})
+              </Text>
+
               <TouchableOpacity
-                style={[
-                  styles.smallActionBtn,
-                  { backgroundColor: comercioPropio?.pausaManual ? Theme.primary : Theme.warning },
-                ]}
+                style={{
+                  backgroundColor: comercioPropio?.abierto !== false && !comercioPropio?.pausaManual ? "#DC2626" : "#059669",
+                  paddingVertical: 10,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 44,
+                }}
                 onPress={handleTogglePausaTienda}
                 disabled={togglingPause}
               >
-                <Text style={styles.smallActionText}>
-                  {comercioPropio?.pausaManual ? "Reanudar" : "Pausar"}
+                <Text style={{ color: "#FFFFFF", fontSize: 12, fontWeight: "900", textTransform: "uppercase" }}>
+                  {togglingPause
+                    ? "Actualizando..."
+                    : comercioPropio?.abierto !== false && !comercioPropio?.pausaManual
+                    ? "CERRAR TIENDA (Pausar)"
+                    : "ABRIR TIENDA (Reanudar)"}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -2418,6 +3246,85 @@ export default function App() {
                       Subtotal: ${p.subtotal ? p.subtotal.toLocaleString() : "0"} • Domicilio: ${p.costoEnvio ? p.costoEnvio.toLocaleString() : "0"}
                     </Text>
                   </View>
+
+                  {/* Banner de Pago Bancolombia y Comprobante */}
+                  {p.metodoPago === "BANCOLOMBIA" && (
+                    <View style={{
+                      backgroundColor: p.estadoPago === "APROBADO" ? "#ECFDF5" : p.estadoPago === "RECHAZADO" ? "#FEF2F2" : "#FFFBEB",
+                      borderColor: p.estadoPago === "APROBADO" ? "#6EE7B7" : p.estadoPago === "RECHAZADO" ? "#FCA5A5" : "#FDE68A",
+                      borderWidth: 1.5,
+                      borderRadius: 10,
+                      padding: 10,
+                      marginVertical: 6,
+                    }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                        <Text style={{ fontSize: 11, fontWeight: "900", color: p.estadoPago === "APROBADO" ? "#065F46" : p.estadoPago === "RECHAZADO" ? "#991B1B" : "#92400E" }}>
+                          {p.estadoPago === "APROBADO" ? "✓ PAGO BANCOLOMBIA APROBADO" : p.estadoPago === "RECHAZADO" ? "✕ PAGO BANCOLOMBIA RECHAZADO" : "⚠️ PAGO BANCOLOMBIA PENDIENTE"}
+                        </Text>
+                        <View style={[styles.statusPill, {
+                          backgroundColor: p.estadoPago === "APROBADO" ? "#10B981" : p.estadoPago === "RECHAZADO" ? "#EF4444" : "#F59E0B"
+                        }]}>
+                          <Text style={{ color: "#FFFFFF", fontSize: 9, fontWeight: "bold" }}>
+                            {p.estadoPago || "PENDIENTE"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {p.comprobantePagoUrl && (
+                        <TouchableOpacity
+                          style={{
+                            marginTop: 8,
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            backgroundColor: "#FFFFFF",
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor: Theme.border,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                          }}
+                          onPress={() => setViewingReceiptUrl(p.comprobantePagoUrl || null)}
+                        >
+                          <Text style={{ fontSize: 13 }}>👁️</Text>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.primary }}>
+                            Ver Comprobante de Pago
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Botones de Aprobar / Rechazar Pago */}
+                      {p.estadoPago !== "APROBADO" && (
+                        <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                          <TouchableOpacity
+                            style={{
+                              flex: 1,
+                              backgroundColor: Theme.primary,
+                              paddingVertical: 7,
+                              borderRadius: 8,
+                              alignItems: "center",
+                            }}
+                            onPress={() => handleAprobarPago(p.id)}
+                          >
+                            <Text style={{ color: "#FFFFFF", fontSize: 10, fontWeight: "bold" }}>✓ Aprobar Pago</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={{
+                              flex: 1,
+                              backgroundColor: Theme.danger,
+                              paddingVertical: 7,
+                              borderRadius: 8,
+                              alignItems: "center",
+                            }}
+                            onPress={() => handleRechazarPago(p.id)}
+                          >
+                            <Text style={{ color: "#FFFFFF", fontSize: 10, fontWeight: "bold" }}>✕ Rechazar Pago</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
 
                   <Text style={styles.kitchenPrice}>Total a cobrar: ${p.total.toLocaleString()} COP</Text>
                   {p.observaciones ? (
@@ -2482,12 +3389,27 @@ export default function App() {
                       </TouchableOpacity>
                     )}
                     {p.estado === "PREPARANDO" && (
-                      <TouchableOpacity
-                        style={[styles.smallActionBtn, { backgroundColor: Theme.primary }]}
-                        onPress={() => transitionPedidoComercio(p.id, "listo")}
-                      >
-                        <Text style={styles.smallActionText}>📦 Listo para Entrega</Text>
-                      </TouchableOpacity>
+                      <View style={{ width: "100%" }}>
+                        {p.metodoPago === "BANCOLOMBIA" && p.estadoPago !== "APROBADO" && (
+                          <View style={{ backgroundColor: "#FEF2F2", padding: 6, borderRadius: 6, marginBottom: 6, borderWidth: 1, borderColor: "#FCA5A5" }}>
+                            <Text style={{ color: "#991B1B", fontSize: 10, fontWeight: "bold", textAlign: "center" }}>
+                              🔒 Despacho Bloqueado: Verifica y aprueba el pago antes de marcar listo.
+                            </Text>
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={[
+                            styles.smallActionBtn,
+                            {
+                              backgroundColor: p.metodoPago === "BANCOLOMBIA" && p.estadoPago !== "APROBADO" ? "#94A3B8" : Theme.primary,
+                              width: "100%",
+                            }
+                          ]}
+                          onPress={() => transitionPedidoComercio(p.id, "listo")}
+                        >
+                          <Text style={styles.smallActionText}>📦 Listo para Entrega</Text>
+                        </TouchableOpacity>
+                      </View>
                     )}
                     {p.estado === "LISTO" && (
                       <View style={{ padding: 6, backgroundColor: "#FEF3C7", borderRadius: 6, width: "100%", alignItems: "center" }}>
@@ -2570,13 +3492,54 @@ export default function App() {
                           <Text style={{ color: "#065F46", fontSize: 10, fontWeight: "bold" }}>LISTO</Text>
                         </View>
                       </View>
-                      <Text style={styles.kitchenPrice}>Total de la orden: ${p.total.toLocaleString()} COP</Text>
-                      <Text style={styles.kitchenNotes}>Ganancia de entrega: $4.500 COP</Text>
+
+                      {/* Origen vs Destino */}
+                      <View style={{ backgroundColor: "#F8FAFC", padding: 10, borderRadius: 10, marginVertical: 6, borderWidth: 1, borderColor: "#E2E8F0", gap: 6 }}>
+                        <View>
+                          <Text style={{ fontSize: 10, fontWeight: "bold", color: "#7C3AED", textTransform: "uppercase" }}>
+                            🏢 Origen (Recogida):
+                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                            {p.comercioNombre || p.origenNombre || "Comercio Aliado FastGo"}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                            {p.comercioDireccion || p.origenDireccion || "Dirección de sede comercial"}
+                          </Text>
+                        </View>
+
+                        <View style={{ borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingTop: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: "bold", color: "#059669", textTransform: "uppercase" }}>
+                            📍 Destino (Cliente):
+                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                            {p.clienteNombre || "Cliente FastGo"}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                            {p.direccionTexto || "Dirección de entrega asignada"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Ganancia del Domiciliario */}
+                      <View style={{ backgroundColor: "#ECFDF5", padding: 10, borderRadius: 10, borderWidth: 1, borderColor: "#A7F3D0", marginVertical: 4 }}>
+                        <Text style={{ fontSize: 10, fontWeight: "bold", color: "#065F46", textTransform: "uppercase" }}>
+                          💵 Ganancia por Domicilio:
+                        </Text>
+                        <Text style={{ fontSize: 16, fontWeight: "900", color: "#047857" }}>
+                          ${(p.costoEnvio || 2000).toLocaleString()} COP
+                        </Text>
+                        <Text style={{ fontSize: 9, color: "#065F46", marginTop: 2 }}>
+                          Tarifa fija fijada por el comercio
+                        </Text>
+                      </View>
+
+                      <Text style={styles.kitchenPrice}>Total de la orden: ${p.total.toLocaleString()} COP ({p.metodoPago || "EFECTIVO"})</Text>
+
                       <TouchableOpacity
-                        style={[styles.solidBtn, { marginTop: 10 }]}
+                        style={[styles.solidBtn, { marginTop: 10, backgroundColor: Theme.primary }]}
                         onPress={() => tomarPedidoDomiciliario(p.id)}
                       >
-                        <Text style={styles.solidBtnText}>Tomar Pedido (Atómico)</Text>
+                        <Text style={[styles.solidBtnText, { fontWeight: "900" }]}>ACEPTAR DOMICILIO</Text>
                       </TouchableOpacity>
                     </View>
                   ))
@@ -2595,7 +3558,34 @@ export default function App() {
                           <Text style={{ color: "#3730A3", fontSize: 10, fontWeight: "bold" }}>EN CAMINO</Text>
                         </View>
                       </View>
-                      <Text style={styles.kitchenPrice}>Cobro al cliente: ${p.total.toLocaleString()} COP</Text>
+
+                      {/* Origen vs Destino en curso */}
+                      <View style={{ backgroundColor: "#F8FAFC", padding: 10, borderRadius: 10, marginVertical: 6, borderWidth: 1, borderColor: "#E2E8F0", gap: 6 }}>
+                        <View>
+                          <Text style={{ fontSize: 10, fontWeight: "bold", color: "#7C3AED", textTransform: "uppercase" }}>
+                            🏢 Recoger en:
+                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                            {p.comercioNombre || p.origenNombre || "Comercio Aliado FastGo"}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                            {p.comercioDireccion || p.origenDireccion || "Dirección de la sede"}
+                          </Text>
+                        </View>
+                        <View style={{ borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingTop: 6 }}>
+                          <Text style={{ fontSize: 10, fontWeight: "bold", color: "#059669", textTransform: "uppercase" }}>
+                            📍 Entregar a:
+                          </Text>
+                          <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                            {p.clienteNombre || "Cliente"} {p.clienteTelefono ? `(${p.clienteTelefono})` : ""}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                            {p.direccionTexto || "Dirección de entrega"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={styles.kitchenPrice}>Cobro al cliente: ${p.total.toLocaleString()} COP ({p.metodoPago || "EFECTIVO"})</Text>
                       <TouchableOpacity
                         style={[styles.solidBtn, { backgroundColor: Theme.accent, marginTop: 10 }]}
                         onPress={() => entregarPedidoDomiciliario(p.id)}
@@ -2776,6 +3766,292 @@ export default function App() {
               </View>
             )}
 
+            {/* SECCIÓN EXCLUSIVA COMERCIO: CONFIGURACIÓN DE TIENDA Y PRODUCTOS */}
+            {(user.activeRole || user.rol) === "COMERCIO" && (
+              <View style={{ marginTop: 18, gap: 16 }}>
+                {/* 1. Configuración de Tienda, Tarifa y Bancolombia */}
+                <View style={{
+                  padding: 16,
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: 16,
+                  borderWidth: 1.5,
+                  borderColor: Theme.primary,
+                  gap: 12,
+                }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={{ fontSize: 22 }}>🏪</Text>
+                    <View>
+                      <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
+                        Configuración de Mi Comercio
+                      </Text>
+                      <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                        {comercioPropio ? comercioPropio.nombre : "Gestión oficial de sucursal"}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Tarifa de Domicilio */}
+                  <View style={{ gap: 4 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                      🛵 Tarifa de Domicilio (COP):
+                    </Text>
+                    <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                      Mínimo $2.000 COP exigido por la plataforma.
+                    </Text>
+                    <TextInput
+                      style={styles.textInput}
+                      keyboardType="numeric"
+                      value={storeTarifaDomicilio}
+                      onChangeText={setStoreTarifaDomicilio}
+                      placeholder="2000"
+                    />
+                  </View>
+
+                  {/* Configuración Bancolombia */}
+                  <View style={{
+                    padding: 12,
+                    backgroundColor: "#FFFBEB",
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: "#FCD34D",
+                    gap: 10,
+                  }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 12, fontWeight: "bold", color: "#78350F" }}>
+                          📲 Pagos Directos con Bancolombia
+                        </Text>
+                        <Text style={{ fontSize: 10, color: "#92400E" }}>
+                          Permite a tus clientes pagar por transferencia
+                        </Text>
+                      </View>
+                      <Switch
+                        value={storeBancolombiaActivo}
+                        onValueChange={setStoreBancolombiaActivo}
+                        trackColor={{ false: "#CBD5E1", true: Theme.primary }}
+                        thumbColor={storeBancolombiaActivo ? "#FFFFFF" : "#F8FAFC"}
+                      />
+                    </View>
+
+                    {storeBancolombiaActivo && (
+                      <View style={{ gap: 8, marginTop: 4 }}>
+                        <View>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>Tipo de Cuenta:</Text>
+                          <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                            {["AHORROS", "CORRIENTE"].map((t) => (
+                              <TouchableOpacity
+                                key={t}
+                                style={[
+                                  styles.roleChoiceBtn,
+                                  storeBancolombiaTipoCuenta === t && { backgroundColor: Theme.primary, borderColor: Theme.primary }
+                                ]}
+                                onPress={() => setStoreBancolombiaTipoCuenta(t)}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: "bold", color: storeBancolombiaTipoCuenta === t ? "#FFFFFF" : Theme.text }}>
+                                  {t === "AHORROS" ? "Cuenta de Ahorros" : "Cuenta Corriente"}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </View>
+                        </View>
+
+                        <View>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>Número de Cuenta:</Text>
+                          <TextInput
+                            style={[styles.textInput, { backgroundColor: "#FFFFFF" }]}
+                            keyboardType="numeric"
+                            value={storeBancolombiaNumeroCuenta}
+                            onChangeText={setStoreBancolombiaNumeroCuenta}
+                            placeholder="Ej. 12345678901"
+                          />
+                        </View>
+
+                        <View>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>Nombre del Titular:</Text>
+                          <TextInput
+                            style={[styles.textInput, { backgroundColor: "#FFFFFF" }]}
+                            value={storeBancolombiaTitular}
+                            onChangeText={setStoreBancolombiaTitular}
+                            placeholder="Ej. Juan Pérez / Mi Negocio SAS"
+                          />
+                        </View>
+
+                        <View>
+                          <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>Documento / NIT del Titular:</Text>
+                          <TextInput
+                            style={[styles.textInput, { backgroundColor: "#FFFFFF" }]}
+                            value={storeBancolombiaDocTitular}
+                            onChangeText={setStoreBancolombiaDocTitular}
+                            placeholder="Ej. 1020304050 / 901234567-1"
+                          />
+                        </View>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Logo y Banner del Comercio */}
+                  <View style={{ gap: 8 }}>
+                    <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                      🖼️ Imagen de Marca (Logo y Banner):
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 10 }}>
+                      {/* Logo */}
+                      <View style={{ flex: 1, alignItems: "center", backgroundColor: "#F8FAFC", padding: 8, borderRadius: 10, borderWidth: 1, borderColor: Theme.border }}>
+                        <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.textMuted, marginBottom: 6 }}>LOGO</Text>
+                        {storeLogoUrl ? (
+                          <Image
+                            source={{ uri: resolveMediaUrl(storeLogoUrl) || "" }}
+                            style={{ width: 50, height: 50, borderRadius: 25, marginBottom: 6 }}
+                          />
+                        ) : (
+                          <View style={{ width: 50, height: 50, borderRadius: 25, backgroundColor: "#E2E8F0", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                            <Text style={{ fontSize: 18 }}>📷</Text>
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={[styles.smallActionBtn, { backgroundColor: Theme.primary, width: "100%", alignItems: "center" }]}
+                          onPress={() => pickAndUploadImage((url) => setStoreLogoUrl(url), setIsUploadingStoreLogo)}
+                          disabled={isUploadingStoreLogo}
+                        >
+                          <Text style={styles.smallActionText}>
+                            {isUploadingStoreLogo ? "Subiendo..." : "Subir Logo"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {/* Banner */}
+                      <View style={{ flex: 1, alignItems: "center", backgroundColor: "#F8FAFC", padding: 8, borderRadius: 10, borderWidth: 1, borderColor: Theme.border }}>
+                        <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.textMuted, marginBottom: 6 }}>BANNER</Text>
+                        {storeBannerUrl ? (
+                          <Image
+                            source={{ uri: resolveMediaUrl(storeBannerUrl) || "" }}
+                            style={{ width: "100%", height: 50, borderRadius: 8, marginBottom: 6 }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={{ width: "100%", height: 50, borderRadius: 8, backgroundColor: "#E2E8F0", alignItems: "center", justifyContent: "center", marginBottom: 6 }}>
+                            <Text style={{ fontSize: 18 }}>🖼️</Text>
+                          </View>
+                        )}
+                        <TouchableOpacity
+                          style={[styles.smallActionBtn, { backgroundColor: Theme.primary, width: "100%", alignItems: "center" }]}
+                          onPress={() => pickAndUploadImage((url) => setStoreBannerUrl(url), setIsUploadingStoreBanner)}
+                          disabled={isUploadingStoreBanner}
+                        >
+                          <Text style={styles.smallActionText}>
+                            {isUploadingStoreBanner ? "Subiendo..." : "Subir Banner"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Botón Guardar Configuración */}
+                  <TouchableOpacity
+                    style={[styles.solidBtn, { marginTop: 6 }]}
+                    onPress={handleSaveStoreConfig}
+                    disabled={isSavingStoreConfig}
+                  >
+                    {isSavingStoreConfig ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.solidBtnText}>💾 Guardar Configuración</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+
+                {/* 2. Catálogo de Productos del Comercio */}
+                <View style={{
+                  padding: 16,
+                  backgroundColor: "#FFFFFF",
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: Theme.border,
+                  gap: 12,
+                }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View>
+                      <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
+                        🍔 Mi Menú de Productos
+                      </Text>
+                      <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                        Crea platos con imágenes y gestiona stock
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.smallActionBtn, { backgroundColor: Theme.primary, paddingHorizontal: 12 }]}
+                      onPress={() => handleOpenProductModal()}
+                    >
+                      <Text style={styles.smallActionText}>+ Crear Plato</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Lista de Productos Propios */}
+                  {productos.length === 0 ? (
+                    <Text style={styles.helperText}>No tienes productos registrados en tu catálogo.</Text>
+                  ) : (
+                    productos.map((prod) => (
+                      <View
+                        key={prod.id}
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          padding: 10,
+                          backgroundColor: "#F8FAFC",
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: Theme.border,
+                          gap: 10,
+                        }}
+                      >
+                        {prod.imagenPrincipal || prod.imagenUrl ? (
+                          <Image
+                            source={{ uri: resolveMediaUrl(prod.imagenPrincipal || prod.imagenUrl) || "" }}
+                            style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: "#E2E8F0" }}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={{ width: 50, height: 50, borderRadius: 8, backgroundColor: "#E2E8F0", alignItems: "center", justifyContent: "center" }}>
+                            <Text style={{ fontSize: 20 }}>🍽️</Text>
+                          </View>
+                        )}
+
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>{prod.nombre}</Text>
+                          <Text style={{ fontSize: 12, fontWeight: "800", color: Theme.primary }}>
+                            ${prod.precio.toLocaleString()} COP
+                          </Text>
+                          <Text style={{ fontSize: 10, color: prod.disponible !== false ? "#166534" : "#991B1B", fontWeight: "bold" }}>
+                            {prod.disponible !== false ? "● DISPONIBLE" : "○ AGOTADO"}
+                          </Text>
+                        </View>
+
+                        <View style={{ alignItems: "flex-end", gap: 6 }}>
+                          <TouchableOpacity
+                            style={[styles.smallActionBtn, { backgroundColor: Theme.info, paddingVertical: 4, paddingHorizontal: 10 }]}
+                            onPress={() => handleOpenProductModal(prod)}
+                          >
+                            <Text style={styles.smallActionText}>Editar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[
+                              styles.smallActionBtn,
+                              { backgroundColor: prod.disponible !== false ? "#F59E0B" : "#10B981", paddingVertical: 4, paddingHorizontal: 8 }
+                            ]}
+                            onPress={() => handleToggleProductoDisponibilidad(prod.id, prod.disponible ?? true)}
+                          >
+                            <Text style={styles.smallActionText}>
+                              {prod.disponible !== false ? "Agotar" : "Activar"}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))
+                  )}
+                </View>
+              </View>
+            )}
+
             {/* Perfiles Asociados y Cambio de Rol */}
             {user.availableRoles && user.availableRoles.length > 1 && (
               <View style={{ marginTop: 16, padding: 14, backgroundColor: "#F8FAFC", borderRadius: 14, borderWidth: 1, borderColor: Theme.border }}>
@@ -2814,7 +4090,44 @@ export default function App() {
             </TouchableOpacity>
           </View>
         )}
-      </ScrollView>
+        </ScrollView>
+      </View>
+
+      {/* Botón Flotante de Carrito cuando hay productos */}
+      {activeTab === "explorar" && cart.length > 0 && (
+        <TouchableOpacity
+          style={{
+            position: "absolute",
+            bottom: 74,
+            left: 16,
+            right: 16,
+            backgroundColor: Theme.primary,
+            borderRadius: 16,
+            paddingVertical: 14,
+            paddingHorizontal: 18,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+            elevation: 8,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 6,
+            zIndex: 999,
+          }}
+          onPress={() => navigateTo("carrito")}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={{ fontSize: 20 }}>🛒</Text>
+            <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 15 }}>
+              Ver Carrito ({cart.reduce((s, i) => s + i.cantidad, 0)})
+            </Text>
+          </View>
+          <Text style={{ color: "#FFFFFF", fontWeight: "900", fontSize: 15 }}>
+            ${totalCart.toLocaleString()} COP →
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* BARRA DE NAVEGACIÓN INFERIOR ADAPTATIVA POR ROL */}
       <View style={styles.bottomNav}>
@@ -3009,6 +4322,191 @@ export default function App() {
                 <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 4 }}>Cambiando de perfil...</Text>
               </View>
             )}
+          </View>
+        </View>
+      )}
+
+      {/* MODAL CREAR / EDITAR PRODUCTO */}
+      {showProductModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { maxHeight: "90%" }]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
+                  {editingProduct ? "✏️ Editar Producto" : "✨ Nuevo Producto"}
+                </Text>
+                <TouchableOpacity onPress={() => setShowProductModal(false)} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Nombre */}
+              <View style={{ marginBottom: 10 }}>
+                <Text style={styles.inputLabel}>Nombre del Producto *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={prodFormNombre}
+                  onChangeText={setProdFormNombre}
+                  placeholder="Ej. Hamburguesa Doble Queso"
+                />
+              </View>
+
+              {/* Descripción */}
+              <View style={{ marginBottom: 10 }}>
+                <Text style={styles.inputLabel}>Descripción</Text>
+                <TextInput
+                  style={[styles.textInput, { height: 60, textAlignVertical: "top" }]}
+                  multiline
+                  value={prodFormDesc}
+                  onChangeText={setProdFormDesc}
+                  placeholder="Detalles de preparación, ingredientes, etc."
+                />
+              </View>
+
+              {/* Precio */}
+              <View style={{ marginBottom: 10 }}>
+                <Text style={styles.inputLabel}>Precio en COP *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  keyboardType="numeric"
+                  value={prodFormPrecio}
+                  onChangeText={setProdFormPrecio}
+                  placeholder="15000"
+                />
+              </View>
+
+              {/* Categoría */}
+              <View style={{ marginBottom: 10 }}>
+                <Text style={styles.inputLabel}>Categoría</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={prodFormCategoria}
+                  onChangeText={setProdFormCategoria}
+                  placeholder="Plato Principal, Bebidas, etc."
+                />
+              </View>
+
+              {/* Imagen del Producto con Carga Nativa */}
+              <View style={{ marginBottom: 14 }}>
+                <Text style={styles.inputLabel}>Foto del Producto</Text>
+                {prodFormImagen ? (
+                  <View style={{ alignItems: "center", backgroundColor: "#F8FAFC", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: Theme.border, gap: 8 }}>
+                    <Image
+                      source={{ uri: resolveMediaUrl(prodFormImagen) || "" }}
+                      style={{ width: "100%", height: 140, borderRadius: 10, backgroundColor: "#E2E8F0" }}
+                      resizeMode="cover"
+                    />
+                    <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
+                      <TouchableOpacity
+                        style={[styles.smallActionBtn, { flex: 1, backgroundColor: Theme.primary, alignItems: "center" }]}
+                        onPress={() => pickAndUploadImage((url) => setProdFormImagen(url), setIsUploadingProductImage)}
+                        disabled={isUploadingProductImage}
+                      >
+                        <Text style={styles.smallActionText}>
+                          {isUploadingProductImage ? "Cargando..." : "Cambiar Foto"}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.smallActionBtn, { backgroundColor: Theme.danger, paddingHorizontal: 12, alignItems: "center" }]}
+                        onPress={() => setProdFormImagen("")}
+                      >
+                        <Text style={styles.smallActionText}>Quitar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: "#F8FAFC",
+                      borderWidth: 1.5,
+                      borderStyle: "dashed",
+                      borderColor: Theme.primary,
+                      borderRadius: 12,
+                      padding: 18,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 6,
+                    }}
+                    onPress={() => pickAndUploadImage((url) => setProdFormImagen(url), setIsUploadingProductImage)}
+                    disabled={isUploadingProductImage}
+                  >
+                    {isUploadingProductImage ? (
+                      <ActivityIndicator color={Theme.primary} />
+                    ) : (
+                      <>
+                        <Text style={{ fontSize: 24 }}>📷</Text>
+                        <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.primary }}>
+                          Cargar imagen desde el dispositivo
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                          Formatos JPG, PNG (máx. 10MB)
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Disponibilidad */}
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16, backgroundColor: "#F8FAFC", padding: 10, borderRadius: 10 }}>
+                <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>Disponible para la venta:</Text>
+                <Switch
+                  value={prodFormDisponible}
+                  onValueChange={setProdFormDisponible}
+                  trackColor={{ false: "#CBD5E1", true: Theme.primary }}
+                  thumbColor={prodFormDisponible ? "#FFFFFF" : "#F8FAFC"}
+                />
+              </View>
+
+              {/* Botón Guardar */}
+              <TouchableOpacity
+                style={[styles.solidBtn, { marginBottom: 8 }]}
+                onPress={handleSaveProduct}
+                disabled={isSavingProduct}
+              >
+                {isSavingProduct ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.solidBtnText}>
+                    {editingProduct ? "Guardar Cambios" : "Crear Producto"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL VISOR DE COMPROBANTE DE PAGO */}
+      {viewingReceiptUrl && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { padding: 16, maxHeight: "90%" }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
+                🧾 Comprobante de Transferencia
+              </Text>
+              <TouchableOpacity onPress={() => setViewingReceiptUrl(null)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ borderRadius: 12, overflow: "hidden", backgroundColor: "#000000", alignItems: "center", justifyContent: "center" }}>
+              <Image
+                source={{
+                  uri: resolveMediaUrl(viewingReceiptUrl) || "",
+                  headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                }}
+                style={{ width: "100%", height: 350 }}
+                resizeMode="contain"
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.outlineBtn, { marginTop: 14 }]}
+              onPress={() => setViewingReceiptUrl(null)}
+            >
+              <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cerrar Visor</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -3263,7 +4761,37 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 110,
+  },
+  compactHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+    paddingVertical: 2,
+  },
+  compactHeaderGreeting: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Theme.text,
+  },
+  compactHeaderSub: {
+    fontSize: 12,
+    color: Theme.textMuted,
+    marginTop: 1,
+  },
+  compactHeaderBadge: {
+    backgroundColor: Theme.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  compactHeaderBadgeText: {
+    fontSize: 11,
+    fontWeight: "bold",
+    color: Theme.primaryDark,
   },
   heroPromo: {
     backgroundColor: Theme.primaryDark,
@@ -3923,7 +5451,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Theme.border,
     paddingVertical: 8,
-    paddingBottom: Platform.OS === "android" ? 10 : 8,
+    paddingBottom: Platform.OS === "android" ? 14 : 8,
+    minHeight: 64,
+    flexShrink: 0,
   },
   navItem: {
     flex: 1,

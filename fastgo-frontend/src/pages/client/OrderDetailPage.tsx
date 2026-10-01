@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download } from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { pagoService } from '../../services/pagoService';
+import { uploadService } from '../../services/uploadService';
 import { DetallePedido, OrderStatus, Pago, Pedido } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
+import { Modal } from '../../components/common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { ORDER_STATUS_DETAILS } from '../../constants/orderStatus';
@@ -21,6 +23,12 @@ export const OrderDetailPage: React.FC = () => {
   const [payments, setPayments] = useState<Pago[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
+
+  // Visor de comprobante privado
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
+  const [isPdfReceipt, setIsPdfReceipt] = useState(false);
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
 
   const { success, error: showError } = useToast();
 
@@ -57,6 +65,30 @@ export const OrderDetailPage: React.FC = () => {
     } finally {
       setIsCancelling(false);
     }
+  };
+
+  const handleOpenReceipt = async () => {
+    if (!order?.comprobantePagoUrl) return;
+    setIsReceiptModalOpen(true);
+    setIsLoadingReceipt(true);
+    try {
+      const { blobUrl, isPdf } = await pedidoService.getComprobanteBlob(order.comprobantePagoUrl);
+      setReceiptBlobUrl(blobUrl);
+      setIsPdfReceipt(isPdf);
+    } catch (err) {
+      showError('No se pudo cargar el comprobante privado');
+      setIsReceiptModalOpen(false);
+    } finally {
+      setIsLoadingReceipt(false);
+    }
+  };
+
+  const handleCloseReceiptModal = () => {
+    if (receiptBlobUrl) {
+      URL.revokeObjectURL(receiptBlobUrl);
+    }
+    setReceiptBlobUrl(null);
+    setIsReceiptModalOpen(false);
   };
 
   if (isLoading) {
@@ -213,15 +245,61 @@ export const OrderDetailPage: React.FC = () => {
       <Card className="p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-gray-700" /> Información de Pago
+            <CreditCard className="w-4 h-4 text-gray-700" /> Información de Pago
           </h3>
-          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-            Modo Seguro / Demostración
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-800 border border-gray-200">
+            {order.metodoPago || 'EFECTIVO'}
           </span>
         </div>
-        <p className="text-xs text-gray-600">
-          La pasarela Wompi está deshabilitada en este entorno (<code className="font-mono bg-gray-100 px-1 rounded">fastgo.wompi.enabled=false</code>). No se debitaron fondos reales ni se generaron cargos bancarios falsos.
-        </p>
+
+        {order.metodoPago === 'BANCOLOMBIA' ? (
+          <div className="space-y-3 pt-1">
+            <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+              order.estadoPago === 'APROBADO'
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                : order.estadoPago === 'RECHAZADO'
+                ? 'bg-rose-50 text-rose-900 border-rose-200'
+                : 'bg-amber-50 text-amber-900 border-amber-200'
+            }`}>
+              <div className="flex items-center gap-2">
+                {order.estadoPago === 'APROBADO' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                ) : order.estadoPago === 'RECHAZADO' ? (
+                  <XCircle className="w-4 h-4 text-rose-600" />
+                ) : (
+                  <Clock className="w-4 h-4 text-amber-600" />
+                )}
+                <span>
+                  {order.estadoPago === 'APROBADO' && 'Pago verificado y aprobado por el comercio'}
+                  {order.estadoPago === 'RECHAZADO' && `Pago rechazado: ${order.motivoRechazoPago || 'Comprobante no válido'}`}
+                  {(!order.estadoPago || order.estadoPago === 'PENDIENTE_VERIFICACION') &&
+                    'Comprobante adjunto. El comercio está verificando la transferencia en su cuenta.'}
+                </span>
+              </div>
+            </div>
+
+            {order.comprobantePagoUrl && (
+              <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs">
+                <span className="text-gray-600 flex items-center gap-1.5 font-medium">
+                  <FileText className="w-4 h-4 text-purple-600" /> Comprobante enviado
+                </span>
+                <button
+                  type="button"
+                  onClick={handleOpenReceipt}
+                  className="font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Ver Comprobante
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-600">
+            {order.metodoPago === 'EFECTIVO'
+              ? 'Pago en efectivo directo al domiciliario al momento de recibir la entrega.'
+              : 'Pago gestionado según método seleccionado.'}
+          </p>
+        )}
       </Card>
 
       {/* Destino y Geolocalización (Maps Fallback) */}
@@ -244,6 +322,57 @@ export const OrderDetailPage: React.FC = () => {
           {order.observaciones}
         </Card>
       )}
+
+      {/* Modal Visor de Comprobante Privado */}
+      <Modal
+        isOpen={isReceiptModalOpen}
+        onClose={handleCloseReceiptModal}
+        title="Comprobante de Pago Privado"
+      >
+        <div className="space-y-4">
+          {isLoadingReceipt ? (
+            <div className="py-12 flex flex-col items-center justify-center">
+              <Spinner size="md" />
+              <p className="mt-2 text-xs text-gray-500 font-semibold">Cargando comprobante seguro...</p>
+            </div>
+          ) : receiptBlobUrl ? (
+            <>
+              {isPdfReceipt ? (
+                <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-200 space-y-4">
+                  <FileText className="w-16 h-16 text-rose-500 mx-auto" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">Comprobante en formato PDF</p>
+                    <p className="text-xs text-gray-500">Documento bancario privado adjunto a tu pedido.</p>
+                  </div>
+                  <a
+                    href={receiptBlobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={`comprobante-pedido-${order?.id}.pdf`}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors"
+                  >
+                    <Download className="w-4 h-4" /> Abrir / Descargar PDF
+                  </a>
+                </div>
+              ) : (
+                <div className="max-h-[70vh] overflow-auto rounded-xl border border-gray-200 bg-gray-900/5 p-2 flex items-center justify-center">
+                  <img
+                    src={receiptBlobUrl}
+                    alt="Comprobante de pago"
+                    className="max-h-[65vh] w-auto max-w-full rounded-lg object-contain shadow-sm"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button variant="secondary" onClick={handleCloseReceiptModal}>
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </Modal>
     </div>
   );
 };

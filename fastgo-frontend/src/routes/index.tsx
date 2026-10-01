@@ -48,9 +48,22 @@ export const AppRoutes: React.FC = () => {
         <Route path={APP_ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
         <Route path={APP_ROUTES.RESET_PASSWORD} element={<ResetPasswordPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path={APP_ROUTES.COMMERCE_DETAIL} element={<CommerceDetailPage />} />
-        <Route path={APP_ROUTES.CART} element={<CartPage />} />
+        <Route
+          path={APP_ROUTES.COMMERCE_DETAIL}
+          element={
+            <ProtectedRoute>
+              <CommerceDetailPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path={APP_ROUTES.CART}
+          element={
+            <ProtectedRoute>
+              <CartPage />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Rutas Protegidas - Cliente */}
         <Route

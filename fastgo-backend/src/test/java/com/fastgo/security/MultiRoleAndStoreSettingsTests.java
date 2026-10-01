@@ -283,4 +283,97 @@ public class MultiRoleAndStoreSettingsTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[?(@.nombre == '" + nombreComercio + "')]").doesNotExist());
     }
+
+    @Test
+    @DisplayName("Validar estado Abierto/Cerrado, gestión de categorías por Comercio y protección de compra sin autenticación o con tienda cerrada")
+    void testStoreOpenCloseCategoryManagementAndCheckoutProtection() throws Exception {
+        // 1. Visitante sin autenticación NO puede crear pedidos ni acceder al carrito
+        mockMvc.perform(post("/api/pedidos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"carritoId\":1,\"direccionId\":1}"))
+                .andExpect(status().isUnauthorized());
+
+        // 2. Crear usuario COMERCIO
+        String correoCom = "comercio.test." + UUID.randomUUID().toString().substring(0, 8) + "@fastgo.com";
+        RegistroUsuarioRequest regCom = new RegistroUsuarioRequest();
+        regCom.setNombre("Tienda");
+        regCom.setApellido("Moda");
+        regCom.setCorreo(correoCom);
+        regCom.setTelefono("3112223344");
+        regCom.setPassword("Password123!");
+        regCom.setRol("COMERCIO");
+
+        mockMvc.perform(post("/api/usuarios")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(regCom)))
+                .andExpect(status().isOk());
+
+        LoginRequest loginReq = new LoginRequest();
+        loginReq.setCorreo(correoCom);
+        loginReq.setPassword("Password123!");
+        MvcResult logRes = mockMvc.perform(post("/api/auth/login")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andReturn();
+        String tokenCom = objectMapper.readTree(logRes.getResponse().getContentAsString()).get("token").asText();
+
+        // 3. Crear comercio
+        com.fastgo.dto.ComercioRequestDTO storeReq = new com.fastgo.dto.ComercioRequestDTO();
+        storeReq.setNombre("Boutique Elegance");
+        storeReq.setDescripcion("Ropa exclusiva");
+        storeReq.setCategoriaId(1);
+        storeReq.setDireccion("Calle 100 # 15-20");
+        storeReq.setCiudad("Bogotá");
+        storeReq.setHoraApertura("06:00");
+        storeReq.setHoraCierre("23:59");
+        storeReq.setDiasAtencion("Lunes a Domingo");
+        storeReq.setActivo(true);
+
+        MvcResult storeRes = mockMvc.perform(post("/api/comercios")
+                .header("Authorization", "Bearer " + tokenCom)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(storeReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.abierto").value(true))
+                .andReturn();
+        Integer storeId = objectMapper.readTree(storeRes.getResponse().getContentAsString()).get("id").asInt();
+
+        // 4. Comercio puede crear categoría de producto
+        com.fastgo.entity.CategoriaProducto newCat = new com.fastgo.entity.CategoriaProducto();
+        newCat.setNombre("Camisas y Blusas");
+        newCat.setDescripcion("Prendas superiores");
+        newCat.setActivo(true);
+        MvcResult catRes = mockMvc.perform(post("/api/categorias-producto")
+                .header("Authorization", "Bearer " + tokenCom)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(newCat)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").isNumber())
+                .andReturn();
+        Integer catId = objectMapper.readTree(catRes.getResponse().getContentAsString()).get("id").asInt();
+
+        // 5. Comercio puede actualizar categoría de producto
+        newCat.setNombre("Camisas, Blusas y Tops");
+        mockMvc.perform(put("/api/categorias-producto/" + catId)
+                .header("Authorization", "Bearer " + tokenCom)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(newCat)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("Camisas, Blusas y Tops"));
+
+        // 6. Comercio puede cerrar tienda manualmente con togglePausaManual
+        mockMvc.perform(patch("/api/comercios/" + storeId + "/pausa-manual")
+                .header("Authorization", "Bearer " + tokenCom))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pausaManual").value(true))
+                .andExpect(jsonPath("$.abierto").value(false));
+
+        // 7. Comercio puede volver a abrir la tienda
+        mockMvc.perform(patch("/api/comercios/" + storeId + "/pausa-manual")
+                .header("Authorization", "Bearer " + tokenCom))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pausaManual").value(false))
+                .andExpect(jsonPath("$.abierto").value(true));
+    }
 }

@@ -401,7 +401,7 @@ class BusinessAndIdorSecurityTests {
                         .param("direccionId", dirA.getId().toString())
                         .param("costoEnvio", "-99999.00"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.costoEnvio", is(2000)))
+                .andExpect(jsonPath("$.costoEnvio", is(2000.0)))
                 .andExpect(jsonPath("$.subtotal", is(50000.0)))
                 .andExpect(jsonPath("$.total", is(52000.0)))
                 .andExpect(jsonPath("$.estado", is("PENDIENTE")));

@@ -60,7 +60,7 @@ public class CategoriaProductoController {
 
     // Actualizar categoría
     @PutMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIO')")
     public ResponseEntity<CategoriaProducto> actualizarCategoria(
             @PathVariable @Positive Integer id,
             @Valid @RequestBody CategoriaProducto categoria) {
@@ -72,7 +72,7 @@ public class CategoriaProductoController {
 
     // Eliminar categoría
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIO')")
     public ResponseEntity<Void> eliminarCategoria(
             @PathVariable @Positive Integer id) {
 

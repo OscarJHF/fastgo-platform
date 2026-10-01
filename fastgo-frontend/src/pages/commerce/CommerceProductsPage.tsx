@@ -10,11 +10,15 @@ import {
   Store,
   Sparkles,
   Search,
+  Upload,
+  X,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
 import { productoService } from '../../services/productoService';
 import { categoriaService } from '../../services/categoriaService';
+import { uploadService } from '../../services/uploadService';
 import { apiClient } from '../../api/apiClient';
 import { Producto, Sucursal, CategoriaProducto, ProductoRequest, Comercio } from '../../types';
 import { Card } from '../../components/common/Card';
@@ -42,11 +46,19 @@ export const CommerceProductsPage: React.FC = () => {
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Modal Nueva Categoría
+  // Modal Nueva / Gestionar Categoría
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  // Filtro y Gestión Avanzada de Categorías
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<number | 'ALL'>('ALL');
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoriaProducto | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryDesc, setEditCategoryDesc] = useState('');
+  const [isUpdatingCategory, setIsUpdatingCategory] = useState(false);
 
   // Filtro de búsqueda
   const [searchFilter, setSearchFilter] = useState('');
@@ -138,6 +150,29 @@ export const CommerceProductsPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+
+  const handleUploadProductImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showError('El archivo excede el tamaño máximo permitido de 10 MB');
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const res = await uploadService.uploadFile(file);
+      setFormData((prev) => ({ ...prev, imagenPrincipal: res.url }));
+      success('Imagen de producto cargada exitosamente');
+    } catch (err: any) {
+      showError(err?.response?.data?.message || 'Error al subir la imagen');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nombre.trim()) {
@@ -204,6 +239,45 @@ export const CommerceProductsPage: React.FC = () => {
       showError(msg);
     } finally {
       setIsCreatingCategory(false);
+    }
+  };
+
+  const handleUpdateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editCategoryName.trim()) return;
+    setIsUpdatingCategory(true);
+    try {
+      const updated = await categoriaService.updateProductCategory(editingCategory.id, {
+        nombre: editCategoryName.trim(),
+        descripcion: editCategoryDesc.trim() || undefined,
+        activo: true,
+      });
+      success(`Categoría "${updated.nombre}" actualizada con éxito`);
+      setCategories((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+      setEditingCategory(null);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Error al actualizar categoría';
+      showError(msg);
+    } finally {
+      setIsUpdatingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async (cat: CategoriaProducto) => {
+    const attachedCount = products.filter((p) => p.categoriaId === cat.id).length;
+    if (attachedCount > 0) {
+      showError(`No puedes eliminar "${cat.nombre}" porque tiene ${attachedCount} producto(s) asignado(s). Reasigna o elimina los productos primero.`);
+      return;
+    }
+    if (!window.confirm(`¿Estás seguro de eliminar la categoría "${cat.nombre}"?`)) return;
+    try {
+      await categoriaService.deleteProductCategory(cat.id);
+      success(`Categoría "${cat.nombre}" eliminada`);
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+      if (selectedCategoryFilter === cat.id) setSelectedCategoryFilter('ALL');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Error al eliminar categoría';
+      showError(msg);
     }
   };
 
@@ -310,10 +384,10 @@ export const CommerceProductsPage: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsCategoryModalOpen(true)}
+            onClick={() => setIsManageCategoriesOpen(true)}
             icon={<FolderPlus className="w-4 h-4" />}
           >
-            Nueva Categoría
+            Gestionar Categorías
           </Button>
 
           <Button
@@ -325,6 +399,47 @@ export const CommerceProductsPage: React.FC = () => {
             Agregar Producto
           </Button>
         </div>
+      </div>
+
+      {/* Category Pills Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setSelectedCategoryFilter('ALL')}
+          className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+            selectedCategoryFilter === 'ALL'
+              ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+              : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+          }`}
+        >
+          Todas ({filteredProducts.length})
+        </button>
+
+        {categories.map((c) => {
+          const count = filteredProducts.filter((p) => p.categoriaId === c.id).length;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setSelectedCategoryFilter(c.id)}
+              className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 transition-all ${
+                selectedCategoryFilter === c.id
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/20'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              {c.nombre} ({count})
+            </button>
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => setIsManageCategoriesOpen(true)}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 flex items-center gap-1.5"
+        >
+          <FolderPlus className="w-3.5 h-3.5" /> + Gestionar
+        </button>
       </div>
 
       {/* Search Filter Bar */}
@@ -341,7 +456,7 @@ export const CommerceProductsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Product List */}
+      {/* Product List Grouped or Filtered */}
       {filteredProducts.length === 0 ? (
         <Card className="p-12 text-center space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
@@ -363,78 +478,266 @@ export const CommerceProductsPage: React.FC = () => {
             </Button>
           )}
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProducts.map((prod) => (
-            <Card key={prod.id} className="p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div className="space-y-2">
-                <div className="h-36 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-400">
-                  {prod.imagenPrincipal ? (
-                    <img
-                      src={prod.imagenPrincipal}
-                      alt={prod.nombre}
-                      className="w-full h-full object-cover"
-                      onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                    />
-                  ) : (
-                    <Package className="w-8 h-8 text-gray-300" />
+      ) : selectedCategoryFilter === 'ALL' ? (
+        <div className="space-y-8">
+          {categories.map((cat) => {
+            const prodsInCat = filteredProducts.filter((p) => p.categoriaId === cat.id);
+            if (prodsInCat.length === 0) return null; // No romper visualmente categorías vacías
+            return (
+              <div key={cat.id} className="space-y-3">
+                <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+                  <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block"></span>
+                    {cat.nombre} <span className="text-xs font-normal text-gray-500">({prodsInCat.length})</span>
+                  </h2>
+                  {cat.descripcion && (
+                    <span className="text-xs text-gray-400 hidden sm:inline">{cat.descripcion}</span>
                   )}
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {prodsInCat.map((prod) => (
+                    <Card key={prod.id} className="p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
+                      <div className="space-y-2">
+                        <div className="h-36 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-400">
+                          {prod.imagenPrincipal ? (
+                            <img
+                              src={uploadService.getImageUrl(prod.imagenPrincipal)}
+                              alt={prod.nombre}
+                              className="w-full h-full object-cover"
+                              onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                            />
+                          ) : (
+                            <Package className="w-8 h-8 text-gray-300" />
+                          )}
+                        </div>
 
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-extrabold text-sm text-gray-900 line-clamp-1">{prod.nombre}</h3>
-                  <span className="font-black text-sm text-gray-900 shrink-0">
-                    {formatCurrency(prod.precio)}
-                  </span>
-                </div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-extrabold text-sm text-gray-900 line-clamp-1">{prod.nombre}</h3>
+                          <span className="font-black text-sm text-gray-900 shrink-0">
+                            {formatCurrency(prod.precio)}
+                          </span>
+                        </div>
 
-                <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion || 'Sin descripción'}</p>
+                        <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion || 'Sin descripción'}</p>
 
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] font-bold text-gray-500">
-                    Stock: {prod.stock != null ? prod.stock : 'Ilimitado'} • Prep: ~{prod.tiempoPreparacion || 15}m
-                  </span>
-                  <Badge variant={prod.disponible ? 'success' : 'danger'}>
-                    {prod.disponible ? 'Disponible' : 'Agotado'}
-                  </Badge>
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] font-bold text-gray-500">
+                            Stock: {prod.stock != null ? prod.stock : 'Ilimitado'} • Prep: ~{prod.tiempoPreparacion || 15}m
+                          </span>
+                          <Badge variant={prod.disponible ? 'success' : 'danger'}>
+                            {prod.disponible ? 'Disponible' : 'Agotado'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-100 mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDisponibilidad(prod)}
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                              prod.disponible
+                                ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                            }`}
+                          >
+                            {prod.disponible ? 'Agotar' : 'Activar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(prod)}
+                            className="p-1.5 text-gray-500 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+                            title="Editar producto"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(prod.id)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </Card>
+                  ))}
                 </div>
               </div>
+            );
+          })}
 
-              <div className="pt-3 border-t border-gray-100 mt-3 flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleDisponibilidad(prod)}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
-                      prod.disponible
-                        ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
-                        : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
-                    }`}
-                  >
-                    {prod.disponible ? 'Agotar' : 'Activar'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEdit(prod)}
-                    className="p-1.5 text-gray-500 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
-                    title="Editar producto"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleDelete(prod.id)}
-                  className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
-                  title="Eliminar producto"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+          {/* Categoría sin clasificar */}
+          {filteredProducts.filter((p) => !categories.some((c) => c.id === p.categoriaId)).length > 0 && (
+            <div className="space-y-3">
+              <div className="border-b border-gray-200 pb-2">
+                <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block"></span>
+                  Otros Productos ({filteredProducts.filter((p) => !categories.some((c) => c.id === p.categoriaId)).length})
+                </h2>
               </div>
-            </Card>
-          ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredProducts
+                  .filter((p) => !categories.some((c) => c.id === p.categoriaId))
+                  .map((prod) => (
+                    <Card key={prod.id} className="p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
+                      <div className="space-y-2">
+                        <div className="h-36 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-400">
+                          {prod.imagenPrincipal ? (
+                            <img
+                              src={uploadService.getImageUrl(prod.imagenPrincipal)}
+                              alt={prod.nombre}
+                              className="w-full h-full object-cover"
+                              onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                            />
+                          ) : (
+                            <Package className="w-8 h-8 text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-extrabold text-sm text-gray-900 line-clamp-1">{prod.nombre}</h3>
+                          <span className="font-black text-sm text-gray-900 shrink-0">
+                            {formatCurrency(prod.precio)}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion || 'Sin descripción'}</p>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[11px] font-bold text-gray-500">
+                            Stock: {prod.stock != null ? prod.stock : 'Ilimitado'} • Prep: ~{prod.tiempoPreparacion || 15}m
+                          </span>
+                          <Badge variant={prod.disponible ? 'success' : 'danger'}>
+                            {prod.disponible ? 'Disponible' : 'Agotado'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-100 mt-3 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleDisponibilidad(prod)}
+                            className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                              prod.disponible
+                                ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                            }`}
+                          >
+                            {prod.disponible ? 'Agotar' : 'Activar'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(prod)}
+                            className="p-1.5 text-gray-500 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+                            title="Editar producto"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(prod.id)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                          title="Eliminar producto"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </Card>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="border-b border-gray-200 pb-2">
+            <h2 className="text-base font-black text-gray-900">
+              {categories.find((c) => c.id === selectedCategoryFilter)?.nombre || 'Categoría'} (
+              {filteredProducts.filter((p) => p.categoriaId === selectedCategoryFilter).length})
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredProducts
+              .filter((p) => p.categoriaId === selectedCategoryFilter)
+              .map((prod) => (
+                <Card key={prod.id} className="p-4 flex flex-col justify-between hover:shadow-md transition-shadow">
+                  <div className="space-y-2">
+                    <div className="h-36 bg-gray-100 rounded-xl overflow-hidden flex items-center justify-center text-gray-400">
+                      {prod.imagenPrincipal ? (
+                        <img
+                          src={uploadService.getImageUrl(prod.imagenPrincipal)}
+                          alt={prod.nombre}
+                          className="w-full h-full object-cover"
+                          onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                        />
+                      ) : (
+                        <Package className="w-8 h-8 text-gray-300" />
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-extrabold text-sm text-gray-900 line-clamp-1">{prod.nombre}</h3>
+                      <span className="font-black text-sm text-gray-900 shrink-0">
+                        {formatCurrency(prod.precio)}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-gray-500 line-clamp-2">{prod.descripcion || 'Sin descripción'}</p>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[11px] font-bold text-gray-500">
+                        Stock: {prod.stock != null ? prod.stock : 'Ilimitado'} • Prep: ~{prod.tiempoPreparacion || 15}m
+                      </span>
+                      <Badge variant={prod.disponible ? 'success' : 'danger'}>
+                        {prod.disponible ? 'Disponible' : 'Agotado'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleDisponibilidad(prod)}
+                        className={`px-2.5 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider transition-all ${
+                          prod.disponible
+                            ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                        }`}
+                      >
+                        {prod.disponible ? 'Agotar' : 'Activar'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(prod)}
+                        className="p-1.5 text-gray-500 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+                        title="Editar producto"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(prod.id)}
+                      className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                      title="Eliminar producto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </Card>
+              ))}
+          </div>
         </div>
       )}
 
@@ -519,12 +822,70 @@ export const CommerceProductsPage: React.FC = () => {
             </select>
           </div>
 
-          <Input
-            label="URL de Imagen (Opcional)"
-            placeholder="https://ejemplo.com/producto.jpg"
-            value={formData.imagenPrincipal || ''}
-            onChange={(e) => setFormData({ ...formData, imagenPrincipal: e.target.value })}
-          />
+          {/* Carga de Imagen de Producto */}
+          <div className="space-y-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-gray-700">
+              Imagen del Producto
+            </label>
+
+            {formData.imagenPrincipal ? (
+              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-200 flex items-center gap-4">
+                <div className="w-16 h-16 rounded-xl overflow-hidden bg-white border border-gray-200 shrink-0">
+                  <img
+                    src={uploadService.getImageUrl(formData.imagenPrincipal)}
+                    alt="Vista previa"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-800 truncate">Imagen asignada</p>
+                  <p className="text-[11px] text-gray-400 truncate">{formData.imagenPrincipal}</p>
+                  <div className="flex gap-2 mt-2">
+                    <label className="cursor-pointer text-xs font-bold text-purple-600 hover:text-purple-700">
+                      {isUploadingImage ? 'Cargando...' : 'Cambiar imagen'}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/jpg"
+                        className="hidden"
+                        onChange={handleUploadProductImage}
+                        disabled={isUploadingImage}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, imagenPrincipal: '' }))}
+                      className="text-xs font-bold text-rose-500 hover:text-rose-600"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 hover:border-purple-500 rounded-2xl cursor-pointer bg-gray-50/50 hover:bg-purple-50/30 transition-colors">
+                <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                <span className="text-xs font-bold text-gray-700">
+                  {isUploadingImage ? 'Subiendo imagen...' : 'Seleccionar o Subir Imagen'}
+                </span>
+                <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG o WEBP (máximo 10MB)</span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={handleUploadProductImage}
+                  disabled={isUploadingImage}
+                />
+              </label>
+            )}
+
+            <input
+              type="text"
+              placeholder="O escribe una URL directa de imagen externa..."
+              value={formData.imagenPrincipal || ''}
+              onChange={(e) => setFormData({ ...formData, imagenPrincipal: e.target.value })}
+              className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
+            />
+          </div>
 
           <div className="flex items-center gap-4 pt-2">
             <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-gray-700">
@@ -578,6 +939,134 @@ export const CommerceProductsPage: React.FC = () => {
             Crear Categoría
           </Button>
         </form>
+      </Modal>
+
+      {/* Modal Gestionar Categorías */}
+      <Modal
+        isOpen={isManageCategoriesOpen}
+        onClose={() => {
+          setIsManageCategoriesOpen(false);
+          setEditingCategory(null);
+        }}
+        title="Gestionar Categorías de la Tienda"
+      >
+        <div className="space-y-6">
+          <p className="text-xs text-gray-500">
+            Crea o ajusta las sub-categorías de tu catálogo (ej: Hamburguesas, Ropa de Mujer, Lácteos, Accesorios, etc.) para organizar tus productos.
+          </p>
+
+          {/* Formulario Crear Nueva Categoría */}
+          {!editingCategory ? (
+            <form onSubmit={handleCreateCategory} className="p-4 rounded-2xl bg-purple-50/50 border border-purple-100 space-y-3">
+              <h4 className="font-extrabold text-xs uppercase tracking-wider text-purple-900">
+                + Crear Nueva Categoría
+              </h4>
+              <Input
+                label="Nombre de Categoría"
+                placeholder="Ej. Hamburguesas, Ropa deportiva, Bebidas..."
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                required
+              />
+              <Input
+                label="Descripción (Opcional)"
+                placeholder="Detalle de los productos en esta categoría..."
+                value={newCategoryDesc}
+                onChange={(e) => setNewCategoryDesc(e.target.value)}
+              />
+              <Button type="submit" variant="primary" size="sm" className="w-full" isLoading={isCreatingCategory}>
+                Crear Categoría
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleUpdateCategory} className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-extrabold text-xs uppercase tracking-wider text-amber-900">
+                  Editar Categoría: {editingCategory.nombre}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setEditingCategory(null)}
+                  className="text-xs text-gray-500 hover:text-black font-bold"
+                >
+                  Cancelar
+                </button>
+              </div>
+              <Input
+                label="Nombre de Categoría"
+                value={editCategoryName}
+                onChange={(e) => setEditCategoryName(e.target.value)}
+                required
+              />
+              <Input
+                label="Descripción"
+                value={editCategoryDesc}
+                onChange={(e) => setEditCategoryDesc(e.target.value)}
+              />
+              <Button type="submit" variant="primary" size="sm" className="w-full" isLoading={isUpdatingCategory}>
+                Guardar Cambios de Categoría
+              </Button>
+            </form>
+          )}
+
+          {/* Listado de Categorías Existentes */}
+          <div className="space-y-2">
+            <h4 className="font-extrabold text-xs uppercase tracking-wider text-gray-700">
+              Categorías Activas ({categories.length})
+            </h4>
+
+            {categories.length === 0 ? (
+              <p className="text-xs text-gray-400 italic">No hay categorías registradas.</p>
+            ) : (
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                {categories.map((cat) => {
+                  const prodCount = products.filter((p) => p.categoriaId === cat.id).length;
+                  return (
+                    <div
+                      key={cat.id}
+                      className="p-3 rounded-xl border border-gray-100 bg-white flex items-center justify-between hover:border-gray-200 transition-colors shadow-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-gray-900">{cat.nombre}</span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100">
+                            {prodCount} {prodCount === 1 ? 'producto' : 'productos'}
+                          </span>
+                        </div>
+                        {cat.descripcion && (
+                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{cat.descripcion}</p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategory(cat);
+                            setEditCategoryName(cat.nombre);
+                            setEditCategoryDesc(cat.descripcion || '');
+                          }}
+                          className="p-1.5 text-gray-500 hover:text-purple-600 rounded-lg hover:bg-purple-50 transition-colors"
+                          title="Editar nombre"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCategory(cat)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                          title="Eliminar categoría"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </Modal>
     </div>
   );

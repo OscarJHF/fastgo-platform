@@ -38,6 +38,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.CONFLICT, "CONFLICT", "La operación entra en conflicto con los datos existentes");
     }
 
+    @ExceptionHandler(PedidoYaAsignadoException.class)
+    public ResponseEntity<Map<String, Object>> pedidoYaAsignado(PedidoYaAsignadoException exception) {
+        return response(HttpStatus.CONFLICT, "CONFLICT", exception.getMessage());
+    }
+
     @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> accessDenied(org.springframework.security.access.AccessDeniedException exception) {
         return response(HttpStatus.FORBIDDEN, "FORBIDDEN", "No tienes permisos para realizar esta operación");

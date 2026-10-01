@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # FASTGO â€” Root .gitignore
 # Strictly prevents committing secrets, credentials, and artifacts
 # ============================================================
@@ -59,3 +59,5 @@ temp/
 tmp/
 .tempmediaStorage/
 coverage/
+uploads/
+*.tsbuildinfo

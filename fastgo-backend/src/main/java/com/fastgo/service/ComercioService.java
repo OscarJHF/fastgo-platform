@@ -168,6 +168,37 @@ public class ComercioService {
         if (d.getPausaManual() != null) {
             c.setPausaManual(d.getPausaManual());
         }
+        if (d.getTarifaDomicilio() != null) {
+            if (d.getTarifaDomicilio().compareTo(java.math.BigDecimal.valueOf(2000)) < 0) {
+                throw new IllegalArgumentException("La tarifa de domicilio mínima es de $2.000 COP");
+            }
+            c.setTarifaDomicilio(d.getTarifaDomicilio());
+        } else if (c.getTarifaDomicilio() == null) {
+            c.setTarifaDomicilio(java.math.BigDecimal.valueOf(2000));
+        }
+        if (d.getBancolombiaActivo() != null) {
+            c.setBancolombiaActivo(d.getBancolombiaActivo());
+            if (Boolean.TRUE.equals(d.getBancolombiaActivo())) {
+                if (d.getBancolombiaNumeroCuenta() == null || d.getBancolombiaNumeroCuenta().isBlank()) {
+                    throw new IllegalArgumentException("El número de cuenta Bancolombia es obligatorio si el método está activo");
+                }
+                if (d.getBancolombiaTitular() == null || d.getBancolombiaTitular().isBlank()) {
+                    throw new IllegalArgumentException("El titular de la cuenta Bancolombia es obligatorio si el método está activo");
+                }
+            }
+        }
+        if (d.getBancolombiaTipoCuenta() != null) {
+            c.setBancolombiaTipoCuenta(d.getBancolombiaTipoCuenta().trim());
+        }
+        if (d.getBancolombiaNumeroCuenta() != null) {
+            c.setBancolombiaNumeroCuenta(d.getBancolombiaNumeroCuenta().trim());
+        }
+        if (d.getBancolombiaTitular() != null) {
+            c.setBancolombiaTitular(d.getBancolombiaTitular().trim());
+        }
+        if (d.getBancolombiaDocTitular() != null) {
+            c.setBancolombiaDocTitular(d.getBancolombiaDocTitular().trim());
+        }
     }
 
     private Comercio propio(Integer id, Usuario u) {
@@ -211,6 +242,15 @@ public class ComercioService {
         r.setTiempoPreparacionMin(c.getTiempoPreparacionMin());
         r.setPausaManual(c.getPausaManual());
         r.setAbierto(c.isAbierto());
+        r.setDentroDeHorario(c.isDentroDeHorario());
+        r.setMensajeEstado(c.getMensajeEstado());
+
+        r.setTarifaDomicilio(c.getTarifaDomicilio());
+        r.setBancolombiaActivo(c.getBancolombiaActivo());
+        r.setBancolombiaTipoCuenta(c.getBancolombiaTipoCuenta());
+        r.setBancolombiaNumeroCuenta(c.getBancolombiaNumeroCuenta());
+        r.setBancolombiaTitular(c.getBancolombiaTitular());
+        r.setBancolombiaDocTitular(c.getBancolombiaDocTitular());
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
         if (!sucursales.isEmpty()) {

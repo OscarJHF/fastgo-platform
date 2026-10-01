@@ -11,9 +11,14 @@ import {
   Eye,
   EyeOff,
   Sparkles,
+  CreditCard,
+  DollarSign,
+  Upload,
+  X,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { categoriaService } from '../../services/categoriaService';
+import { uploadService } from '../../services/uploadService';
 import { Comercio, CategoriaComercio, ComercioRequest } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -30,6 +35,9 @@ export const CommerceStoreConfigPage: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [existingStore, setExistingStore] = useState<Comercio | null>(null);
   const [categories, setCategories] = useState<CategoriaComercio[]>([]);
+
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingBanner, setIsUploadingBanner] = useState(false);
 
   const [formData, setFormData] = useState<ComercioRequest>({
     nombre: '',
@@ -48,6 +56,12 @@ export const CommerceStoreConfigPage: React.FC = () => {
     horaCierre: '20:00',
     diasAtencion: 'Lunes a Domingo',
     tiempoPreparacionMin: 25,
+    tarifaDomicilio: 2000,
+    bancolombiaActivo: false,
+    bancolombiaTipoCuenta: 'AHORROS',
+    bancolombiaNumeroCuenta: '',
+    bancolombiaTitular: '',
+    bancolombiaDocTitular: '',
   });
 
   useEffect(() => {
@@ -80,6 +94,12 @@ export const CommerceStoreConfigPage: React.FC = () => {
             diasAtencion: own.diasAtencion || 'Lunes a Domingo',
             tiempoPreparacionMin: own.tiempoPreparacionMin || 25,
             pausaManual: own.pausaManual ?? false,
+            tarifaDomicilio: own.tarifaDomicilio ? Number(own.tarifaDomicilio) : 2000,
+            bancolombiaActivo: own.bancolombiaActivo ?? false,
+            bancolombiaTipoCuenta: own.bancolombiaTipoCuenta || 'AHORROS',
+            bancolombiaNumeroCuenta: own.bancolombiaNumeroCuenta || '',
+            bancolombiaTitular: own.bancolombiaTitular || '',
+            bancolombiaDocTitular: own.bancolombiaDocTitular || '',
           });
         } else if (cats.length > 0) {
           setFormData((prev) => ({ ...prev, categoriaId: cats[0].id }));
@@ -99,10 +119,34 @@ export const CommerceStoreConfigPage: React.FC = () => {
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData((prev) => ({ ...prev, [name]: checked }));
-    } else if (name === 'categoriaId' || name === 'tiempoPreparacionMin') {
+    } else if (name === 'categoriaId' || name === 'tiempoPreparacionMin' || name === 'tarifaDomicilio') {
       setFormData((prev) => ({ ...prev, [name]: Number(value) }));
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
+    }
+  };
+
+  const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>, field: 'logo' | 'banner') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      showError('El archivo excede el tamaño máximo de 10 MB');
+      return;
+    }
+
+    if (field === 'logo') setIsUploadingLogo(true);
+    else setIsUploadingBanner(true);
+
+    try {
+      const res = await uploadService.uploadFile(file);
+      setFormData((prev) => ({ ...prev, [field]: res.url }));
+      success('Imagen subida exitosamente');
+    } catch (err: any) {
+      showError(err?.response?.data?.message || 'Error al subir imagen');
+    } finally {
+      if (field === 'logo') setIsUploadingLogo(false);
+      else setIsUploadingBanner(false);
     }
   };
 
@@ -115,6 +159,22 @@ export const CommerceStoreConfigPage: React.FC = () => {
     if (!formData.categoriaId) {
       showError('Debes seleccionar una categoría o sector comercial');
       return;
+    }
+
+    if (formData.tarifaDomicilio !== undefined && Number(formData.tarifaDomicilio) < 2000) {
+      showError('La tarifa de domicilio mínima permitida es de $2.000 COP');
+      return;
+    }
+
+    if (formData.bancolombiaActivo) {
+      if (
+        !formData.bancolombiaNumeroCuenta?.trim() ||
+        !formData.bancolombiaTitular?.trim() ||
+        !formData.bancolombiaDocTitular?.trim()
+      ) {
+        showError('Para activar Bancolombia debes ingresar número de cuenta, titular y documento');
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -400,59 +460,139 @@ export const CommerceStoreConfigPage: React.FC = () => {
             <p className="text-xs text-gray-500 mt-0.5">Logotipo y foto de portada para destacar ante los clientes.</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                URL del Logo
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Logo */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Logotipo del Comercio
               </label>
+              
+              {formData.logo ? (
+                <div className="relative group p-3 bg-gray-50 rounded-2xl border border-gray-200 flex items-center gap-4">
+                  <img
+                    src={uploadService.getImageUrl(formData.logo)}
+                    alt="Logo"
+                    className="w-16 h-16 object-cover rounded-xl border border-gray-200 bg-white"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-800 truncate">Logo cargado</p>
+                    <p className="text-[11px] text-gray-400 truncate">{formData.logo}</p>
+                    <div className="flex gap-2 mt-2">
+                      <label className="cursor-pointer text-xs font-bold text-purple-600 hover:text-purple-700">
+                        Cambiar
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleUploadImage(e, 'logo')}
+                          disabled={isUploadingLogo}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, logo: '' }))}
+                        className="text-xs font-bold text-rose-500 hover:text-rose-600"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 hover:border-purple-500 rounded-2xl cursor-pointer bg-gray-50/50 hover:bg-purple-50/30 transition-colors">
+                  <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                  <span className="text-xs font-bold text-gray-700">
+                    {isUploadingLogo ? 'Subiendo imagen...' : 'Subir archivo de logotipo'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">PNG, JPG o WEBP (máx. 10MB)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleUploadImage(e, 'logo')}
+                    disabled={isUploadingLogo}
+                  />
+                </label>
+              )}
+
               <input
-                type="url"
+                type="text"
                 name="logo"
                 value={formData.logo || ''}
                 onChange={handleChange}
-                placeholder="https://ejemplo.com/logo.png"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="O pega una URL directa de imagen..."
+                className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
-              {formData.logo && (
-                <div className="mt-2 flex items-center gap-3 p-2 bg-gray-50 rounded-xl border border-gray-100">
-                  <img
-                    src={formData.logo}
-                    alt="Preview Logo"
-                    className="w-12 h-12 object-cover rounded-lg border border-gray-200"
-                    onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                  />
-                  <span className="text-xs text-gray-500 font-medium">Vista previa de logo</span>
-                </div>
-              )}
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                URL del Banner o Portada
+            {/* Banner */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                Banner o Portada
               </label>
+
+              {formData.banner ? (
+                <div className="relative group p-3 bg-gray-50 rounded-2xl border border-gray-200 space-y-2">
+                  <div className="h-20 w-full rounded-xl overflow-hidden bg-white border border-gray-200">
+                    <img
+                      src={uploadService.getImageUrl(formData.banner)}
+                      alt="Banner"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-400 truncate max-w-[200px]">{formData.banner}</span>
+                    <div className="flex gap-2">
+                      <label className="cursor-pointer text-xs font-bold text-purple-600 hover:text-purple-700">
+                        Cambiar
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => handleUploadImage(e, 'banner')}
+                          disabled={isUploadingBanner}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, banner: '' }))}
+                        className="text-xs font-bold text-rose-500 hover:text-rose-600"
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 hover:border-purple-500 rounded-2xl cursor-pointer bg-gray-50/50 hover:bg-purple-50/30 transition-colors">
+                  <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                  <span className="text-xs font-bold text-gray-700">
+                    {isUploadingBanner ? 'Subiendo imagen...' : 'Subir imagen de banner'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">PNG, JPG o WEBP (máx. 10MB)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleUploadImage(e, 'banner')}
+                    disabled={isUploadingBanner}
+                  />
+                </label>
+              )}
+
               <input
-                type="url"
+                type="text"
                 name="banner"
                 value={formData.banner || ''}
                 onChange={handleChange}
-                placeholder="https://ejemplo.com/banner.jpg"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="O pega una URL directa de imagen..."
+                className="w-full px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 focus:outline-none focus:ring-1 focus:ring-purple-500"
               />
-              {formData.banner && (
-                <div className="mt-2 h-16 w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-50">
-                  <img
-                    src={formData.banner}
-                    alt="Preview Banner"
-                    className="w-full h-full object-cover"
-                    onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                  />
-                </div>
-              )}
             </div>
 
             <div className="md:col-span-2">
               <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-                Métodos de Pago Aceptados
+                Métodos de Pago Informativos
               </label>
               <input
                 type="text"
@@ -466,7 +606,162 @@ export const CommerceStoreConfigPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* Section 5: Publication Toggle */}
+        {/* Section 5: Delivery Rate */}
+        <Card className="p-6 space-y-5">
+          <div className="border-b border-gray-100 pb-3">
+            <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-600" />
+              5. Tarifa de Domicilio y Envíos
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Configura la tarifa de domicilio que pagará el cliente y recibirá el domiciliario (mínimo $2.000 COP).
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                Tarifa de Domicilio (COP) <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400 font-bold">
+                  $
+                </div>
+                <input
+                  type="number"
+                  name="tarifaDomicilio"
+                  min={2000}
+                  step={500}
+                  required
+                  value={formData.tarifaDomicilio ?? 2000}
+                  onChange={handleChange}
+                  placeholder="2000"
+                  className="w-full pl-8 pr-3.5 py-2.5 rounded-xl border border-gray-200 text-base font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                Tarifa mínima permitida: <strong className="text-emerald-700">$2.000 COP</strong>
+              </p>
+            </div>
+
+            <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-800">Tarifa para el cliente:</span>
+                <span className="text-lg font-black text-emerald-900">
+                  ${Number(formData.tarifaDomicilio || 2000).toLocaleString('es-CO')} COP
+                </span>
+              </div>
+              <p className="text-[11px] text-emerald-700 mt-1">
+                Esta tarifa se congelará de forma autoritativa en cada pedido al momento de su creación.
+              </p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Section 6: Bancolombia Payment */}
+        <Card className="p-6 space-y-5">
+          <div className="border-b border-gray-100 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-black text-gray-900 flex items-center gap-2">
+                <CreditCard className="w-5 h-5 text-amber-500" />
+                6. Pagos por Transferencia Bancolombia
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Permite a tus clientes pagar vía transferencia a tu cuenta Bancolombia con comprobante obligatorio.
+              </p>
+            </div>
+
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                name="bancolombiaActivo"
+                checked={formData.bancolombiaActivo ?? false}
+                onChange={handleChange}
+                className="sr-only peer"
+              />
+              <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+              <span className="ml-2.5 text-xs font-bold text-gray-800">
+                {formData.bancolombiaActivo ? 'Activo' : 'Inactivo'}
+              </span>
+            </label>
+          </div>
+
+          {formData.bancolombiaActivo ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Tipo de Cuenta <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    name="bancolombiaTipoCuenta"
+                    value={formData.bancolombiaTipoCuenta || 'AHORROS'}
+                    onChange={handleChange}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                  >
+                    <option value="AHORROS">Cuenta de Ahorros</option>
+                    <option value="CORRIENTE">Cuenta Corriente</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Número de Cuenta <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="bancolombiaNumeroCuenta"
+                    required={formData.bancolombiaActivo}
+                    value={formData.bancolombiaNumeroCuenta || ''}
+                    onChange={handleChange}
+                    placeholder="Ej. 123-456789-00"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Nombre o Razón Social del Titular <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="bancolombiaTitular"
+                    required={formData.bancolombiaActivo}
+                    value={formData.bancolombiaTitular || ''}
+                    onChange={handleChange}
+                    placeholder="Ej. Juan Pérez / Inversiones SAS"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Documento del Titular (C.C. / NIT) <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="bancolombiaDocTitular"
+                    required={formData.bancolombiaActivo}
+                    value={formData.bancolombiaDocTitular || ''}
+                    onChange={handleChange}
+                    placeholder="Ej. CC 1020304050 / NIT 901234567"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+                <strong>Verificación en Comercio:</strong> Cuando un cliente pague con Bancolombia, deberá subir obligatoriamente el comprobante. Deberás verificarlo y aprobarlo desde la lista de pedidos antes de poder despachar el pedido.
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 italic">
+              Los pagos por Bancolombia están desactivados para este comercio. Actívalos si deseas recibir transferencias directas.
+            </p>
+          )}
+        </Card>
+
+        {/* Section 7: Publication Toggle */}
         <Card className="p-6 bg-slate-50 border-slate-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">

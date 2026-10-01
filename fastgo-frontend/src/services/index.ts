@@ -10,3 +10,4 @@ export * from './pedidoService';
 export * from './pagoService';
 export * from './wompiService';
 export * from './mapsService';
+export * from './uploadService';

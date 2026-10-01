@@ -1,5 +1,7 @@
 package com.fastgo.dto;
 
+import java.math.BigDecimal;
+
 public class ComercioResponseDTO {
 
     private Integer id;
@@ -22,6 +24,15 @@ public class ComercioResponseDTO {
     private Integer tiempoPreparacionMin;
     private Boolean pausaManual;
     private Boolean abierto;
+    private Boolean dentroDeHorario;
+    private String mensajeEstado;
+
+    private BigDecimal tarifaDomicilio;
+    private Boolean bancolombiaActivo;
+    private String bancolombiaTipoCuenta;
+    private String bancolombiaNumeroCuenta;
+    private String bancolombiaTitular;
+    private String bancolombiaDocTitular;
 
     public ComercioResponseDTO() {
     }
@@ -159,4 +170,28 @@ public class ComercioResponseDTO {
 
     public String getCiudad() { return ciudad; }
     public void setCiudad(String ciudad) { this.ciudad = ciudad; }
+
+    public Boolean getDentroDeHorario() { return dentroDeHorario; }
+    public void setDentroDeHorario(Boolean dentroDeHorario) { this.dentroDeHorario = dentroDeHorario; }
+
+    public String getMensajeEstado() { return mensajeEstado; }
+    public void setMensajeEstado(String mensajeEstado) { this.mensajeEstado = mensajeEstado; }
+
+    public BigDecimal getTarifaDomicilio() { return tarifaDomicilio != null ? tarifaDomicilio : BigDecimal.valueOf(2000); }
+    public void setTarifaDomicilio(BigDecimal tarifaDomicilio) { this.tarifaDomicilio = tarifaDomicilio; }
+
+    public Boolean getBancolombiaActivo() { return bancolombiaActivo != null ? bancolombiaActivo : false; }
+    public void setBancolombiaActivo(Boolean bancolombiaActivo) { this.bancolombiaActivo = bancolombiaActivo; }
+
+    public String getBancolombiaTipoCuenta() { return bancolombiaTipoCuenta; }
+    public void setBancolombiaTipoCuenta(String bancolombiaTipoCuenta) { this.bancolombiaTipoCuenta = bancolombiaTipoCuenta; }
+
+    public String getBancolombiaNumeroCuenta() { return bancolombiaNumeroCuenta; }
+    public void setBancolombiaNumeroCuenta(String bancolombiaNumeroCuenta) { this.bancolombiaNumeroCuenta = bancolombiaNumeroCuenta; }
+
+    public String getBancolombiaTitular() { return bancolombiaTitular; }
+    public void setBancolombiaTitular(String bancolombiaTitular) { this.bancolombiaTitular = bancolombiaTitular; }
+
+    public String getBancolombiaDocTitular() { return bancolombiaDocTitular; }
+    public void setBancolombiaDocTitular(String bancolombiaDocTitular) { this.bancolombiaDocTitular = bancolombiaDocTitular; }
 }

@@ -36,7 +36,7 @@ export const CartPage: React.FC = () => {
     );
   }
 
-  const shippingFee = 0; // Calculado autoritativamente por el servidor en creación de pedido
+  const shippingFee = 2000; // Tarifa oficial FASTGO: $2.000 COP base
   const total = subtotal + shippingFee;
 
   return (
@@ -121,8 +121,8 @@ export const CartPage: React.FC = () => {
                 <span className="font-bold text-gray-900">{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Costo de Envío</span>
-                <span className="font-semibold text-emerald-600">Gratis (Beta 2)</span>
+                <span>Tarifa de entrega FASTGO</span>
+                <span className="font-semibold text-gray-900">{formatCurrency(shippingFee)} (Base)</span>
               </div>
             </div>
 
@@ -138,11 +138,11 @@ export const CartPage: React.FC = () => {
               onClick={() => navigate(APP_ROUTES.CHECKOUT)}
               icon={<ArrowRight className="w-4 h-4" />}
             >
-              Continuar al Checkout
+              Continuar compra
             </Button>
 
             <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-              * El monto definitivo se calcula de forma autoritativa en el servidor al confirmar tu orden.
+              * Tarifa de entrega oficial FASTGO: $2.000 COP base. La tarifa variable por distancia se desglosa al seleccionar tu dirección.
             </p>
           </Card>
         </div>

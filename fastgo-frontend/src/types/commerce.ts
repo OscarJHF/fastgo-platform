@@ -28,6 +28,14 @@ export interface Comercio {
   pausaManual?: boolean;
   abierto?: boolean;
   estadoHorario?: string;
+  dentroDeHorario?: boolean;
+  mensajeEstado?: string;
+  tarifaDomicilio?: number;
+  bancolombiaActivo?: boolean;
+  bancolombiaTipoCuenta?: string;
+  bancolombiaNumeroCuenta?: string;
+  bancolombiaTitular?: string;
+  bancolombiaDocTitular?: string;
 }
 
 export interface ComercioRequest {
@@ -48,6 +56,12 @@ export interface ComercioRequest {
   diasAtencion?: string;
   tiempoPreparacionMin?: number;
   pausaManual?: boolean;
+  tarifaDomicilio?: number;
+  bancolombiaActivo?: boolean;
+  bancolombiaTipoCuenta?: string;
+  bancolombiaNumeroCuenta?: string;
+  bancolombiaTitular?: string;
+  bancolombiaDocTitular?: string;
 }
 
 export interface Sucursal {

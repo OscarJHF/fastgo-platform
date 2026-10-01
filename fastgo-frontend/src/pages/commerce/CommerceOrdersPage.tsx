@@ -1,12 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, ArrowLeft, Check, Clock, PackageCheck, AlertCircle, XCircle, ChevronDown, ChevronUp, Package, MapPin, User, Phone, CreditCard } from 'lucide-react';
+import {
+  ShoppingBag,
+  ArrowLeft,
+  Check,
+  Clock,
+  PackageCheck,
+  AlertCircle,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Package,
+  MapPin,
+  User,
+  Phone,
+  CreditCard,
+  Eye,
+  FileText,
+  CheckCircle2,
+  ShieldAlert,
+  Download,
+} from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
 import { pedidoService } from '../../services/pedidoService';
+import { uploadService } from '../../services/uploadService';
 import { DetallePedido, Pedido, Sucursal } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
+import { Modal } from '../../components/common/Modal';
 import { Spinner } from '../../components/common/Spinner';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
@@ -21,6 +43,42 @@ export const CommerceOrdersPage: React.FC = () => {
   const [isUpdating, setIsUpdating] = useState<number | null>(null);
   const [expandedOrders, setExpandedOrders] = useState<Record<number, DetallePedido[]>>({});
   const [loadingDetails, setLoadingDetails] = useState<Record<number, boolean>>({});
+  const [selectedReceiptUrl, setSelectedReceiptUrl] = useState<string | null>(null);
+  const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
+  const [isPdfReceipt, setIsPdfReceipt] = useState(false);
+  const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedReceiptUrl) {
+      if (receiptBlobUrl) URL.revokeObjectURL(receiptBlobUrl);
+      setReceiptBlobUrl(null);
+      return;
+    }
+
+    setIsLoadingReceipt(true);
+    pedidoService.getComprobanteBlob(selectedReceiptUrl)
+      .then(({ blobUrl, isPdf }) => {
+        if (active) {
+          setReceiptBlobUrl(blobUrl);
+          setIsPdfReceipt(isPdf);
+        } else {
+          URL.revokeObjectURL(blobUrl);
+        }
+      })
+      .catch((err) => {
+        console.error('Error al cargar comprobante:', err);
+        showError('No se pudo cargar el comprobante privado.');
+        setSelectedReceiptUrl(null);
+      })
+      .finally(() => {
+        if (active) setIsLoadingReceipt(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selectedReceiptUrl]);
 
   const { success, error: showError } = useToast();
 
@@ -117,6 +175,34 @@ export const CommerceOrdersPage: React.FC = () => {
       await loadData();
     } catch (err) {
       showError('No se pudo rechazar el pedido');
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  const handleApprovePayment = async (id: number) => {
+    setIsUpdating(id);
+    try {
+      await pedidoService.aprobarPago(id);
+      success(`¡Pago del pedido #${id} aprobado exitosamente!`);
+      await loadData();
+    } catch (err: any) {
+      showError(err?.response?.data?.message || 'Error al aprobar el pago');
+    } finally {
+      setIsUpdating(null);
+    }
+  };
+
+  const handleRejectPayment = async (id: number) => {
+    const motivo = window.prompt('Indica el motivo del rechazo del comprobante de pago:');
+    if (motivo === null) return;
+    setIsUpdating(id);
+    try {
+      await pedidoService.rechazarPago(id, motivo || 'Comprobante no válido');
+      success(`Pago del pedido #${id} rechazado. Pedido cancelado y stock devuelto.`);
+      await loadData();
+    } catch (err: any) {
+      showError(err?.response?.data?.message || 'Error al rechazar el pago');
     } finally {
       setIsUpdating(null);
     }
@@ -219,6 +305,92 @@ export const CommerceOrdersPage: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Bancolombia Payment Box */}
+                {order.metodoPago === 'BANCOLOMBIA' && (
+                  <div
+                    className={`p-4 rounded-xl border space-y-3 ${
+                      order.estadoPago === 'APROBADO'
+                        ? 'bg-emerald-50/60 border-emerald-200'
+                        : order.estadoPago === 'RECHAZADO'
+                        ? 'bg-rose-50/60 border-rose-200'
+                        : 'bg-amber-50 border-amber-300'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <CreditCard className="w-5 h-5 text-amber-600 shrink-0" />
+                        <div>
+                          <span className="font-extrabold text-xs uppercase tracking-wider text-gray-900">
+                            Pago por Bancolombia
+                          </span>
+                          <p className="text-[11px] text-gray-600">
+                            {order.estadoPago === 'APROBADO' && 'El pago fue verificado y aprobado correctamente.'}
+                            {order.estadoPago === 'RECHAZADO' && `Pago rechazado: ${order.motivoRechazoPago || 'No válido'}`}
+                            {order.estadoPago === 'PENDIENTE_VERIFICACION' &&
+                              'Revisa el comprobante y valida el ingreso en tu cuenta bancaria antes de despachar.'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        {order.estadoPago === 'PENDIENTE_VERIFICACION' && (
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-900 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+                            Pendiente Verificación
+                          </span>
+                        )}
+                        {order.estadoPago === 'APROBADO' && (
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-300">
+                            Pago Aprobado
+                          </span>
+                        )}
+                        {order.estadoPago === 'RECHAZADO' && (
+                          <span className="text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 px-2.5 py-1 rounded-full border border-rose-300">
+                            Pago Rechazado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-amber-200/60">
+                      {order.comprobantePagoUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedReceiptUrl(order.comprobantePagoUrl || null)}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Ver Comprobante de Pago
+                        </button>
+                      ) : (
+                        <span className="text-xs text-rose-600 font-semibold italic">Sin comprobante adjunto</span>
+                      )}
+
+                      {order.estadoPago === 'PENDIENTE_VERIFICACION' && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleRejectPayment(order.id)}
+                            disabled={isUpdating === order.id}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-rose-700 bg-white hover:bg-rose-50 border border-rose-300 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            Rechazar Pago
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApprovePayment(order.id)}
+                            disabled={isUpdating === order.id}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 px-3.5 py-1.5 rounded-lg shadow-xs transition-colors"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            Aprobar Pago
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {order.observaciones && (
                   <div className="text-xs text-amber-900 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
                     <span className="font-bold">Observaciones del cliente: </span>
@@ -317,15 +489,34 @@ export const CommerceOrdersPage: React.FC = () => {
                   )}
 
                   {(order.estado === 'EN_PREPARACION' || order.estado === 'PREPARANDO') && (
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleReady(order.id)}
-                      isLoading={isUpdating === order.id}
-                      icon={<PackageCheck className="w-4 h-4" />}
-                    >
-                      Marcar Listo para Entrega
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {order.metodoPago === 'BANCOLOMBIA' && order.estadoPago !== 'APROBADO' ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs text-amber-800 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-lg font-bold">
+                            ⚠️ Aprueba el pago Bancolombia para poder despachar
+                          </span>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            disabled={true}
+                            title="Debes aprobar el pago por Bancolombia antes de marcar listo"
+                            icon={<PackageCheck className="w-4 h-4" />}
+                          >
+                            Marcar Listo para Entrega
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleReady(order.id)}
+                          isLoading={isUpdating === order.id}
+                          icon={<PackageCheck className="w-4 h-4" />}
+                        >
+                          Marcar Listo para Entrega
+                        </Button>
+                      )}
+                    </div>
                   )}
 
                   {(order.estado === 'LISTO_PARA_ENTREGA' || order.estado === 'LISTO') && (
@@ -357,6 +548,57 @@ export const CommerceOrdersPage: React.FC = () => {
           })}
         </div>
       )}
+
+      {/* Modal Visor de Comprobante */}
+      <Modal
+        isOpen={!!selectedReceiptUrl}
+        onClose={() => setSelectedReceiptUrl(null)}
+        title="Comprobante de Pago Bancolombia"
+      >
+        <div className="space-y-4">
+          {isLoadingReceipt ? (
+            <div className="py-12 flex flex-col items-center justify-center">
+              <Spinner size="md" />
+              <p className="mt-2 text-xs text-gray-500 font-semibold">Cargando comprobante seguro...</p>
+            </div>
+          ) : receiptBlobUrl ? (
+            <>
+              {isPdfReceipt ? (
+                <div className="p-8 text-center bg-gray-50 rounded-2xl border border-gray-200 space-y-4">
+                  <FileText className="w-16 h-16 text-rose-500 mx-auto" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">Comprobante en formato PDF</p>
+                    <p className="text-xs text-gray-500">Documento privado del cliente recibido para este pedido.</p>
+                  </div>
+                  <a
+                    href={receiptBlobUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download="comprobante-pago.pdf"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl hover:bg-purple-700 transition-colors"
+                  >
+                    <Download className="w-4 h-4" /> Abrir / Descargar PDF
+                  </a>
+                </div>
+              ) : (
+                <div className="max-h-[70vh] overflow-auto rounded-xl border border-gray-200 bg-gray-900/5 p-2 flex items-center justify-center">
+                  <img
+                    src={receiptBlobUrl}
+                    alt="Comprobante de pago"
+                    className="max-h-[65vh] w-auto max-w-full rounded-lg object-contain shadow-sm"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <Button variant="secondary" onClick={() => setSelectedReceiptUrl(null)}>
+                  Cerrar
+                </Button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </Modal>
     </div>
   );
 };

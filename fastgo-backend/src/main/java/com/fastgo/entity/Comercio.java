@@ -2,6 +2,7 @@ package com.fastgo.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -68,6 +69,24 @@ public class Comercio {
     @Column(name = "pausa_manual")
     private Boolean pausaManual;
 
+    @Column(name = "tarifa_domicilio", precision = 12, scale = 2)
+    private BigDecimal tarifaDomicilio;
+
+    @Column(name = "bancolombia_activo")
+    private Boolean bancolombiaActivo;
+
+    @Column(name = "bancolombia_tipo_cuenta", length = 20)
+    private String bancolombiaTipoCuenta;
+
+    @Column(name = "bancolombia_numero_cuenta", length = 50)
+    private String bancolombiaNumeroCuenta;
+
+    @Column(name = "bancolombia_titular", length = 150)
+    private String bancolombiaTitular;
+
+    @Column(name = "bancolombia_doc_titular", length = 50)
+    private String bancolombiaDocTitular;
+
     public Comercio() {
     }
 
@@ -104,6 +123,14 @@ public class Comercio {
 
         if (pausaManual == null) {
             pausaManual = false;
+        }
+
+        if (tarifaDomicilio == null || tarifaDomicilio.compareTo(BigDecimal.valueOf(2000)) < 0) {
+            tarifaDomicilio = BigDecimal.valueOf(2000);
+        }
+
+        if (bancolombiaActivo == null) {
+            bancolombiaActivo = false;
         }
     }
 
@@ -267,20 +294,41 @@ public class Comercio {
     public boolean isAbierto() {
         if (Boolean.FALSE.equals(activo)) return false;
         if (Boolean.TRUE.equals(pausaManual)) return false;
+        return isDentroDeHorario();
+    }
+
+    public boolean isDentroDeHorario() {
         if (horaApertura == null || horaCierre == null) return true;
 
         java.time.ZonedDateTime now = java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Bogota"));
         int currentDay = now.getDayOfWeek().getValue(); // 1 = Lunes ... 7 = Domingo
         if (diasAtencion != null && !diasAtencion.isBlank()) {
-            String[] dias = diasAtencion.split(",");
-            boolean diaPermitido = false;
-            for (String d : dias) {
-                if (d.trim().equals(String.valueOf(currentDay))) {
-                    diaPermitido = true;
-                    break;
+            String diasLower = diasAtencion.toLowerCase().trim();
+            if (diasLower.contains("todos") || diasLower.contains("lunes a domingo") || diasLower.equals("1,2,3,4,5,6,7")) {
+                // Todos los días permitidos
+            } else if (diasLower.contains("lunes a viernes")) {
+                if (currentDay > 5) return false;
+            } else if (diasLower.contains("lunes a sabado") || diasLower.contains("lunes a sábado")) {
+                if (currentDay > 6) return false;
+            } else {
+                String[] dias = diasAtencion.split("[,;]");
+                boolean diaPermitido = false;
+                for (String d : dias) {
+                    String dt = d.trim().toLowerCase();
+                    if (dt.equals(String.valueOf(currentDay))) {
+                        diaPermitido = true;
+                        break;
+                    }
+                    if (currentDay == 1 && (dt.contains("lun") || dt.equals("1"))) diaPermitido = true;
+                    if (currentDay == 2 && (dt.contains("mar") || dt.equals("2"))) diaPermitido = true;
+                    if (currentDay == 3 && (dt.contains("mie") || dt.contains("mié") || dt.equals("3"))) diaPermitido = true;
+                    if (currentDay == 4 && (dt.contains("jue") || dt.equals("4"))) diaPermitido = true;
+                    if (currentDay == 5 && (dt.contains("vie") || dt.equals("5"))) diaPermitido = true;
+                    if (currentDay == 6 && (dt.contains("sab") || dt.contains("sáb") || dt.equals("6"))) diaPermitido = true;
+                    if (currentDay == 7 && (dt.contains("dom") || dt.equals("7"))) diaPermitido = true;
                 }
+                if (!diaPermitido) return false;
             }
-            if (!diaPermitido) return false;
         }
 
         java.time.LocalTime currentTime = now.toLocalTime();
@@ -291,10 +339,75 @@ public class Comercio {
         }
     }
 
+    public String getMensajeEstado() {
+        if (Boolean.FALSE.equals(activo)) return "Comercio inactivo";
+        if (Boolean.TRUE.equals(pausaManual)) return "Cerrado temporalmente por el comercio";
+        if (!isDentroDeHorario()) {
+            return "Cerrado fuera de horario (Horario: " + 
+                    (horaApertura != null ? horaApertura.toString() : "08:00") + " - " + 
+                    (horaCierre != null ? horaCierre.toString() : "22:00") + ")";
+        }
+        return "Abierto";
+    }
+
+    public BigDecimal getTarifaDomicilio() {
+        return tarifaDomicilio != null ? tarifaDomicilio : BigDecimal.valueOf(2000);
+    }
+
+    public void setTarifaDomicilio(BigDecimal tarifaDomicilio) {
+        if (tarifaDomicilio != null && tarifaDomicilio.compareTo(BigDecimal.valueOf(2000)) < 0) {
+            throw new IllegalArgumentException("La tarifa de domicilio mínima es de $2.000 COP");
+        }
+        this.tarifaDomicilio = tarifaDomicilio;
+    }
+
+    public Boolean getBancolombiaActivo() {
+        return bancolombiaActivo;
+    }
+
+    public void setBancolombiaActivo(Boolean bancolombiaActivo) {
+        this.bancolombiaActivo = bancolombiaActivo;
+    }
+
+    public String getBancolombiaTipoCuenta() {
+        return bancolombiaTipoCuenta;
+    }
+
+    public void setBancolombiaTipoCuenta(String bancolombiaTipoCuenta) {
+        this.bancolombiaTipoCuenta = bancolombiaTipoCuenta;
+    }
+
+    public String getBancolombiaNumeroCuenta() {
+        return bancolombiaNumeroCuenta;
+    }
+
+    public void setBancolombiaNumeroCuenta(String bancolombiaNumeroCuenta) {
+        this.bancolombiaNumeroCuenta = bancolombiaNumeroCuenta;
+    }
+
+    public String getBancolombiaTitular() {
+        return bancolombiaTitular;
+    }
+
+    public void setBancolombiaTitular(String bancolombiaTitular) {
+        this.bancolombiaTitular = bancolombiaTitular;
+    }
+
+    public String getBancolombiaDocTitular() {
+        return bancolombiaDocTitular;
+    }
+
+    public void setBancolombiaDocTitular(String bancolombiaDocTitular) {
+        this.bancolombiaDocTitular = bancolombiaDocTitular;
+    }
+
     public boolean aceptaMetodoPago(String metodo) {
         if (metodo == null || metodo.isBlank()) return false;
-        if (metodosPago == null || metodosPago.isBlank()) return true;
         String clean = metodo.trim().toUpperCase();
+        if (clean.equals("BANCOLOMBIA")) {
+            return Boolean.TRUE.equals(bancolombiaActivo);
+        }
+        if (metodosPago == null || metodosPago.isBlank()) return true;
         for (String m : metodosPago.split(",")) {
             if (m.trim().equalsIgnoreCase(clean)) return true;
         }

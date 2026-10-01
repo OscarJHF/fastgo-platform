@@ -42,6 +42,12 @@ public class Pedido {
     @Column(name = "metodo_pago", length = 50)
     private String metodoPago;
 
+    @Column(name = "estado_pago", length = 30)
+    private String estadoPago;
+
+    @Column(name = "comprobante_pago_url", length = 500)
+    private String comprobantePagoUrl;
+
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
 
@@ -57,9 +63,16 @@ public class Pedido {
     protected void alCrear() {
         if (creadoEn == null) creadoEn = LocalDateTime.now();
         if (estado == null || estado.isBlank()) estado = "PENDIENTE";
-        if (costoEnvio == null) costoEnvio = BigDecimal.ZERO;
+        if (costoEnvio == null) costoEnvio = BigDecimal.valueOf(2000);
         if (tarifaAceptada == null) tarifaAceptada = true;
         if (metodoPago == null || metodoPago.isBlank()) metodoPago = "EFECTIVO";
+        if (estadoPago == null || estadoPago.isBlank()) {
+            if ("BANCOLOMBIA".equalsIgnoreCase(metodoPago)) {
+                estadoPago = "PENDIENTE_VERIFICACION";
+            } else {
+                estadoPago = "APROBADO";
+            }
+        }
     }
 
     public Integer getId() { return id; }
@@ -92,14 +105,20 @@ public class Pedido {
     public Boolean getTarifaAceptada() { return tarifaAceptada; }
     public void setTarifaAceptada(Boolean tarifaAceptada) { this.tarifaAceptada = tarifaAceptada; }
 
+    public String getMetodoPago() { return metodoPago; }
+    public void setMetodoPago(String metodoPago) { this.metodoPago = metodoPago; }
+
+    public String getEstadoPago() { return estadoPago; }
+    public void setEstadoPago(String estadoPago) { this.estadoPago = estadoPago; }
+
+    public String getComprobantePagoUrl() { return comprobantePagoUrl; }
+    public void setComprobantePagoUrl(String comprobantePagoUrl) { this.comprobantePagoUrl = comprobantePagoUrl; }
+
     public BigDecimal getTotal() { return total; }
     public void setTotal(BigDecimal total) { this.total = total; }
 
     public String getObservaciones() { return observaciones; }
     public void setObservaciones(String observaciones) { this.observaciones = observaciones; }
-
-    public String getMetodoPago() { return metodoPago; }
-    public void setMetodoPago(String metodoPago) { this.metodoPago = metodoPago; }
 
     public LocalDateTime getCreadoEn() { return creadoEn; }
     public void setCreadoEn(LocalDateTime creadoEn) { this.creadoEn = creadoEn; }
@@ -113,6 +132,15 @@ public class Pedido {
     @Transient
     private String direccionTexto;
 
+    @Transient
+    private String comercioNombre;
+
+    @Transient
+    private String comercioDireccion;
+
+    @Transient
+    private String sucursalNombre;
+
     public String getClienteNombre() { return clienteNombre; }
     public void setClienteNombre(String clienteNombre) { this.clienteNombre = clienteNombre; }
 
@@ -121,4 +149,13 @@ public class Pedido {
 
     public String getDireccionTexto() { return direccionTexto; }
     public void setDireccionTexto(String direccionTexto) { this.direccionTexto = direccionTexto; }
+
+    public String getComercioNombre() { return comercioNombre; }
+    public void setComercioNombre(String comercioNombre) { this.comercioNombre = comercioNombre; }
+
+    public String getComercioDireccion() { return comercioDireccion; }
+    public void setComercioDireccion(String comercioDireccion) { this.comercioDireccion = comercioDireccion; }
+
+    public String getSucursalNombre() { return sucursalNombre; }
+    public void setSucursalNombre(String sucursalNombre) { this.sucursalNombre = sucursalNombre; }
 }

@@ -41,6 +41,17 @@ public class ComercioController {
         return ResponseEntity.ok(
                 comercioService.guardar(datos));
     }
+    @PutMapping("/propio")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<ComercioResponseDTO> actualizarPropio(
+            @Valid @RequestBody ComercioRequestDTO datos) {
+        ComercioResponseDTO propio = comercioService.buscarPropio();
+        if (propio == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(
+                comercioService.actualizar(propio.getId(), datos));
+    }
 
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('COMERCIO')")

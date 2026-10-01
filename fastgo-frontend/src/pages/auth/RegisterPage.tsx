@@ -58,13 +58,7 @@ export const RegisterPage: React.FC = () => {
       const data = await authService.getDatosReutilizables(trimmed);
       if (data && data.rolesExistentes && data.rolesExistentes.length > 0) {
         setReusableData(data);
-        // Pre-llenar datos personales automáticamente
-        setFormData((prev) => ({
-          ...prev,
-          nombre: prev.nombre || data.nombre || '',
-          apellido: prev.apellido || data.apellido || '',
-          telefono: prev.telefono || data.telefono || '',
-        }));
+        // NO autorrellenar nombre, apellido ni teléfono (los campos deben permanecer en blanco hasta que el usuario los escriba)
 
         // Si el rol actualmente seleccionado ya está registrado, sugerir otro disponible
         if (data.rolesExistentes.includes(formData.rol)) {
@@ -163,23 +157,23 @@ export const RegisterPage: React.FC = () => {
           </div>
         )}
 
-        {/* Banner de Reutilización Inteligente de Datos */}
+        {/* Banner de Detección de Cuenta Previa */}
         {reusableData && reusableData.rolesExistentes.length > 0 && (
-          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-medium space-y-1">
+          <div className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-medium space-y-1">
             <div className="flex items-center gap-2 font-bold">
-              <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>¡Cuenta existente detectada!</span>
+              <Info className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Cuenta existente en FastGo</span>
             </div>
-            <p className="text-emerald-800 text-[11px] leading-relaxed">
-              Hemos precargado tus datos personales. Tu correo ya cuenta con perfil de:{' '}
-              <strong className="underline">{reusableData.rolesExistentes.join(', ')}</strong>.
-              Puedes registrar un nuevo rol sin perder tu cuenta existente.
+            <p className="text-blue-800 text-[11px] leading-relaxed">
+              Este correo ya tiene una cuenta registrada en FastGo (roles:{' '}
+              <strong className="underline">{reusableData.rolesExistentes.join(', ')}</strong>).
+              Si eres el titular, puedes iniciar sesión o agregar este nuevo rol a tu perfil existente.
             </p>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Correo Electrónico PRIMERO para predecir y precargar datos */}
+        <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+          {/* Correo Electrónico PRIMERO para verificar cuenta */}
           <div>
             <Input
               label="Correo Electrónico"
@@ -190,8 +184,9 @@ export const RegisterPage: React.FC = () => {
               onBlur={(e) => verificarCorreoExistente(e.target.value)}
               icon={<Mail className="w-4 h-4" />}
               error={fieldErrors['correo']}
-              helperText={checkingEmail ? 'Verificando cuentas asociadas...' : 'Si ya tienes cuenta en FastGo, reutilizaremos tus datos para tu nuevo rol.'}
+              helperText={checkingEmail ? 'Verificando cuenta...' : 'Ingresa tu correo para asociar tu rol a FASTGO.'}
               required
+              autoComplete="off"
             />
           </div>
 
@@ -272,6 +267,7 @@ export const RegisterPage: React.FC = () => {
               icon={<User className="w-4 h-4" />}
               error={fieldErrors['nombre']}
               required
+              autoComplete="off"
             />
             <Input
               label="Apellido"
@@ -281,6 +277,7 @@ export const RegisterPage: React.FC = () => {
               icon={<User className="w-4 h-4" />}
               error={fieldErrors['apellido']}
               required
+              autoComplete="off"
             />
           </div>
 
@@ -293,6 +290,7 @@ export const RegisterPage: React.FC = () => {
             error={fieldErrors['telefono']}
             helperText="Formato de 10 dígitos (ej. 3001234567)"
             required
+            autoComplete="off"
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

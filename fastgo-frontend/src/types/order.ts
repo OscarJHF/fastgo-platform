@@ -26,6 +26,12 @@ export interface Pedido {
   direccionTexto?: string;
   distanciaKm?: number;
   creadoEn: string;
+  estadoPago?: 'PENDIENTE_VERIFICACION' | 'APROBADO' | 'RECHAZADO' | string;
+  comprobantePagoUrl?: string;
+  comercioNombre?: string;
+  comercioDireccion?: string;
+  sucursalNombre?: string;
+  motivoRechazoPago?: string;
 }
 
 export interface DetallePedido {

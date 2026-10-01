@@ -12,6 +12,7 @@ import {
   Package,
   Eye,
   EyeOff,
+  Power,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
@@ -103,30 +104,11 @@ export const CommerceDashboardPage: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           {activeCommerce && (
             <>
-              <button
-                type="button"
-                onClick={handleTogglePause}
-                disabled={isTogglingPause}
-                className={`px-3 py-1.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-sm flex items-center gap-1.5 ${
-                  activeCommerce.pausaManual
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" />
-                {activeCommerce.pausaManual ? 'Reanudar Tienda' : 'Pausar Tienda'}
-              </button>
-
               <Link to={APP_ROUTES.COMMERCE_STORE}>
                 <Button variant="secondary" size="sm" icon={<Settings className="w-4 h-4" />}>
                   Configurar Tienda
                 </Button>
               </Link>
-            </>
-          )}
-
-          {activeCommerce && (
-            <>
               <Link to={APP_ROUTES.COMMERCE_ORDERS}>
                 <Button variant="primary" size="sm" icon={<ShoppingBag className="w-4 h-4" />}>
                   Ver Pedidos
@@ -164,6 +146,67 @@ export const CommerceDashboardPage: React.FC = () => {
         </Card>
       ) : (
         <>
+          {/* Control Visual Claro y Dedicado: ABRIR TIENDA / CERRAR TIENDA */}
+          <div className={`p-5 rounded-3xl border-2 transition-all flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm ${
+            activeCommerce.abierto
+              ? 'bg-emerald-50/60 border-emerald-300'
+              : 'bg-rose-50/60 border-rose-300'
+          }`}>
+            <div className="flex items-center gap-4">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-white shadow-md ${
+                activeCommerce.abierto ? 'bg-emerald-600 shadow-emerald-500/20' : 'bg-rose-600 shadow-rose-500/20'
+              }`}>
+                <Store className="w-7 h-7" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500">ESTADO COMERCIAL:</span>
+                  <span className={`text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-xs ${
+                    activeCommerce.abierto
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-rose-600 text-white'
+                  }`}>
+                    {activeCommerce.abierto ? '● TIENDA ABIERTA' : '○ TIENDA CERRADA'}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-gray-800 mt-1">
+                  {activeCommerce.mensajeEstado || (activeCommerce.abierto ? 'Recibiendo pedidos con normalidad' : 'No se recibirán pedidos')}
+                </p>
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+                  <span>Horario: <strong>{activeCommerce.horaApertura || '08:00'} - {activeCommerce.horaCierre || '20:00'}</strong></span>
+                  <span>•</span>
+                  <span>Días: <strong>{activeCommerce.diasAtencion || 'Todos los días'}</strong></span>
+                  <span>•</span>
+                  <span>Dentro de horario: <strong>{activeCommerce.dentroDeHorario ? 'Sí' : 'No'}</strong></span>
+                  {activeCommerce.pausaManual && (
+                    <>
+                      <span>•</span>
+                      <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded">Pausa manual activa</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTogglePause}
+              disabled={isTogglingPause}
+              className={`w-full sm:w-auto px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 ${
+                activeCommerce.abierto
+                  ? 'bg-rose-600 text-white hover:bg-rose-700 active:scale-95 shadow-rose-600/30'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700 active:scale-95 shadow-emerald-600/30'
+              }`}
+            >
+              <Power className="w-4 h-4" />
+              {isTogglingPause
+                ? 'Actualizando...'
+                : activeCommerce.abierto
+                ? 'CERRAR TIENDA (Pausar)'
+                : 'ABRIR TIENDA (Reanudar)'}
+            </button>
+          </div>
+
           {/* Operational & Visibility Status Card */}
           <div className="p-5 rounded-3xl bg-white border border-gray-100 shadow-sm space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3">
