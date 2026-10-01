@@ -27,13 +27,22 @@ public class UploadController {
     private final Path publicDir;
 
     public UploadController(@Value("${fastgo.upload.dir:uploads}") String uploadDirPath) {
-        this.uploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
-        this.publicDir = this.uploadDir.resolve("public").normalize();
+        Path targetUploadDir = Paths.get(uploadDirPath).toAbsolutePath().normalize();
+        Path targetPublicDir = targetUploadDir.resolve("public").normalize();
         try {
-            Files.createDirectories(this.publicDir);
-        } catch (IOException e) {
-            throw new RuntimeException("No se pudo inicializar el directorio de subidas públicas: " + this.publicDir, e);
+            Files.createDirectories(targetPublicDir);
+        } catch (Exception e) {
+            Path fallback = Paths.get(System.getProperty("java.io.tmpdir", "/tmp")).resolve("fastgo-uploads").normalize();
+            try {
+                Files.createDirectories(fallback.resolve("public").normalize());
+                targetUploadDir = fallback;
+                targetPublicDir = fallback.resolve("public").normalize();
+            } catch (Exception ex) {
+                // If even fallback fails, retain targetUploadDir without crashing startup
+            }
         }
+        this.uploadDir = targetUploadDir;
+        this.publicDir = targetPublicDir;
     }
 
     @PostMapping

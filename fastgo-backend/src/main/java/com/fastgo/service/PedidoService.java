@@ -63,13 +63,22 @@ public class PedidoService {
         this.productoRepository = productoRepository;
         this.tarifaService = tarifaService;
         this.pagoRepository = pagoRepository;
-        this.uploadDir = Paths.get(uploadDirPath != null ? uploadDirPath : "uploads").toAbsolutePath().normalize();
-        this.proofsDir = this.uploadDir.resolve("payment-proofs").normalize();
+        Path targetUploadDir = Paths.get(uploadDirPath != null ? uploadDirPath : "uploads").toAbsolutePath().normalize();
+        Path targetProofsDir = targetUploadDir.resolve("payment-proofs").normalize();
         try {
-            Files.createDirectories(this.proofsDir);
-        } catch (IOException e) {
-            throw new RuntimeException("No se pudo inicializar el directorio de comprobantes: " + this.proofsDir, e);
+            Files.createDirectories(targetProofsDir);
+        } catch (Exception e) {
+            Path fallback = Paths.get(System.getProperty("java.io.tmpdir", "/tmp")).resolve("fastgo-uploads").normalize();
+            try {
+                Files.createDirectories(fallback.resolve("payment-proofs").normalize());
+                targetUploadDir = fallback;
+                targetProofsDir = fallback.resolve("payment-proofs").normalize();
+            } catch (Exception ex) {
+                // If even fallback fails, retain targetUploadDir without crashing startup
+            }
         }
+        this.uploadDir = targetUploadDir;
+        this.proofsDir = targetProofsDir;
     }
 
     @Transactional
