@@ -34,8 +34,11 @@ import { useToast } from '../../context/ToastContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { ORDER_STATUS_DETAILS } from '../../constants/orderStatus';
 import { APP_ROUTES } from '../../constants/routes';
+import { useMerchantStore } from '../../context/MerchantStoreContext';
+import { StoreSwitcher } from '../../components/commerce/StoreSwitcher';
 
 export const CommerceOrdersPage: React.FC = () => {
+  const { stores, selectedStore, isLoading: isStoresLoading } = useMerchantStore();
   const [branches, setBranches] = useState<Sucursal[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState<number | null>(null);
   const [orders, setOrders] = useState<Pedido[]>([]);
@@ -84,19 +87,27 @@ export const CommerceOrdersPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const commerces = await commerceService.listCommerces();
-      if (commerces.length > 0) {
-        const sucs = await sucursalService.listByCommerce(commerces[0].id);
+      if (selectedStore) {
+        const sucs = await sucursalService.listByCommerce(selectedStore.id).catch(() => []);
         setBranches(sucs);
         if (sucs.length > 0) {
-          const branchId = selectedBranchId || sucs[0].id;
+          const branchId = selectedBranchId && sucs.some((s) => s.id === selectedBranchId)
+            ? selectedBranchId
+            : sucs[0].id;
           setSelectedBranchId(branchId);
           const ords = await pedidoService.listBySucursal(branchId);
           setOrders(ords);
+        } else {
+          setSelectedBranchId(null);
+          setOrders([]);
         }
+      } else {
+        setBranches([]);
+        setSelectedBranchId(null);
+        setOrders([]);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error al cargar pedidos:', err);
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +115,7 @@ export const CommerceOrdersPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [selectedBranchId]);
+  }, [selectedStore, selectedBranchId]);
 
   const toggleOrderDetails = async (orderId: number) => {
     if (expandedOrders[orderId]) {
@@ -221,6 +232,9 @@ export const CommerceOrdersPage: React.FC = () => {
       <Link to={APP_ROUTES.COMMERCE_DASHBOARD} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-black">
         <ArrowLeft className="w-4 h-4" /> Volver al panel de comercio
       </Link>
+
+      {/* Multi-Store Switcher */}
+      <StoreSwitcher />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

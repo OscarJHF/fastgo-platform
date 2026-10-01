@@ -32,6 +32,15 @@ export interface Pedido {
   comercioDireccion?: string;
   sucursalNombre?: string;
   motivoRechazoPago?: string;
+  gananciaDomiciliario?: number;
+  destinoDireccion?: string;
+  destinoCiudad?: string;
+  destinoReferencia?: string;
+  destinoLatitud?: number | null;
+  destinoLongitud?: number | null;
+  origenLatitud?: number | null;
+  origenLongitud?: number | null;
+  origenTelefono?: string;
 }
 
 export interface DetallePedido {

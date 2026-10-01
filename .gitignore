@@ -61,3 +61,5 @@ tmp/
 coverage/
 uploads/
 *.tsbuildinfo
+.wrangler/
+*.png

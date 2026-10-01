@@ -11,3 +11,5 @@ export * from './pagoService';
 export * from './wompiService';
 export * from './mapsService';
 export * from './uploadService';
+export * from './trackingService';
+export * from './adminService';

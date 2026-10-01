@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download, Navigation } from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { pagoService } from '../../services/pagoService';
 import { uploadService } from '../../services/uploadService';
-import { DetallePedido, OrderStatus, Pago, Pedido } from '../../types';
+import { trackingService } from '../../services/trackingService';
+import { DetallePedido, OrderStatus, Pago, Pedido, TrackingResponse } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
@@ -21,6 +22,7 @@ export const OrderDetailPage: React.FC = () => {
   const [order, setOrder] = useState<Pedido | null>(null);
   const [details, setDetails] = useState<DetallePedido[]>([]);
   const [payments, setPayments] = useState<Pago[]>([]);
+  const [tracking, setTracking] = useState<TrackingResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -52,6 +54,20 @@ export const OrderDetailPage: React.FC = () => {
   useEffect(() => {
     loadOrder();
   }, [orderId]);
+
+  // Polling de telemetría de seguimiento en tiempo real cuando el pedido está EN_CAMINO
+  useEffect(() => {
+    if (order?.estado !== 'EN_CAMINO') return;
+
+    const fetchTracking = async () => {
+      const data = await trackingService.obtenerUltimaUbicacion(orderId);
+      if (data) setTracking(data);
+    };
+
+    fetchTracking();
+    const interval = setInterval(fetchTracking, 10000);
+    return () => clearInterval(interval);
+  }, [order?.estado, orderId]);
 
   const handleCancelOrder = async () => {
     if (!window.confirm('¿Seguro que deseas cancelar este pedido? Esta acción no se puede deshacer.')) return;
@@ -302,17 +318,89 @@ export const OrderDetailPage: React.FC = () => {
         )}
       </Card>
 
-      {/* Destino y Geolocalización (Maps Fallback) */}
-      <Card className="p-5 space-y-3">
-        <h3 className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
-          <MapPin className="w-4 h-4 text-gray-700" /> Ubicación y Entrega
-        </h3>
-        <p className="text-xs text-gray-600">
-          Dirección asignada al pedido #{order.id} con coordenadas verificadas.
-        </p>
-        <div className="p-3 bg-gray-50 rounded-xl border border-gray-100 text-[11px] text-gray-500">
-          🗺️ <strong>Modo mapa:</strong> Sin clave pública de Google Maps configurada (<code className="font-mono bg-gray-200 px-1 rounded">fastgo.maps.enabled=false</code>). Se visualiza ubicación estática por dirección sin errores de script.
+      {/* Destino y Geolocalización / Tracking GPS */}
+      <Card className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-emerald-600" /> Ubicación y Datos de Entrega
+          </h3>
+          {order.estado === 'EN_CAMINO' && (
+            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 animate-pulse flex items-center gap-1">
+              <Navigation className="w-3 h-3 text-blue-600" /> GPS en vivo
+            </span>
+          )}
         </div>
+
+        <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 space-y-2 text-xs">
+          <div>
+            <span className="font-bold text-gray-500 uppercase tracking-wider text-[10px] block">Dirección de Entrega</span>
+            <p className="font-extrabold text-gray-900 text-sm">
+              {order.destinoDireccion || order.direccionTexto || 'Dirección de entrega asignada'}
+              {order.destinoCiudad && <span className="text-gray-600 font-semibold ml-1">({order.destinoCiudad})</span>}
+            </p>
+          </div>
+
+          {order.destinoReferencia && (
+            <p className="text-gray-600 text-[11px] italic bg-white p-2 rounded-lg border border-gray-200">
+              <span className="font-bold not-italic text-gray-700">Punto de referencia:</span> {order.destinoReferencia}
+            </p>
+          )}
+
+          {order.destinoLatitud != null && order.destinoLongitud != null && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-gray-500">
+                Coordenadas destino: <strong>{order.destinoLatitud.toFixed(4)}, {order.destinoLongitud.toFixed(4)}</strong>
+              </span>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${order.destinoLatitud},${order.destinoLongitud}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-blue-600 hover:text-blue-800 text-[11px] flex items-center gap-1"
+              >
+                Abrir en Google Maps ↗
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Telemetría GPS en tiempo real cuando el repartidor está en camino */}
+        {order.estado === 'EN_CAMINO' && (
+          <div className="p-3.5 bg-blue-50/80 rounded-xl border border-blue-200 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-blue-900 flex items-center gap-1.5 text-xs">
+                <Bike className="w-4 h-4 text-blue-600" /> Repartidor en Ruta hacia tu Ubicación
+              </span>
+              <span className="text-[10px] text-blue-700 font-semibold">Telemetría GPS FastGo</span>
+            </div>
+
+            {tracking ? (
+              <div className="space-y-2 pt-1 text-[11px] text-blue-800">
+                <p>
+                  Posición actual: <strong>{tracking.latitud.toFixed(5)}, {tracking.longitud.toFixed(5)}</strong>
+                  {tracking.velocidad != null && ` • ${(tracking.velocidad * 3.6).toFixed(0)} km/h`}
+                  {tracking.precision != null && ` • Precisión: ±${Math.round(tracking.precision)}m`}
+                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-blue-600">
+                    Último reporte: {formatDate(tracking.fechaHora)}
+                  </span>
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${tracking.latitud},${tracking.longitud}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 text-[10px]"
+                  >
+                    Ver Repartidor en Mapa ↗
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <p className="text-[11px] text-blue-700">
+                Repartidor en desplazamiento. Esperando primera transmisión de coordenadas desde el dispositivo...
+              </p>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Observaciones */}

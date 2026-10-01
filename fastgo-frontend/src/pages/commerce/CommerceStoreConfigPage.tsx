@@ -26,10 +26,14 @@ import { Spinner } from '../../components/common/Spinner';
 import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../context/ToastContext';
 import { APP_ROUTES } from '../../constants/routes';
+import { useMerchantStore } from '../../context/MerchantStoreContext';
+import { StoreSwitcher } from '../../components/commerce/StoreSwitcher';
+import { formatCurrency } from '../../utils/formatters';
 
 export const CommerceStoreConfigPage: React.FC = () => {
   const navigate = useNavigate();
   const { success, error: showError } = useToast();
+  const { stores, selectedStore, refreshStores, subscriptionConfig } = useMerchantStore();
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -67,13 +71,10 @@ export const CommerceStoreConfigPage: React.FC = () => {
   useEffect(() => {
     const loadStoreData = async () => {
       try {
-        const [cats, own] = await Promise.all([
-          categoriaService.listActiveCommerceCategories().catch(() => []),
-          commerceService.getPropio().catch(() => null),
-        ]);
-
+        const cats = await categoriaService.listActiveCommerceCategories().catch(() => []);
         setCategories(cats);
 
+        const own = selectedStore;
         if (own) {
           setExistingStore(own);
           setFormData({
@@ -112,7 +113,7 @@ export const CommerceStoreConfigPage: React.FC = () => {
     };
 
     loadStoreData();
-  }, []);
+  }, [selectedStore]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -182,10 +183,12 @@ export const CommerceStoreConfigPage: React.FC = () => {
       if (existingStore) {
         const updated = await commerceService.updateCommerce(existingStore.id, formData);
         setExistingStore(updated);
+        await refreshStores();
         success('¡Tienda actualizada exitosamente!');
       } else {
         const created = await commerceService.createCommerce(formData);
         setExistingStore(created);
+        await refreshStores();
         success('¡Tu tienda ha sido creada y configurada con éxito!');
       }
       setTimeout(() => {
@@ -221,7 +224,7 @@ export const CommerceStoreConfigPage: React.FC = () => {
           </Link>
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900 flex items-center gap-2.5">
             <Building2 className="w-7 h-7 text-purple-600" />
-            {existingStore ? 'Configuración de Mi Tienda' : 'Crear y Configurar Mi Tienda'}
+            {existingStore ? `Configuración de ${existingStore.nombre}` : 'Crear y Configurar Mi Tienda'}
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
             Personaliza tu perfil comercial, datos de contacto, horarios y visibilidad para tus clientes.
@@ -236,6 +239,9 @@ export const CommerceStoreConfigPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Multi-Store Switcher */}
+      <StoreSwitcher />
 
       {/* Multi-sector announcement banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-emerald-500/10 border border-purple-200/60 flex items-start gap-3">

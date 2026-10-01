@@ -8,6 +8,7 @@ export interface CategoriaProducto {
 
 export interface Producto {
   id: number;
+  comercioId?: number;
   sucursalId: number;
   categoriaId: number;
   nombre: string;
@@ -24,6 +25,7 @@ export interface Producto {
 }
 
 export interface ProductoRequest {
+  comercioId?: number;
   sucursalId: number;
   categoriaId: number;
   nombre: string;

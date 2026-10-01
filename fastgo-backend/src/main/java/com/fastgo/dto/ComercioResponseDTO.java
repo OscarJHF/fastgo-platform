@@ -1,6 +1,7 @@
 package com.fastgo.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public class ComercioResponseDTO {
 
@@ -33,6 +34,20 @@ public class ComercioResponseDTO {
     private String bancolombiaNumeroCuenta;
     private String bancolombiaTitular;
     private String bancolombiaDocTitular;
+
+    private Boolean esPrincipal;
+    private String estado;
+    private Integer usuarioId;
+    private String usuarioNombre;
+    private String usuarioCorreo;
+    private String creadoEn;
+    private String fechaInicioSuscripcion;
+    private String fechaFinSuscripcion;
+    private String tipoPlan;
+    private String estadoSuscripcion;
+    private BigDecimal precioMensual;
+    private BigDecimal precioActivacion;
+    private Boolean esGratuito;
 
     public ComercioResponseDTO() {
     }
@@ -194,4 +209,46 @@ public class ComercioResponseDTO {
 
     public String getBancolombiaDocTitular() { return bancolombiaDocTitular; }
     public void setBancolombiaDocTitular(String bancolombiaDocTitular) { this.bancolombiaDocTitular = bancolombiaDocTitular; }
+
+    public Boolean getEsPrincipal() { return esPrincipal; }
+    public void setEsPrincipal(Boolean esPrincipal) { this.esPrincipal = esPrincipal; }
+
+    public String getEstado() { return estado != null ? estado : "ACTIVA"; }
+    public void setEstado(String estado) { this.estado = estado; }
+
+    public Integer getUsuarioId() { return usuarioId; }
+    public void setUsuarioId(Integer usuarioId) { this.usuarioId = usuarioId; }
+
+    public String getUsuarioNombre() { return usuarioNombre; }
+    public void setUsuarioNombre(String usuarioNombre) { this.usuarioNombre = usuarioNombre; }
+
+    public String getUsuarioCorreo() { return usuarioCorreo; }
+    public void setUsuarioCorreo(String usuarioCorreo) { this.usuarioCorreo = usuarioCorreo; }
+
+    public String getCreadoEn() { return creadoEn; }
+    public void setCreadoEn(String creadoEn) { this.creadoEn = creadoEn; }
+    public void setCreadoEn(LocalDateTime creadoEn) { this.creadoEn = creadoEn != null ? creadoEn.toString() : null; }
+
+    public String getFechaInicioSuscripcion() { return fechaInicioSuscripcion; }
+    public void setFechaInicioSuscripcion(String fechaInicioSuscripcion) { this.fechaInicioSuscripcion = fechaInicioSuscripcion; }
+    public void setFechaInicioSuscripcion(LocalDateTime fechaInicioSuscripcion) { this.fechaInicioSuscripcion = fechaInicioSuscripcion != null ? fechaInicioSuscripcion.toString() : null; }
+
+    public String getFechaFinSuscripcion() { return fechaFinSuscripcion; }
+    public void setFechaFinSuscripcion(String fechaFinSuscripcion) { this.fechaFinSuscripcion = fechaFinSuscripcion; }
+    public void setFechaFinSuscripcion(LocalDateTime fechaFinSuscripcion) { this.fechaFinSuscripcion = fechaFinSuscripcion != null ? fechaFinSuscripcion.toString() : null; }
+
+    public String getTipoPlan() { return tipoPlan; }
+    public void setTipoPlan(String tipoPlan) { this.tipoPlan = tipoPlan; }
+
+    public String getEstadoSuscripcion() { return estadoSuscripcion; }
+    public void setEstadoSuscripcion(String estadoSuscripcion) { this.estadoSuscripcion = estadoSuscripcion; }
+
+    public BigDecimal getPrecioMensual() { return precioMensual; }
+    public void setPrecioMensual(BigDecimal precioMensual) { this.precioMensual = precioMensual; }
+
+    public BigDecimal getPrecioActivacion() { return precioActivacion; }
+    public void setPrecioActivacion(BigDecimal precioActivacion) { this.precioActivacion = precioActivacion; }
+
+    public Boolean getEsGratuito() { return esGratuito; }
+    public void setEsGratuito(Boolean esGratuito) { this.esGratuito = esGratuito; }
 }

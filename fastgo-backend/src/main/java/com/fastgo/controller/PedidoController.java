@@ -66,8 +66,18 @@ public class PedidoController {
 
     @GetMapping("/estado/{estado}")
     @PreAuthorize("hasRole('COMERCIO')")
-    public ResponseEntity<List<Pedido>> porEstado(@PathVariable @Size(max = 30) String estado) {
-        return ResponseEntity.ok(pedidoService.listarPorEstado(estado));
+    public ResponseEntity<List<Pedido>> porEstado(
+            @PathVariable @Size(max = 30) String estado,
+            @RequestParam(required = false) Integer comercioId) {
+        return ResponseEntity.ok(pedidoService.listarPorEstado(estado, comercioId));
+    }
+
+    @GetMapping("/comercio")
+    @PreAuthorize("hasRole('COMERCIO')")
+    public ResponseEntity<List<Pedido>> pedidosComercio(
+            @RequestParam(required = false) Integer comercioId,
+            @RequestParam(required = false) String estado) {
+        return ResponseEntity.ok(pedidoService.listarPorEstado(estado, comercioId));
     }
 
     @GetMapping("/{id}/detalles")

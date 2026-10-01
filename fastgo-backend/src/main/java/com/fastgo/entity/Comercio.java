@@ -87,6 +87,12 @@ public class Comercio {
     @Column(name = "bancolombia_doc_titular", length = 50)
     private String bancolombiaDocTitular;
 
+    @Column(name = "es_principal")
+    private Boolean esPrincipal;
+
+    @Column(name = "estado", length = 30)
+    private String estado;
+
     public Comercio() {
     }
 
@@ -99,6 +105,14 @@ public class Comercio {
 
         if (activo == null) {
             activo = true;
+        }
+
+        if (esPrincipal == null) {
+            esPrincipal = false;
+        }
+
+        if (estado == null) {
+            estado = "ACTIVA";
         }
 
         if (metodosPago == null) {
@@ -292,7 +306,7 @@ public class Comercio {
     }
 
     public boolean isAbierto() {
-        if (Boolean.FALSE.equals(activo)) return false;
+        if (!isOperativa()) return false;
         if (Boolean.TRUE.equals(pausaManual)) return false;
         return isDentroDeHorario();
     }
@@ -340,6 +354,11 @@ public class Comercio {
     }
 
     public String getMensajeEstado() {
+        if ("PENDIENTE_ACTIVACION".equalsIgnoreCase(getEstado())) return "Tienda pendiente de activación por administración";
+        if ("PENDIENTE_PAGO".equalsIgnoreCase(getEstado())) return "Tienda pendiente de pago de suscripción";
+        if ("SUSPENDIDA".equalsIgnoreCase(getEstado())) return "Tienda suspendida administrativamente";
+        if ("DESACTIVADA".equalsIgnoreCase(getEstado())) return "Tienda desactivada";
+        if ("VENCIDA".equalsIgnoreCase(getEstado())) return "Suscripción vencida";
         if (Boolean.FALSE.equals(activo)) return "Comercio inactivo";
         if (Boolean.TRUE.equals(pausaManual)) return "Cerrado temporalmente por el comercio";
         if (!isDentroDeHorario()) {
@@ -412,5 +431,25 @@ public class Comercio {
             if (m.trim().equalsIgnoreCase(clean)) return true;
         }
         return false;
+    }
+
+    public Boolean getEsPrincipal() {
+        return esPrincipal;
+    }
+
+    public void setEsPrincipal(Boolean esPrincipal) {
+        this.esPrincipal = esPrincipal;
+    }
+
+    public String getEstado() {
+        return estado != null ? estado : "ACTIVA";
+    }
+
+    public void setEstado(String estado) {
+        this.estado = estado;
+    }
+
+    public boolean isOperativa() {
+        return Boolean.TRUE.equals(activo) && "ACTIVA".equalsIgnoreCase(getEstado());
     }
 }

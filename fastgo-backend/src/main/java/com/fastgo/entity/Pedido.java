@@ -141,6 +141,33 @@ public class Pedido {
     @Transient
     private String sucursalNombre;
 
+    @Transient
+    private BigDecimal gananciaDomiciliario;
+
+    @Transient
+    private String destinoDireccion;
+
+    @Transient
+    private String destinoCiudad;
+
+    @Transient
+    private String destinoReferencia;
+
+    @Transient
+    private BigDecimal destinoLatitud;
+
+    @Transient
+    private BigDecimal destinoLongitud;
+
+    @Transient
+    private BigDecimal origenLatitud;
+
+    @Transient
+    private BigDecimal origenLongitud;
+
+    @Transient
+    private String origenTelefono;
+
     public String getClienteNombre() { return clienteNombre; }
     public void setClienteNombre(String clienteNombre) { this.clienteNombre = clienteNombre; }
 
@@ -158,4 +185,35 @@ public class Pedido {
 
     public String getSucursalNombre() { return sucursalNombre; }
     public void setSucursalNombre(String sucursalNombre) { this.sucursalNombre = sucursalNombre; }
+
+    public BigDecimal getGananciaDomiciliario() {
+        return costoEnvio != null ? costoEnvio : BigDecimal.valueOf(2000);
+    }
+    public void setGananciaDomiciliario(BigDecimal gananciaDomiciliario) {
+        this.gananciaDomiciliario = gananciaDomiciliario;
+    }
+
+    public String getDestinoDireccion() { return destinoDireccion; }
+    public void setDestinoDireccion(String destinoDireccion) { this.destinoDireccion = destinoDireccion; }
+
+    public String getDestinoCiudad() { return destinoCiudad; }
+    public void setDestinoCiudad(String destinoCiudad) { this.destinoCiudad = destinoCiudad; }
+
+    public String getDestinoReferencia() { return destinoReferencia; }
+    public void setDestinoReferencia(String destinoReferencia) { this.destinoReferencia = destinoReferencia; }
+
+    public BigDecimal getDestinoLatitud() { return destinoLatitud; }
+    public void setDestinoLatitud(BigDecimal destinoLatitud) { this.destinoLatitud = destinoLatitud; }
+
+    public BigDecimal getDestinoLongitud() { return destinoLongitud; }
+    public void setDestinoLongitud(BigDecimal destinoLongitud) { this.destinoLongitud = destinoLongitud; }
+
+    public BigDecimal getOrigenLatitud() { return origenLatitud; }
+    public void setOrigenLatitud(BigDecimal origenLatitud) { this.origenLatitud = origenLatitud; }
+
+    public BigDecimal getOrigenLongitud() { return origenLongitud; }
+    public void setOrigenLongitud(BigDecimal origenLongitud) { this.origenLongitud = origenLongitud; }
+
+    public String getOrigenTelefono() { return origenTelefono; }
+    public void setOrigenTelefono(String origenTelefono) { this.origenTelefono = origenTelefono; }
 }

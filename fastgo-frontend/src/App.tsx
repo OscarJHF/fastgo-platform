@@ -3,6 +3,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
+import { MerchantStoreProvider } from './context/MerchantStoreContext';
 import { AppRoutes } from './routes';
 
 export const App: React.FC = () => {
@@ -10,9 +11,11 @@ export const App: React.FC = () => {
     <BrowserRouter>
       <ToastProvider>
         <AuthProvider>
-          <CartProvider>
-            <AppRoutes />
-          </CartProvider>
+          <MerchantStoreProvider>
+            <CartProvider>
+              <AppRoutes />
+            </CartProvider>
+          </MerchantStoreProvider>
         </AuthProvider>
       </ToastProvider>
     </BrowserRouter>

@@ -127,6 +127,11 @@ public class PedidoService {
         Comercio comercio = comercioRepository.findById(sucursal.getComercioId())
                 .orElseThrow(() -> new RuntimeException("Comercio no encontrado"));
 
+        // Validar si el comercio se encuentra activo y operativo
+        if (!comercio.isOperativa()) {
+            throw new IllegalStateException("El comercio '" + comercio.getNombre() + "' no se encuentra activo u operativo actualmente (" + comercio.getEstado() + ").");
+        }
+
         // Validar si el comercio se encuentra abierto
         if (!comercio.isAbierto()) {
             throw new IllegalStateException("El comercio '" + comercio.getNombre() + "' se encuentra actualmente cerrado. Consulta sus horarios de atención.");
@@ -264,6 +269,10 @@ public class PedidoService {
             return enriquecerPedido(pedido);
         }
 
+        if ("ADMIN".equalsIgnoreCase(rol(usuario))) {
+            return enriquecerPedido(pedido);
+        }
+
         if ("DOMICILIARIO".equalsIgnoreCase(rol(usuario))
                 && usuario.getId().equals(pedido.getDomiciliarioId())) {
             return enriquecerPedido(pedido);
@@ -298,6 +307,10 @@ public class PedidoService {
     }
 
     public List<Pedido> listarPorEstado(String estado) {
+        return listarPorEstado(estado, null);
+    }
+
+    public List<Pedido> listarPorEstado(String estado, Integer comercioId) {
         Usuario usuario = usuario();
         if (!"COMERCIO".equalsIgnoreCase(rol(usuario))) {
             throw new RuntimeException(
@@ -308,13 +321,20 @@ public class PedidoService {
                 ? ""
                 : estado.trim().toUpperCase();
 
-        return enriquecerPedidos(sucursalRepository.findByComercioId(
-                        comercioPropio(usuario).getId())
-                .stream()
-                .flatMap(sucursal ->
-                        pedidoRepository.findBySucursalId(sucursal.getId()).stream())
-                .filter(pedido ->
-                        pedido.getEstado().equalsIgnoreCase(estadoNormalizado))
+        List<Comercio> comercios;
+        if (comercioId != null) {
+            Comercio c = comercioRepository.findByIdAndUsuarioId(comercioId, usuario.getId())
+                    .orElseThrow(() -> new RuntimeException("Comercio no encontrado o no pertenece al usuario"));
+            comercios = List.of(c);
+        } else {
+            comercios = comercioRepository.findAllByUsuarioIdOrderByCreadoEnAsc(usuario.getId());
+        }
+
+        return enriquecerPedidos(comercios.stream()
+                .flatMap(c -> sucursalRepository.findByComercioId(c.getId()).stream())
+                .flatMap(sucursal -> pedidoRepository.findBySucursalId(sucursal.getId()).stream())
+                .filter(pedido -> estadoNormalizado.isBlank() || "TODOS".equalsIgnoreCase(estadoNormalizado) || pedido.getEstado().equalsIgnoreCase(estadoNormalizado))
+                .sorted((p1, p2) -> p2.getId().compareTo(p1.getId()))
                 .toList());
     }
 
@@ -357,6 +377,11 @@ public class PedidoService {
 
     private Pedido enriquecerPedido(Pedido p) {
         if (p == null) return null;
+
+        // Invariante de negocio: Ganancia del domiciliario es exactamente el deliveryFee congelado en el pedido
+        BigDecimal costo = p.getCostoEnvio() != null ? p.getCostoEnvio() : BigDecimal.valueOf(2000);
+        p.setGananciaDomiciliario(costo);
+
         if (p.getUsuarioId() != null) {
             usuarioRepository.findById(p.getUsuarioId()).ifPresent(u -> {
                 String nombreCompleto = u.getNombre() + (u.getApellido() != null && !u.getApellido().isBlank() ? " " + u.getApellido() : "");
@@ -368,6 +393,11 @@ public class PedidoService {
             direccionRepository.findById(p.getDireccionId()).ifPresent(d -> {
                 String dir = d.getDireccion() + (d.getCiudad() != null && !d.getCiudad().isBlank() ? ", " + d.getCiudad() : "");
                 p.setDireccionTexto(dir);
+                p.setDestinoDireccion(d.getDireccion());
+                p.setDestinoCiudad(d.getCiudad());
+                p.setDestinoReferencia(d.getAlias());
+                p.setDestinoLatitud(d.getLatitud());
+                p.setDestinoLongitud(d.getLongitud());
             });
         }
         if (p.getSucursalId() != null) {
@@ -375,6 +405,9 @@ public class PedidoService {
                 p.setSucursalNombre(s.getNombre());
                 String dir = s.getDireccion() + (s.getCiudad() != null && !s.getCiudad().isBlank() ? ", " + s.getCiudad() : "");
                 p.setComercioDireccion(dir);
+                p.setOrigenLatitud(s.getLatitud());
+                p.setOrigenLongitud(s.getLongitud());
+                p.setOrigenTelefono(s.getTelefono());
                 if (s.getComercioId() != null) {
                     comercioRepository.findById(s.getComercioId()).ifPresent(c -> {
                         p.setComercioNombre(c.getNombre());
@@ -382,6 +415,16 @@ public class PedidoService {
                 }
             });
         }
+
+        // REGLA DE PRIVACIDAD: Si el usuario actual es un domiciliario y el pedido aún no está asignado a él,
+        // ocultamos el teléfono privado del cliente para prevenir recolección no autorizada de datos.
+        Usuario solicitante = usuarioOpcional();
+        if (solicitante != null && "DOMICILIARIO".equalsIgnoreCase(rol(solicitante))) {
+            if (p.getDomiciliarioId() == null || !p.getDomiciliarioId().equals(solicitante.getId())) {
+                p.setClienteTelefono(null);
+            }
+        }
+
         return p;
     }
 
@@ -685,6 +728,14 @@ public class PedidoService {
                 .orElseThrow(() ->
                         new RuntimeException(
                                 "Usuario autenticado no encontrado"));
+    }
+
+    private Usuario usuarioOpcional() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || authentication.getName() == null || "anonymousUser".equals(authentication.getPrincipal())) {
+            return null;
+        }
+        return usuarioRepository.findByCorreo(authentication.getName()).orElse(null);
     }
 
     private String rol(Usuario usuario) {

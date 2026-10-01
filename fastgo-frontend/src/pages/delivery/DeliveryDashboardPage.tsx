@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { encomiendaService } from '../../services/encomiendaService';
+import { trackingService } from '../../services/trackingService';
 import { Pedido, Encomienda, EstadoEncomienda } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -60,6 +61,35 @@ export const DeliveryDashboardPage: React.FC = () => {
   useEffect(() => {
     loadDeliveryData();
   }, []);
+
+  // Telemetría GPS en tiempo real para pedidos en ruta (EN_CAMINO)
+  useEffect(() => {
+    const activeRouteOrder = myDeliveries.find((p) => p.estado === 'EN_CAMINO');
+    if (!activeRouteOrder || !navigator.geolocation) return;
+
+    const emitLocation = (pos: GeolocationPosition) => {
+      trackingService.enviarUbicacion({
+        pedidoId: activeRouteOrder.id,
+        latitud: pos.coords.latitude,
+        longitud: pos.coords.longitude,
+        precision: pos.coords.accuracy,
+        rumbo: pos.coords.heading || undefined,
+        velocidad: pos.coords.speed || undefined,
+      }).catch(() => {});
+    };
+
+    navigator.geolocation.getCurrentPosition(emitLocation, () => {}, { enableHighAccuracy: true });
+
+    const watchId = navigator.geolocation.watchPosition(emitLocation, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 10000,
+      timeout: 15000,
+    });
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, [myDeliveries]);
 
   // Handlers para Pedidos de Comercio con Aceptación Atómica
   const handleClaimOrder = async (id: number) => {
@@ -251,16 +281,37 @@ export const DeliveryDashboardPage: React.FC = () => {
                             </span>
                             <span className="font-extrabold text-gray-900">{order.comercioNombre || 'Comercio FastGo'}</span>
                             <p className="text-[11px] text-gray-600">{order.comercioDireccion || 'Dirección de la sede'}</p>
+                            {order.origenTelefono && (
+                              <p className="text-[10px] text-purple-700 font-bold mt-0.5">📞 Tel: {order.origenTelefono}</p>
+                            )}
                           </div>
                           <div>
                             <span className="font-bold text-emerald-700 block text-[10px] uppercase flex items-center gap-1">
                               <MapPin className="w-3 h-3" /> Entregar a (Cliente):
                             </span>
-                            <span className="font-extrabold text-gray-900">{order.clienteNombre || 'Cliente'}</span>
-                            <p className="text-[11px] text-gray-600">{order.direccionTexto || 'Dirección de entrega'}</p>
+                            <span className="font-extrabold text-gray-900">
+                              {order.clienteNombre || 'Cliente'} {order.clienteTelefono && <span className="text-emerald-700 font-bold">({order.clienteTelefono})</span>}
+                            </span>
+                            <p className="text-[11px] text-gray-600">
+                              {order.destinoDireccion || order.direccionTexto || 'Dirección de entrega'}
+                              {order.destinoCiudad && ` (${order.destinoCiudad})`}
+                            </p>
+                            {order.destinoReferencia && (
+                              <p className="text-[10px] text-gray-500 italic mt-0.5">Ref: {order.destinoReferencia}</p>
+                            )}
+                            {order.destinoLatitud != null && order.destinoLongitud != null && (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${order.destinoLatitud},${order.destinoLongitud}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 mt-1"
+                              >
+                                📍 Navegar en Google Maps ({order.destinoLatitud.toFixed(4)}, {order.destinoLongitud.toFixed(4)})
+                              </a>
+                            )}
                           </div>
                           <div className="sm:col-span-2 pt-1 border-t border-gray-200/50 flex items-center justify-between text-[11px]">
-                            <span className="text-gray-500">Ganancia domicilio: <strong className="text-emerald-700">{formatCurrency(order.costoEnvio)}</strong></span>
+                            <span className="text-gray-500">Ganancia domicilio: <strong className="text-emerald-700">{formatCurrency(order.gananciaDomiciliario ?? order.costoEnvio)}</strong></span>
                             <span className="text-gray-500">Cobro total: <strong className="text-gray-900">{formatCurrency(order.total)}</strong> ({order.metodoPago || 'EFECTIVO'})</span>
                           </div>
                         </div>
@@ -324,8 +375,17 @@ export const DeliveryDashboardPage: React.FC = () => {
                         </p>
                         <p className="font-extrabold text-gray-900 text-sm">{order.clienteNombre || 'Cliente'}</p>
                         <p className="text-gray-600 text-[11px]">
-                          {order.direccionTexto || 'Dirección de entrega asignada'}
+                          {order.destinoDireccion || order.direccionTexto || 'Dirección de entrega asignada'}
+                          {order.destinoCiudad && ` (${order.destinoCiudad})`}
                         </p>
+                        {order.destinoReferencia && (
+                          <p className="text-[10px] text-gray-500 italic">Ref: {order.destinoReferencia}</p>
+                        )}
+                        {order.destinoLatitud != null && order.destinoLongitud != null && (
+                          <span className="text-[10px] text-blue-600 font-semibold block">
+                            GPS: {order.destinoLatitud.toFixed(4)}, {order.destinoLongitud.toFixed(4)}
+                          </span>
+                        )}
                       </div>
 
                       {/* Ganancia del Domiciliario */}
@@ -334,9 +394,9 @@ export const DeliveryDashboardPage: React.FC = () => {
                           <DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Ganancia por Domicilio
                         </p>
                         <p className="font-black text-emerald-700 text-lg">
-                          {formatCurrency(order.costoEnvio)}
+                          {formatCurrency(order.gananciaDomiciliario ?? order.costoEnvio)}
                         </p>
-                        <p className="text-[10px] text-emerald-600">Tarifa fija fijada por el comercio</p>
+                        <p className="text-[10px] text-emerald-600">Tarifa fija congelada en el pedido</p>
                       </div>
                     </div>
 

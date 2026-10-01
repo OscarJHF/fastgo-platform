@@ -20,8 +20,8 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 
-// URL de pruebas locales mediante ADB reverse en dispositivo fisico
-const DEFAULT_API_URL = "http://localhost:8080";
+// URL de conexión oficial FastGo (Producción por defecto / configurable vía EXPO_PUBLIC_FASTGO_API_URL)
+const DEFAULT_API_URL = process.env.EXPO_PUBLIC_FASTGO_API_URL || "https://fastgo-backend-lp2j.onrender.com";
 
 // ==========================================
 // PALETA DE COLORES OFICIAL FASTGO
@@ -73,6 +73,15 @@ interface Comercio {
   banner?: string;
   logoUrl?: string;
   bannerUrl?: string;
+  esPrincipal?: boolean;
+  estado?: string;
+  esGratuito?: boolean;
+  tipoPlan?: string;
+  estadoSuscripcion?: string;
+  fechaInicioSuscripcion?: string;
+  fechaFinSuscripcion?: string;
+  precioMensual?: number;
+  precioActivacion?: number;
 }
 
 interface Producto {
@@ -128,6 +137,15 @@ interface PedidoItem {
   comercioDireccion?: string;
   distanciaKm?: number;
   creadoEn?: string;
+  gananciaDomiciliario?: number;
+  destinoDireccion?: string;
+  destinoCiudad?: string;
+  destinoReferencia?: string;
+  destinoLatitud?: number | null;
+  destinoLongitud?: number | null;
+  origenLatitud?: number | null;
+  origenLongitud?: number | null;
+  origenTelefono?: string;
 }
 
 interface DetallePedidoItem {
@@ -228,6 +246,19 @@ export default function App() {
   // Comercio y Tienda Propia
   const [comercioPropio, setComercioPropio] = useState<any>(null);
   const [togglingPause, setTogglingPause] = useState<boolean>(false);
+
+  // Multi-tiendas y Suscripciones (Fase 2)
+  const [misTiendas, setMisTiendas] = useState<any[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<number | null>(null);
+  const [subConfig, setSubConfig] = useState<any>(null);
+  const [showStoreSwitcherModal, setShowStoreSwitcherModal] = useState<boolean>(false);
+  const [showNewStoreModal, setShowNewStoreModal] = useState<boolean>(false);
+  const [newStoreNombre, setNewStoreNombre] = useState<string>("");
+  const [newStoreDireccion, setNewStoreDireccion] = useState<string>("");
+  const [newStoreTelefono, setNewStoreTelefono] = useState<string>("");
+  const [newStoreCorreo, setNewStoreCorreo] = useState<string>("");
+  const [newStoreCiudad, setNewStoreCiudad] = useState<string>("Bogotá");
+  const [isCreatingNewStore, setIsCreatingNewStore] = useState<boolean>(false);
 
   // Método de Pago Seleccionado
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("EFECTIVO");
@@ -705,25 +736,133 @@ export default function App() {
     }
   };
 
-  const fetchComercioPropio = async (jwt = token) => {
+  const fetchComercioPropio = async (jwt = token, targetStoreId?: number) => {
     if (!jwt) return;
     try {
-      const res = await fetch(`${apiUrl}/api/comercios/propio`, {
+      // 1. Cargar todas las tiendas del comerciante (Fase 2 Multitiendas)
+      const resStores = await fetch(`${apiUrl}/api/comercios/mis-tiendas`, {
         headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setComercioPropio(data);
-        setStoreTarifaDomicilio(String(data.tarifaDomicilio || 2000));
-        setStoreBancolombiaActivo(Boolean(data.bancolombiaActivo));
-        setStoreBancolombiaTipoCuenta(data.bancolombiaTipoCuenta || "AHORROS");
-        setStoreBancolombiaNumeroCuenta(data.bancolombiaNumeroCuenta || "");
-        setStoreBancolombiaTitular(data.bancolombiaTitular || "");
-        setStoreBancolombiaDocTitular(data.bancolombiaDocTitular || "");
-        setStoreLogoUrl(data.logo || data.logoUrl || "");
-        setStoreBannerUrl(data.banner || data.bannerUrl || "");
+      let stores: Comercio[] = [];
+      if (resStores.ok) {
+        stores = await resStores.json();
+        setMisTiendas(stores);
+      }
+
+      // 2. Cargar tarifas de suscripciones
+      fetch(`${apiUrl}/api/comercios/suscripciones/configuracion`, {
+        headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((cfg) => {
+          if (cfg) setSubConfig(cfg);
+        })
+        .catch(() => {});
+
+      // 3. Determinar tienda a seleccionar
+      let activeStore: any = null;
+      if (stores.length > 0) {
+        if (targetStoreId) {
+          activeStore = stores.find((s) => s.id === targetStoreId) || stores[0];
+        } else if (selectedStoreId) {
+          activeStore = stores.find((s) => s.id === selectedStoreId) || stores[0];
+        } else {
+          activeStore = stores.find((s) => s.esPrincipal) || stores[0];
+        }
+      } else {
+        const resSingle = await fetch(`${apiUrl}/api/comercios/propio`, {
+          headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
+        });
+        if (resSingle.ok) {
+          activeStore = await resSingle.json();
+          setMisTiendas([activeStore]);
+        }
+      }
+
+      if (activeStore) {
+        setSelectedStoreId(activeStore.id);
+        setComercioPropio(activeStore);
+        setStoreTarifaDomicilio(String(activeStore.tarifaDomicilio || 2000));
+        setStoreBancolombiaActivo(Boolean(activeStore.bancolombiaActivo));
+        setStoreBancolombiaTipoCuenta(activeStore.bancolombiaTipoCuenta || "AHORROS");
+        setStoreBancolombiaNumeroCuenta(activeStore.bancolombiaNumeroCuenta || "");
+        setStoreBancolombiaTitular(activeStore.bancolombiaTitular || "");
+        setStoreBancolombiaDocTitular(activeStore.bancolombiaDocTitular || "");
+        setStoreLogoUrl(activeStore.logo || activeStore.logoUrl || "");
+        setStoreBannerUrl(activeStore.banner || activeStore.bannerUrl || "");
+        fetchPedidosComercio(jwt, activeStore);
       }
     } catch {}
+  };
+
+  const handleSelectStore = (store: any) => {
+    setSelectedStoreId(store.id);
+    setComercioPropio(store);
+    setStoreTarifaDomicilio(String(store.tarifaDomicilio || 2000));
+    setStoreBancolombiaActivo(Boolean(store.bancolombiaActivo));
+    setStoreBancolombiaTipoCuenta(store.bancolombiaTipoCuenta || "AHORROS");
+    setStoreBancolombiaNumeroCuenta(store.bancolombiaNumeroCuenta || "");
+    setStoreBancolombiaTitular(store.bancolombiaTitular || "");
+    setStoreBancolombiaDocTitular(store.bancolombiaDocTitular || "");
+    setStoreLogoUrl(store.logo || store.logoUrl || "");
+    setStoreBannerUrl(store.banner || store.bannerUrl || "");
+    setShowStoreSwitcherModal(false);
+    fetchPedidosComercio(token, store);
+  };
+
+  const handleCreateAdditionalStore = async () => {
+    if (!token) return;
+    if (!newStoreNombre.trim() || !newStoreDireccion.trim() || !newStoreTelefono.trim() || !newStoreCorreo.trim()) {
+      Alert.alert("Campos Requeridos", "Por favor ingresa nombre, dirección, teléfono y correo de la nueva tienda.");
+      return;
+    }
+    setIsCreatingNewStore(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/comercios`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          nombre: newStoreNombre.trim(),
+          direccion: newStoreDireccion.trim(),
+          telefono: newStoreTelefono.trim(),
+          correo: newStoreCorreo.trim(),
+          ciudad: newStoreCiudad.trim() || "Bogotá",
+          categoriaId: 1,
+          horaApertura: "08:00",
+          horaCierre: "20:00",
+          diasAtencion: "Lunes a Domingo",
+          tiempoPreparacionMin: 25,
+          tarifaDomicilio: 2000,
+          metodosPago: "EFECTIVO, TARJETA, PSE, TRANSFERENCIA",
+          activo: false,
+        }),
+      });
+
+      if (res.ok) {
+        const created = await res.json();
+        Alert.alert(
+          "¡Tienda Creada!",
+          `Tu tienda "${created.nombre}" fue registrada exitosamente en estado PENDIENTE DE ACTIVACIÓN. El equipo administrativo revisará y activará la sede para recibir pedidos.`
+        );
+        setShowNewStoreModal(false);
+        setNewStoreNombre("");
+        setNewStoreDireccion("");
+        setNewStoreTelefono("");
+        setNewStoreCorreo("");
+        await fetchComercioPropio(token, created.id);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || err.mensaje || "No se pudo crear la tienda adicional.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error de Red", e.message || "Error al conectar con el servidor.");
+    } finally {
+      setIsCreatingNewStore(false);
+    }
   };
 
   const handleSaveStoreConfig = async () => {
@@ -761,7 +900,8 @@ export default function App() {
         bancolombiaDocTitular: storeBancolombiaDocTitular,
       };
 
-      const res = await fetch(`${apiUrl}/api/comercios/propio`, {
+      const url = comercioPropio?.id ? `${apiUrl}/api/comercios/${comercioPropio.id}` : `${apiUrl}/api/comercios/propio`;
+      const res = await fetch(url, {
         method: "PUT",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -773,6 +913,7 @@ export default function App() {
       if (res.ok) {
         const updated = await res.json();
         setComercioPropio(updated);
+        setMisTiendas((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
         Alert.alert("Éxito", "Configuración de comercio y Bancolombia guardada correctamente.");
         loadComercios();
       } else {
@@ -829,6 +970,7 @@ export default function App() {
         imagenPrincipal: prodFormImagen || undefined,
         imagenUrl: prodFormImagen || undefined,
         sucursalId: comercioPropio?.sucursalId || comercioPropio?.id || 1,
+        comercioId: comercioPropio?.id,
         tiempoPreparacion: 15,
         destacado: false,
         stock: 50,
@@ -875,6 +1017,7 @@ export default function App() {
       if (res.ok) {
         const updated = await res.json();
         setComercioPropio(updated);
+        setMisTiendas((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
         Alert.alert("Tienda Actualizada", `La tienda ha sido ${nuevoEstado ? "PAUSADA temporalmente" : "REANUDADA para recibir pedidos"}.`);
       }
     } catch (e: any) {
@@ -1500,10 +1643,15 @@ export default function App() {
   // ==========================================
   // COMERCIO: GESTIÓN DE PEDIDOS
   // ==========================================
-  const fetchPedidosComercio = async (jwt = token) => {
+  const fetchPedidosComercio = async (jwt = token, store = comercioPropio) => {
     if (!jwt) return;
     try {
-      const res = await fetch(`${apiUrl}/api/pedidos/sucursal/1`, {
+      const storeId = store?.id;
+      const sucursalId = store?.sucursalId || storeId || 1;
+      const url = storeId
+        ? `${apiUrl}/api/pedidos/sucursal/${sucursalId}?comercioId=${storeId}`
+        : `${apiUrl}/api/pedidos/sucursal/${sucursalId}`;
+      const res = await fetch(url, {
         headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
       });
       if (res.ok) setPedidosComercio(await res.json());
@@ -1613,6 +1761,43 @@ export default function App() {
       if (r2.ok) setMisEntregas(await r2.json());
     } catch {}
   };
+
+  // Telemetría GPS en tiempo real para Domiciliario en ruta
+  useEffect(() => {
+    if (!token || (user?.activeRole || user?.rol) !== "DOMICILIARIO") return;
+    const pedidoEnRuta = misEntregas.find((p) => p.estado === "EN_CAMINO");
+    if (!pedidoEnRuta) return;
+
+    const emitirGps = () => {
+      if (typeof navigator !== "undefined" && (navigator as any).geolocation) {
+        (navigator as any).geolocation.getCurrentPosition(
+          (pos: any) => {
+            fetch(`${apiUrl}/api/tracking/ubicacion`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                pedidoId: pedidoEnRuta.id,
+                latitud: pos.coords.latitude,
+                longitud: pos.coords.longitude,
+                precision: pos.coords.accuracy,
+                rumbo: pos.coords.heading || undefined,
+                velocidad: pos.coords.speed || undefined,
+              }),
+            }).catch(() => {});
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+      }
+    };
+
+    emitirGps();
+    const interval = setInterval(emitirGps, 15000);
+    return () => clearInterval(interval);
+  }, [token, user, misEntregas, apiUrl]);
 
   const tomarPedidoDomiciliario = async (pedidoId: number) => {
     try {
@@ -3150,6 +3335,113 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
+            {/* Multi-Tiendas y Planes FASTGO */}
+            <View
+              style={{
+                marginTop: 12,
+                padding: 12,
+                backgroundColor: "#F1F5F9",
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: "#CBD5E1",
+                gap: 8,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flex: 1 }}>
+                  <Text style={{ fontSize: 18 }}>🏬</Text>
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.text }}>
+                        {comercioPropio ? comercioPropio.nombre : "Sin Tienda"}
+                      </Text>
+                      {comercioPropio?.esPrincipal && (
+                        <View style={{ backgroundColor: "#EDE9FE", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 9, fontWeight: "900", color: "#6D28D9" }}>Principal (6m gratis)</Text>
+                        </View>
+                      )}
+                      <View
+                        style={{
+                          backgroundColor:
+                            comercioPropio?.estado === "ACTIVA"
+                              ? "#D1FAE5"
+                              : comercioPropio?.estado === "PENDIENTE_ACTIVACION"
+                              ? "#FEF3C7"
+                              : "#FEE2E2",
+                          paddingHorizontal: 6,
+                          paddingVertical: 2,
+                          borderRadius: 6,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 9,
+                            fontWeight: "900",
+                            color:
+                              comercioPropio?.estado === "ACTIVA"
+                                ? "#065F46"
+                                : comercioPropio?.estado === "PENDIENTE_ACTIVACION"
+                                ? "#92400E"
+                                : "#991B1B",
+                          }}
+                        >
+                          {comercioPropio?.estado || "ACTIVA"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 2 }}>
+                      {comercioPropio?.direccion || "Bogotá"}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: "row", gap: 6 }}>
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: Theme.secondary,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 10,
+                    }}
+                    onPress={() => setShowStoreSwitcherModal(true)}
+                  >
+                    <Text style={{ color: "#FFF", fontSize: 11, fontWeight: "bold" }}>
+                      Mis Tiendas ({misTiendas.length})
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: Theme.primary,
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 10,
+                    }}
+                    onPress={() => setShowNewStoreModal(true)}
+                  >
+                    <Text style={{ color: "#FFF", fontSize: 11, fontWeight: "bold" }}>+ Nueva</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Banner informativo si no está ACTIVA */}
+              {comercioPropio && comercioPropio.estado !== "ACTIVA" && (
+                <View
+                  style={{
+                    backgroundColor: "#FFFBEB",
+                    padding: 8,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: "#FCD34D",
+                  }}
+                >
+                  <Text style={{ fontSize: 10, color: "#92400E", fontWeight: "bold" }}>
+                    ⚠️ Tienda en estado {comercioPropio.estado}. Pendiente de activación administrativa. Podrás configurar tus productos mientras el equipo FASTGO revisa y activa la tienda.
+                  </Text>
+                </View>
+              )}
+            </View>
+
             {/* Control Dedicado: ABRIR TIENDA / CERRAR TIENDA */}
             <View
               style={{
@@ -3515,8 +3807,19 @@ export default function App() {
                             {p.clienteNombre || "Cliente FastGo"}
                           </Text>
                           <Text style={{ fontSize: 11, color: Theme.textMuted }}>
-                            {p.direccionTexto || "Dirección de entrega asignada"}
+                            {p.destinoDireccion || p.direccionTexto || "Dirección de entrega asignada"}
+                            {p.destinoCiudad ? ` (${p.destinoCiudad})` : ""}
                           </Text>
+                          {p.destinoReferencia ? (
+                            <Text style={{ fontSize: 10, fontStyle: "italic", color: Theme.textMuted, marginTop: 2 }}>
+                              Ref: {p.destinoReferencia}
+                            </Text>
+                          ) : null}
+                          {p.destinoLatitud != null && p.destinoLongitud != null ? (
+                            <Text style={{ fontSize: 10, fontWeight: "bold", color: "#2563EB", marginTop: 2 }}>
+                              GPS: {p.destinoLatitud.toFixed(4)}, {p.destinoLongitud.toFixed(4)}
+                            </Text>
+                          ) : null}
                         </View>
                       </View>
 
@@ -3526,10 +3829,10 @@ export default function App() {
                           💵 Ganancia por Domicilio:
                         </Text>
                         <Text style={{ fontSize: 16, fontWeight: "900", color: "#047857" }}>
-                          ${(p.costoEnvio || 2000).toLocaleString()} COP
+                          ${(p.gananciaDomiciliario ?? p.costoEnvio ?? 2000).toLocaleString()} COP
                         </Text>
                         <Text style={{ fontSize: 9, color: "#065F46", marginTop: 2 }}>
-                          Tarifa fija fijada por el comercio
+                          Tarifa fija congelada en el pedido
                         </Text>
                       </View>
 
@@ -3571,18 +3874,40 @@ export default function App() {
                           <Text style={{ fontSize: 11, color: Theme.textMuted }}>
                             {p.comercioDireccion || p.origenDireccion || "Dirección de la sede"}
                           </Text>
+                          {p.origenTelefono ? (
+                            <Text style={{ fontSize: 10, fontWeight: "bold", color: "#7C3AED", marginTop: 2 }}>
+                              📞 Tel Comercio: {p.origenTelefono}
+                            </Text>
+                          ) : null}
                         </View>
                         <View style={{ borderTopWidth: 1, borderTopColor: "#E2E8F0", paddingTop: 6 }}>
                           <Text style={{ fontSize: 10, fontWeight: "bold", color: "#059669", textTransform: "uppercase" }}>
                             📍 Entregar a:
                           </Text>
                           <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
-                            {p.clienteNombre || "Cliente"} {p.clienteTelefono ? `(${p.clienteTelefono})` : ""}
+                            {p.clienteNombre || "Cliente"} {p.clienteTelefono ? `(📞 ${p.clienteTelefono})` : ""}
                           </Text>
                           <Text style={{ fontSize: 11, color: Theme.textMuted }}>
-                            {p.direccionTexto || "Dirección de entrega"}
+                            {p.destinoDireccion || p.direccionTexto || "Dirección de entrega"}
+                            {p.destinoCiudad ? ` (${p.destinoCiudad})` : ""}
                           </Text>
+                          {p.destinoReferencia ? (
+                            <Text style={{ fontSize: 10, fontStyle: "italic", color: Theme.textMuted, marginTop: 2 }}>
+                              Ref: {p.destinoReferencia}
+                            </Text>
+                          ) : null}
+                          {p.destinoLatitud != null && p.destinoLongitud != null ? (
+                            <Text style={{ fontSize: 10, fontWeight: "bold", color: "#2563EB", marginTop: 2 }}>
+                              GPS: {p.destinoLatitud.toFixed(4)}, {p.destinoLongitud.toFixed(4)}
+                            </Text>
+                          ) : null}
                         </View>
+                      </View>
+
+                      <View style={{ backgroundColor: "#ECFDF5", padding: 8, borderRadius: 8, borderWidth: 1, borderColor: "#A7F3D0", marginBottom: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "bold", color: "#065F46" }}>
+                          💵 Tu ganancia: ${(p.gananciaDomiciliario ?? p.costoEnvio ?? 2000).toLocaleString()} COP
+                        </Text>
                       </View>
 
                       <Text style={styles.kitchenPrice}>Cobro al cliente: ${p.total.toLocaleString()} COP ({p.metodoPago || "EFECTIVO"})</Text>
@@ -3778,17 +4103,87 @@ export default function App() {
                   borderColor: Theme.primary,
                   gap: 12,
                 }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={{ fontSize: 22 }}>🏪</Text>
-                    <View>
-                      <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
-                        Configuración de Mi Comercio
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <Text style={{ fontSize: 22 }}>🏪</Text>
+                      <View>
+                        <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
+                          Configuración de Mi Comercio
+                        </Text>
+                        <Text style={{ fontSize: 11, color: Theme.textMuted }}>
+                          {comercioPropio ? comercioPropio.nombre : "Gestión oficial de sucursal"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: Theme.secondary,
+                        paddingHorizontal: 8,
+                        paddingVertical: 5,
+                        borderRadius: 8,
+                      }}
+                      onPress={() => setShowStoreSwitcherModal(true)}
+                    >
+                      <Text style={{ color: "#FFF", fontSize: 10, fontWeight: "bold" }}>
+                        Tiendas ({misTiendas.length})
                       </Text>
-                      <Text style={{ fontSize: 11, color: Theme.textMuted }}>
-                        {comercioPropio ? comercioPropio.nombre : "Gestión oficial de sucursal"}
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Plan y Estado Actual */}
+                  {comercioPropio && (
+                    <View
+                      style={{
+                        padding: 10,
+                        backgroundColor: "#F8FAFC",
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: Theme.border,
+                        gap: 4,
+                      }}
+                    >
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                        <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.text }}>
+                          {comercioPropio.esPrincipal ? "⭐ Tienda Principal" : "🏬 Sede Adicional"}
+                        </Text>
+                        <View
+                          style={{
+                            backgroundColor:
+                              comercioPropio.estado === "ACTIVA"
+                                ? "#D1FAE5"
+                                : comercioPropio.estado === "PENDIENTE_ACTIVACION"
+                                ? "#FEF3C7"
+                                : "#FEE2E2",
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 6,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              fontSize: 9,
+                              fontWeight: "900",
+                              color:
+                                comercioPropio.estado === "ACTIVA"
+                                  ? "#065F46"
+                                  : comercioPropio.estado === "PENDIENTE_ACTIVACION"
+                                  ? "#92400E"
+                                  : "#991B1B",
+                            }}
+                          >
+                            {comercioPropio.estado || "ACTIVA"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                        {comercioPropio.esPrincipal
+                          ? "Periodo de prueba: 6 meses sin costo ($0 COP), luego $20.000 COP/mes."
+                          : "Tarifa de activación: $50.000 COP y suscripción mensual: $30.000 COP."}
                       </Text>
                     </View>
-                  </View>
+                  )}
 
                   {/* Tarifa de Domicilio */}
                   <View style={{ gap: 4 }}>
@@ -4507,6 +4902,254 @@ export default function App() {
             >
               <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cerrar Visor</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL SELECTOR DE TIENDAS (MIS TIENDAS) */}
+      {showStoreSwitcherModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { padding: 18, maxHeight: "85%" }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
+                  🏬 Mis Tiendas FASTGO
+                </Text>
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                  Selecciona la sede que deseas administrar
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowStoreSwitcherModal(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 320 }}>
+              {misTiendas.length === 0 ? (
+                <Text style={{ fontSize: 12, color: Theme.textMuted, textAlign: "center", marginVertical: 20 }}>
+                  No tienes tiendas registradas.
+                </Text>
+              ) : (
+                misTiendas.map((store) => {
+                  const isSelected = comercioPropio?.id === store.id;
+                  return (
+                    <TouchableOpacity
+                      key={store.id}
+                      style={{
+                        padding: 12,
+                        backgroundColor: isSelected ? "#F0FDF4" : "#FFFFFF",
+                        borderRadius: 14,
+                        borderWidth: 1.5,
+                        borderColor: isSelected ? Theme.primary : Theme.border,
+                        marginBottom: 10,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                      onPress={() => handleSelectStore(store)}
+                    >
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                          <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.text }}>
+                            {store.nombre}
+                          </Text>
+                          {store.esPrincipal && (
+                            <View style={{ backgroundColor: "#EDE9FE", paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6 }}>
+                              <Text style={{ fontSize: 9, fontWeight: "900", color: "#6D28D9" }}>Principal</Text>
+                            </View>
+                          )}
+                          <View
+                            style={{
+                              backgroundColor:
+                                store.estado === "ACTIVA"
+                                  ? "#D1FAE5"
+                                  : store.estado === "PENDIENTE_ACTIVACION"
+                                  ? "#FEF3C7"
+                                  : "#FEE2E2",
+                              paddingHorizontal: 6,
+                              paddingVertical: 1,
+                              borderRadius: 6,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 9,
+                                fontWeight: "900",
+                                color:
+                                  store.estado === "ACTIVA"
+                                    ? "#065F46"
+                                    : store.estado === "PENDIENTE_ACTIVACION"
+                                    ? "#92400E"
+                                    : "#991B1B",
+                              }}
+                            >
+                              {store.estado || "ACTIVA"}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 3 }}>
+                          📍 {store.direccion || "Sin dirección"} • {store.ciudad || "Bogotá"}
+                        </Text>
+                      </View>
+
+                      {isSelected && (
+                        <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: Theme.primary, alignItems: "center", justifyContent: "center" }}>
+                          <Text style={{ color: "#FFF", fontSize: 12, fontWeight: "bold" }}>✓</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+
+            <View style={{ marginTop: 14, gap: 8 }}>
+              <TouchableOpacity
+                style={[styles.solidBtn, { backgroundColor: Theme.primary }]}
+                onPress={() => {
+                  setShowStoreSwitcherModal(false);
+                  setShowNewStoreModal(true);
+                }}
+              >
+                <Text style={styles.solidBtnText}>+ Crear Tienda Adicional</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.outlineBtn}
+                onPress={() => setShowStoreSwitcherModal(false)}
+              >
+                <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL REGISTRAR NUEVA TIENDA / SEDE ADICIONAL */}
+      {showNewStoreModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { padding: 18, maxHeight: "90%" }]}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <View>
+                  <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
+                    ✨ Registrar Nueva Tienda / Sede
+                  </Text>
+                  <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                    Apertura de tienda adicional en FASTGO
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowNewStoreModal(false)} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Condiciones y Tarifas */}
+              <View
+                style={{
+                  padding: 12,
+                  backgroundColor: "#F5F3FF",
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderColor: "#DDD6FE",
+                  marginBottom: 14,
+                  gap: 6,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: "900", color: "#5B21B6" }}>
+                  💎 Tarifas para Tiendas Adicionales
+                </Text>
+                <Text style={{ fontSize: 11, color: "#4C1D95", lineHeight: 16 }}>
+                  • Activación: <Text style={{ fontWeight: "900" }}>${(subConfig?.additionalStoreActivationPrice || 50000).toLocaleString()} COP</Text> (pago único)
+                </Text>
+                <Text style={{ fontSize: 11, color: "#4C1D95", lineHeight: 16 }}>
+                  • Mensualidad: <Text style={{ fontWeight: "900" }}>${(subConfig?.additionalStoreMonthlyPrice || 30000).toLocaleString()} COP/mes</Text>
+                </Text>
+                <View style={{ marginTop: 4, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, color: "#6D28D9", fontWeight: "bold" }}>
+                    📌 Importante: La tienda nacerá en estado PENDIENTE DE ACTIVACIÓN. El equipo administrativo revisará los datos para habilitarla.
+                  </Text>
+                </View>
+              </View>
+
+              {/* Formulario */}
+              <View style={{ gap: 10 }}>
+                <View>
+                  <Text style={styles.inputLabel}>Nombre de la Tienda / Sede *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newStoreNombre}
+                    onChangeText={setNewStoreNombre}
+                    placeholder="Ej. Mi Negocio - Sede Norte"
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>Dirección de Recogida *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newStoreDireccion}
+                    onChangeText={setNewStoreDireccion}
+                    placeholder="Ej. Carrera 15 # 85-30"
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>Teléfono de Contacto *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    keyboardType="phone-pad"
+                    value={newStoreTelefono}
+                    onChangeText={setNewStoreTelefono}
+                    placeholder="Ej. 3101234567"
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>Correo Electrónico de la Tienda *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={newStoreCorreo}
+                    onChangeText={setNewStoreCorreo}
+                    placeholder="Ej. sedenorte@minegocio.com"
+                  />
+                </View>
+
+                <View>
+                  <Text style={styles.inputLabel}>Ciudad *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={newStoreCiudad}
+                    onChangeText={setNewStoreCiudad}
+                    placeholder="Bogotá"
+                  />
+                </View>
+              </View>
+
+              <View style={{ marginTop: 16, gap: 8 }}>
+                <TouchableOpacity
+                  style={[styles.solidBtn, { backgroundColor: Theme.primary }]}
+                  onPress={handleCreateAdditionalStore}
+                  disabled={isCreatingNewStore}
+                >
+                  {isCreatingNewStore ? (
+                    <ActivityIndicator color="#FFF" size="small" />
+                  ) : (
+                    <Text style={styles.solidBtnText}>Crear Tienda Adicional</Text>
+                  )}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.outlineBtn}
+                  onPress={() => setShowNewStoreModal(false)}
+                  disabled={isCreatingNewStore}
+                >
+                  <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cancelar</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
           </View>
         </View>
       )}

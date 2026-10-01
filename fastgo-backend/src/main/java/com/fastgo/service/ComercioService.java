@@ -1,19 +1,16 @@
 package com.fastgo.service;
 
+import com.fastgo.dto.AdminTiendaResponseDTO;
 import com.fastgo.dto.ComercioRequestDTO;
 import com.fastgo.dto.ComercioResponseDTO;
-import com.fastgo.entity.CategoriaComercio;
-import com.fastgo.entity.Comercio;
-import com.fastgo.entity.Sucursal;
-import com.fastgo.entity.Usuario;
-import com.fastgo.repository.CategoriaComercioRepository;
-import com.fastgo.repository.ComercioRepository;
-import com.fastgo.repository.SucursalRepository;
-import com.fastgo.repository.UsuarioRepository;
+import com.fastgo.entity.*;
+import com.fastgo.repository.*;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -24,20 +21,29 @@ public class ComercioService {
     private final UsuarioRepository usuarioRepository;
     private final CategoriaComercioRepository categoriaRepository;
     private final SucursalRepository sucursalRepository;
+    private final SuscripcionService suscripcionService;
+    private final AuditoriaAdminRepository auditoriaRepository;
 
     public ComercioService(
             ComercioRepository c,
             UsuarioRepository u,
             CategoriaComercioRepository cat,
-            SucursalRepository suc) {
+            SucursalRepository suc,
+            SuscripcionService suscripcionService,
+            AuditoriaAdminRepository auditoriaRepository) {
         this.comercioRepository = c;
         this.usuarioRepository = u;
         this.categoriaRepository = cat;
         this.sucursalRepository = suc;
+        this.suscripcionService = suscripcionService;
+        this.auditoriaRepository = auditoriaRepository;
     }
 
     public List<ComercioResponseDTO> listarComercios() {
-        return comercioRepository.findByActivoTrue().stream().map(this::dto).toList();
+        return comercioRepository.findByActivoTrue().stream()
+                .filter(Comercio::isOperativa)
+                .map(this::dto)
+                .toList();
     }
 
     public ComercioResponseDTO buscarPorId(Integer id) {
@@ -52,17 +58,57 @@ public class ComercioService {
                 .orElse(null);
     }
 
+    public List<ComercioResponseDTO> listarMisTiendas() {
+        Usuario u = usuario();
+        return comercioRepository.findAllByUsuarioIdOrderByCreadoEnAsc(u.getId()).stream()
+                .map(this::dto)
+                .toList();
+    }
+
+    public ComercioResponseDTO buscarPropioPorId(Integer id) {
+        Usuario u = usuario();
+        return dto(propio(id, u));
+    }
+
+    @Transactional
     public ComercioResponseDTO guardar(ComercioRequestDTO d) {
         if (d == null) throw new IllegalArgumentException("Los datos del comercio son obligatorios");
         Usuario u = usuario();
         exigirComercio(u);
-        if (comercioRepository.findByUsuarioId(u.getId()).isPresent()) {
-            throw new RuntimeException("El usuario ya tiene un comercio registrado");
+
+        ConfiguracionSuscripcion config = suscripcionService.obtenerConfiguracion();
+        if (!Boolean.TRUE.equals(config.getAllowNewStores()) && !u.hasRole("ADMIN")) {
+            throw new RuntimeException("El registro de nuevas tiendas está temporalmente deshabilitado por administración");
         }
+
+        List<Comercio> misTiendas = comercioRepository.findAllByUsuarioIdOrderByCreadoEnAsc(u.getId());
+        int maxGratis = config.getFreePrimaryStores() != null ? config.getFreePrimaryStores() : 1;
+        boolean esPrincipal = misTiendas.size() < maxGratis;
+
         Comercio c = new Comercio();
         c.setUsuario(u);
+        c.setEsPrincipal(esPrincipal);
+        if (esPrincipal) {
+            c.setEstado("ACTIVA");
+            if (d.getActivo() == null) {
+                c.setActivo(true);
+            } else {
+                c.setActivo(d.getActivo());
+            }
+        } else {
+            c.setEstado("PENDIENTE_ACTIVACION");
+            c.setActivo(false);
+        }
+
         copiar(d, c);
+        if (!esPrincipal) {
+            c.setEstado("PENDIENTE_ACTIVACION");
+            c.setActivo(false);
+        }
+
         Comercio saved = comercioRepository.save(c);
+
+        suscripcionService.crearSuscripcionInicial(saved, esPrincipal, u.getCorreo());
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(saved.getId());
         if (sucursales.isEmpty()) {
@@ -80,11 +126,17 @@ public class ComercioService {
         return dto(saved);
     }
 
+    @Transactional
     public ComercioResponseDTO actualizar(Integer id, ComercioRequestDTO d) {
         if (d == null) throw new IllegalArgumentException("Los datos del comercio son obligatorios");
         Usuario u = usuario();
         Comercio c = propio(id, u);
         copiar(d, c);
+
+        if (!c.isOperativa()) {
+            c.setActivo(false);
+        }
+
         Comercio saved = comercioRepository.save(c);
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(saved.getId());
@@ -129,6 +181,108 @@ public class ComercioService {
 
     public Comercio obtenerEntidadPropia(Integer id) {
         return propio(id, usuario());
+    }
+
+    public List<AdminTiendaResponseDTO> listarTodasAdmin() {
+        return comercioRepository.findAll().stream()
+                .map(this::toAdminDTO)
+                .toList();
+    }
+
+    @Transactional
+    public AdminTiendaResponseDTO activarTiendaAdmin(Integer id, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        String estadoAnterior = c.getEstado();
+        c.setEstado("ACTIVA");
+        c.setActivo(true);
+        Comercio saved = comercioRepository.save(c);
+
+        suscripcionService.activarTienda(saved, admin.getCorreo());
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                "ACTIVAR_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                estadoAnterior,
+                "ACTIVA",
+                razon != null && !razon.isBlank() ? razon : "Activación administrativa de tienda"
+        ));
+
+        return toAdminDTO(saved);
+    }
+
+    @Transactional
+    public AdminTiendaResponseDTO desactivarTiendaAdmin(Integer id, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        String estadoAnterior = c.getEstado();
+        c.setEstado("DESACTIVADA");
+        c.setActivo(false);
+        Comercio saved = comercioRepository.save(c);
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                "DESACTIVAR_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                estadoAnterior,
+                "DESACTIVADA",
+                razon != null && !razon.isBlank() ? razon : "Desactivación administrativa de tienda"
+        ));
+
+        return toAdminDTO(saved);
+    }
+
+    @Transactional
+    public AdminTiendaResponseDTO suspenderTiendaAdmin(Integer id, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        String estadoAnterior = c.getEstado();
+        c.setEstado("SUSPENDIDA");
+        c.setActivo(false);
+        Comercio saved = comercioRepository.save(c);
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                "SUSPENDER_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                estadoAnterior,
+                "SUSPENDIDA",
+                razon != null && !razon.isBlank() ? razon : "Suspensión administrativa por infracción o mora"
+        ));
+
+        return toAdminDTO(saved);
+    }
+
+    @Transactional
+    public AdminTiendaResponseDTO reactivarTiendaAdmin(Integer id, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        String estadoAnterior = c.getEstado();
+        c.setEstado("ACTIVA");
+        c.setActivo(true);
+        Comercio saved = comercioRepository.save(c);
+
+        suscripcionService.activarTienda(saved, admin.getCorreo());
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                "REACTIVAR_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                estadoAnterior,
+                "ACTIVA",
+                razon != null && !razon.isBlank() ? razon : "Reactivación administrativa de tienda"
+        ));
+
+        return toAdminDTO(saved);
     }
 
     private void copiar(ComercioRequestDTO d, Comercio c) {
@@ -221,6 +375,43 @@ public class ComercioService {
                 .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
     }
 
+    private AdminTiendaResponseDTO toAdminDTO(Comercio c) {
+        AdminTiendaResponseDTO dto = new AdminTiendaResponseDTO();
+        dto.setId(c.getId());
+        dto.setNombre(c.getNombre());
+        dto.setDescripcion(c.getDescripcion());
+        dto.setTelefono(c.getTelefono());
+        dto.setEsPrincipal(c.getEsPrincipal());
+        dto.setEstado(c.getEstado());
+        dto.setActivo(c.getActivo());
+        dto.setFechaCreacion(c.getCreadoEn());
+
+        if (c.getUsuario() != null) {
+            dto.setUsuarioId(c.getUsuario().getId());
+            dto.setPropietarioNombre(c.getUsuario().getNombre());
+            dto.setPropietarioCorreo(c.getUsuario().getCorreo());
+            dto.setPropietarioTelefono(c.getUsuario().getTelefono());
+        }
+
+        List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
+        if (!sucursales.isEmpty()) {
+            dto.setDireccion(sucursales.get(0).getDireccion());
+            dto.setCiudad(sucursales.get(0).getCiudad());
+        }
+
+        suscripcionService.obtenerUltimaSuscripcion(c.getId()).ifPresent(sub -> {
+            dto.setTipoPlan(sub.getTipoPlan());
+            dto.setEstadoSuscripcion(sub.getEstado());
+            dto.setFechaInicioSuscripcion(sub.getFechaInicio());
+            dto.setFechaVencimiento(sub.getFechaFin());
+            dto.setMontoSuscripcion(sub.getMonto());
+            dto.setFechaUltimoPago(sub.getFechaPago());
+            dto.setReferenciaPago(sub.getReferenciaPago());
+        });
+
+        return dto;
+    }
+
     private ComercioResponseDTO dto(Comercio c) {
         ComercioResponseDTO r = new ComercioResponseDTO(
                 c.getId(),
@@ -251,6 +442,27 @@ public class ComercioService {
         r.setBancolombiaNumeroCuenta(c.getBancolombiaNumeroCuenta());
         r.setBancolombiaTitular(c.getBancolombiaTitular());
         r.setBancolombiaDocTitular(c.getBancolombiaDocTitular());
+
+        r.setEsPrincipal(c.getEsPrincipal());
+        r.setEstado(c.getEstado());
+        r.setCreadoEn(c.getCreadoEn());
+
+        if (c.getUsuario() != null) {
+            r.setUsuarioId(c.getUsuario().getId());
+            r.setUsuarioNombre(c.getUsuario().getNombre());
+            r.setUsuarioCorreo(c.getUsuario().getCorreo());
+        }
+
+        suscripcionService.obtenerUltimaSuscripcion(c.getId()).ifPresent(sub -> {
+            r.setFechaInicioSuscripcion(sub.getFechaInicio());
+            r.setFechaFinSuscripcion(sub.getFechaFin());
+            r.setTipoPlan(sub.getTipoPlan());
+            r.setEstadoSuscripcion(sub.getEstado());
+            r.setPrecioMensual(sub.getMonto());
+            boolean gratuito = "GRATUITO".equalsIgnoreCase(sub.getEstado()) ||
+                    ("TIENDA_PRINCIPAL".equalsIgnoreCase(sub.getTipoPlan()) && (sub.getMonto() == null || sub.getMonto().compareTo(BigDecimal.ZERO) == 0));
+            r.setEsGratuito(gratuito);
+        });
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
         if (!sucursales.isEmpty()) {

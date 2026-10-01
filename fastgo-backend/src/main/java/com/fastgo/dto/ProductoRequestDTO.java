@@ -25,7 +25,9 @@ public class ProductoRequestDTO {
     private String imagenPrincipal;
     private Boolean disponible, destacado;
     private Integer stock;
+    private Integer comercioId;
     public ProductoRequestDTO(){}
+    public Integer getComercioId(){return comercioId;} public void setComercioId(Integer v){comercioId=v;}
     public Integer getSucursalId(){return sucursalId;} public void setSucursalId(Integer v){sucursalId=v;}
     public Integer getCategoriaId(){return categoriaId;} public void setCategoriaId(Integer v){categoriaId=v;}
     public String getNombre(){return nombre;} public void setNombre(String v){nombre=v;}

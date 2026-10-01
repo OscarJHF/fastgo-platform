@@ -46,8 +46,9 @@ export const productoService = {
     await apiClient.delete(`/api/productos/${id}`);
   },
 
-  async listMisProductos(): Promise<Producto[]> {
-    const response = await apiClient.get<Producto[]>('/api/productos/comercio/mis-productos');
+  async listMisProductos(comercioId?: number): Promise<Producto[]> {
+    const url = comercioId ? `/api/productos/comercio/mis-productos?comercioId=${comercioId}` : '/api/productos/comercio/mis-productos';
+    const response = await apiClient.get<Producto[]>(url);
     return response.data;
   },
 

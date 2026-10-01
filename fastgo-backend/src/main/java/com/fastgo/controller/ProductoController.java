@@ -67,8 +67,9 @@ public class ProductoController {
 
     @GetMapping("/comercio/mis-productos")
     @PreAuthorize("hasRole('COMERCIO')")
-    public ResponseEntity<List<ProductoResponseDTO>> misProductos() {
-        return ResponseEntity.ok(service.listarPorComercioPropio());
+    public ResponseEntity<List<ProductoResponseDTO>> misProductos(
+            @RequestParam(required = false) Integer comercioId) {
+        return ResponseEntity.ok(service.listarPorComercioPropio(comercioId));
     }
 
     @PatchMapping("/{id}/disponibilidad")

@@ -23,8 +23,11 @@ import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
 import { Badge } from '../../components/common/Badge';
 import { APP_ROUTES } from '../../constants/routes';
+import { useMerchantStore } from '../../context/MerchantStoreContext';
+import { StoreSwitcher } from '../../components/commerce/StoreSwitcher';
 
 export const CommerceDashboardPage: React.FC = () => {
+  const { stores, selectedStore, refreshStores, isLoading: isStoresLoading } = useMerchantStore();
   const [activeCommerce, setActiveCommerce] = useState<Comercio | null>(null);
   const [branches, setBranches] = useState<Sucursal[]>([]);
   const [activeBranch, setActiveBranch] = useState<Sucursal | null>(null);
@@ -32,35 +35,35 @@ export const CommerceDashboardPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isTogglingPause, setIsTogglingPause] = useState(false);
 
-  const loadDashboard = async () => {
-    try {
-      let com: Comercio | null = null;
-      try {
-        com = await commerceService.getPropio();
-      } catch {
-        com = null;
-      }
-
-      if (com) {
-        setActiveCommerce(com);
-        const sucs = await sucursalService.listByCommerce(com.id).catch(() => []);
-        setBranches(sucs);
-        if (sucs.length > 0) {
-          setActiveBranch(sucs[0]);
-          const ords = await pedidoService.listBySucursal(sucs[0].id).catch(() => []);
-          setOrders(ords);
+  useEffect(() => {
+    if (selectedStore) {
+      setActiveCommerce(selectedStore);
+      setIsLoading(true);
+      (async () => {
+        try {
+          const sucs = await sucursalService.listByCommerce(selectedStore.id).catch(() => []);
+          setBranches(sucs);
+          if (sucs.length > 0) {
+            setActiveBranch(sucs[0]);
+            const ords = await pedidoService.listBySucursal(sucs[0].id).catch(() => []);
+            setOrders(ords);
+          } else {
+            setActiveBranch(null);
+            setOrders([]);
+          }
+        } catch (err) {
+          console.error('Error cargando sucursales/pedidos:', err);
+        } finally {
+          setIsLoading(false);
         }
-      }
-    } catch (err) {
-      console.error('Error cargando panel comercio:', err);
-    } finally {
+      })();
+    } else if (!isStoresLoading && stores.length === 0) {
+      setActiveCommerce(null);
+      setBranches([]);
+      setOrders([]);
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadDashboard();
-  }, []);
+  }, [selectedStore, isStoresLoading, stores.length]);
 
   const handleTogglePause = async () => {
     if (!activeCommerce) return;
@@ -69,6 +72,7 @@ export const CommerceDashboardPage: React.FC = () => {
       const nuevoEstado = !activeCommerce.pausaManual;
       const updated = await commerceService.togglePausaManual(activeCommerce.id, nuevoEstado);
       setActiveCommerce(updated);
+      await refreshStores();
     } catch (err) {
       console.error('Error al cambiar pausa manual:', err);
     } finally {
@@ -123,6 +127,9 @@ export const CommerceDashboardPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Multi-Store Switcher */}
+      <StoreSwitcher />
 
       {/* When commerce is not yet configured: Onboarding Wizard Banner */}
       {!activeCommerce ? (

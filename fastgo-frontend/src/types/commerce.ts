@@ -36,6 +36,69 @@ export interface Comercio {
   bancolombiaNumeroCuenta?: string;
   bancolombiaTitular?: string;
   bancolombiaDocTitular?: string;
+
+  // Multi-store & subscriptions
+  esPrincipal?: boolean;
+  estado?: string;
+  usuarioId?: number;
+  usuarioNombre?: string;
+  usuarioCorreo?: string;
+  creadoEn?: string;
+  fechaInicioSuscripcion?: string;
+  fechaFinSuscripcion?: string;
+  tipoPlan?: string;
+  estadoSuscripcion?: string;
+  precioMensual?: number;
+  precioActivacion?: number;
+  esGratuito?: boolean;
+}
+
+export interface ConfiguracionSuscripcion {
+  id: number;
+  freePrimaryStores: number;
+  primaryFreePeriodMonths: number;
+  primaryMonthlyPrice: number;
+  additionalStoreActivationPrice: number;
+  additionalStoreMonthlyPrice: number;
+  allowNewStores: boolean;
+  actualizadoPor?: string;
+  actualizadoEn?: string;
+}
+
+export interface AdminTienda {
+  id: number;
+  nombre: string;
+  descripcion?: string;
+  telefono?: string;
+  direccion?: string;
+  ciudad?: string;
+  usuarioId?: number;
+  propietarioNombre?: string;
+  propietarioCorreo?: string;
+  propietarioTelefono?: string;
+  esPrincipal?: boolean;
+  estado: string;
+  activo: boolean;
+  tipoPlan?: string;
+  estadoSuscripcion?: string;
+  fechaCreacion?: string;
+  fechaInicioSuscripcion?: string;
+  fechaVencimiento?: string;
+  montoSuscripcion?: number;
+  fechaUltimoPago?: string;
+  referenciaPago?: string;
+}
+
+export interface AuditoriaAdmin {
+  id: number;
+  adminCorreo: string;
+  accion: string;
+  entidad: string;
+  entidadId?: string;
+  valorAnterior?: string;
+  valorNuevo?: string;
+  detalles?: string;
+  fecha: string;
 }
 
 export interface ComercioRequest {

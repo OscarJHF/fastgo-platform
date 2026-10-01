@@ -30,9 +30,12 @@ import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency } from '../../utils/formatters';
 import { APP_ROUTES } from '../../constants/routes';
+import { useMerchantStore } from '../../context/MerchantStoreContext';
+import { StoreSwitcher } from '../../components/commerce/StoreSwitcher';
 
 export const CommerceProductsPage: React.FC = () => {
   const { success, error: showError } = useToast();
+  const { stores, selectedStore, isLoading: isStoresLoading } = useMerchantStore();
 
   const [ownCommerce, setOwnCommerce] = useState<Comercio | null>(null);
   const [branches, setBranches] = useState<Sucursal[]>([]);
@@ -78,23 +81,19 @@ export const CommerceProductsPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      let com: Comercio | null = null;
-      try {
-        com = await commerceService.getPropio();
-      } catch {
-        com = null;
-      }
-
-      setOwnCommerce(com);
+      const activeStore = selectedStore;
+      setOwnCommerce(activeStore);
 
       const cats = await categoriaService.listActiveProductCategories().catch(() => []);
       setCategories(cats);
 
-      if (com) {
-        const sucs = await sucursalService.listByCommerce(com.id).catch(() => []);
+      if (activeStore) {
+        const sucs = await sucursalService.listByCommerce(activeStore.id).catch(() => []);
         setBranches(sucs);
         if (sucs.length > 0) {
-          const branchId = selectedBranchId || sucs[0].id;
+          const branchId = selectedBranchId && sucs.some((s) => s.id === selectedBranchId)
+            ? selectedBranchId
+            : sucs[0].id;
           setSelectedBranchId(branchId);
           setFormData((prev) => ({
             ...prev,
@@ -103,7 +102,14 @@ export const CommerceProductsPage: React.FC = () => {
           }));
           const prods = await productoService.listBySucursal(branchId);
           setProducts(prods);
+        } else {
+          setSelectedBranchId(null);
+          setProducts([]);
         }
+      } else {
+        setBranches([]);
+        setSelectedBranchId(null);
+        setProducts([]);
       }
     } catch (err) {
       console.error('Error cargando catálogo de productos:', err);
@@ -114,7 +120,7 @@ export const CommerceProductsPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
-  }, [selectedBranchId]);
+  }, [selectedStore, selectedBranchId]);
 
   const handleOpenCreate = () => {
     setEditingProductId(null);
@@ -197,6 +203,7 @@ export const CommerceProductsPage: React.FC = () => {
         await productoService.createProduct({
           ...formData,
           sucursalId: branchId,
+          comercioId: selectedStore?.id,
         });
         success('¡Producto agregado al catálogo!');
       }
@@ -353,6 +360,9 @@ export const CommerceProductsPage: React.FC = () => {
       >
         <ArrowLeft className="w-4 h-4" /> Volver al panel
       </Link>
+
+      {/* Multi-Store Switcher */}
+      <StoreSwitcher />
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

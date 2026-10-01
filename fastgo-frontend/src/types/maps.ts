@@ -14,3 +14,25 @@ export interface MapRouteRequest {
   destinationLat: number;
   destinationLng: number;
 }
+
+export interface TrackingUbicacionRequest {
+  pedidoId: number;
+  latitud: number;
+  longitud: number;
+  precision?: number;
+  rumbo?: number;
+  velocidad?: number;
+}
+
+export interface TrackingResponse {
+  id: number;
+  pedidoId: number;
+  domiciliarioId?: number;
+  latitud: number;
+  longitud: number;
+  precision?: number;
+  rumbo?: number;
+  velocidad?: number;
+  fechaHora: string;
+  estadoPedido: string;
+}

@@ -86,8 +86,14 @@ public class ProductoService {
     public ProductoResponseDTO guardar(ProductoRequestDTO datos) {
         if (datos != null && datos.getSucursalId() == null) {
             Usuario u = usuario();
-            Comercio c = comercioRepository.findByUsuarioId(u.getId())
-                    .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+            Comercio c;
+            if (datos.getComercioId() != null) {
+                c = comercioRepository.findByIdAndUsuarioId(datos.getComercioId(), u.getId())
+                        .orElseThrow(() -> new RuntimeException("Comercio no encontrado o no pertenece al usuario"));
+            } else {
+                c = comercioRepository.findByUsuarioId(u.getId())
+                        .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+            }
             List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
             if (sucursales.isEmpty()) {
                 throw new RuntimeException("El comercio no tiene sucursales configuradas");
@@ -225,9 +231,19 @@ public class ProductoService {
     }
 
     public List<ProductoResponseDTO> listarPorComercioPropio() {
+        return listarPorComercioPropio(null);
+    }
+
+    public List<ProductoResponseDTO> listarPorComercioPropio(Integer comercioId) {
         Usuario usuario = usuario();
-        Comercio comercio = comercioRepository.findByUsuarioId(usuario.getId())
-                .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+        Comercio comercio;
+        if (comercioId != null) {
+            comercio = comercioRepository.findByIdAndUsuarioId(comercioId, usuario.getId())
+                    .orElseThrow(() -> new RuntimeException("Comercio no encontrado o no pertenece al usuario"));
+        } else {
+            comercio = comercioRepository.findByUsuarioId(usuario.getId())
+                    .orElseThrow(() -> new RuntimeException("Comercio no encontrado para el usuario autenticado"));
+        }
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(comercio.getId());
         return sucursales.stream()

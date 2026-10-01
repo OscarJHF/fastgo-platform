@@ -17,6 +17,10 @@ export const commerceService = {
     return response.data;
   },
 
+  async guardar(data: ComercioRequest): Promise<Comercio> {
+    return this.createCommerce(data);
+  },
+
   async updateCommerce(id: number, data: ComercioRequest): Promise<Comercio> {
     const response = await apiClient.put<Comercio>(`/api/comercios/${id}`, data);
     return response.data;
@@ -28,6 +32,16 @@ export const commerceService = {
 
   async getPropio(): Promise<Comercio> {
     const response = await apiClient.get<Comercio>('/api/comercios/propio');
+    return response.data;
+  },
+
+  async listMisTiendas(): Promise<Comercio[]> {
+    const response = await apiClient.get<Comercio[]>('/api/comercios/mis-tiendas');
+    return response.data;
+  },
+
+  async getSubscriptionConfig(): Promise<import('../types').ConfiguracionSuscripcion> {
+    const response = await apiClient.get<import('../types').ConfiguracionSuscripcion>('/api/comercios/suscripciones/configuracion');
     return response.data;
   },
 
