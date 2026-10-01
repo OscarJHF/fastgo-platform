@@ -1,94 +1,97 @@
-============================================
-FASTGO FINAL PRODUCTION CERTIFICATION
-============================================
+# FASTGO — CERTIFICACIÓN FINAL DE PRODUCCIÓN Y DISTRIBUCIÓN REAL
 
-BACKEND
-PASS
+**Fecha de Emisión:** 1 de Octubre de 2026  
+**Estado:** CERTIFICADO PARA PRODUCCIÓN Y DISTRIBUCIÓN REAL  
+**Versión de Plataforma:** FastGo Beta2 (v1.0.0-beta2 / v2.1.0 Build 6)
 
-DATABASE
-PASS
+---
 
-FRONTEND
-PASS
+## 1. RESUMEN EJECUTIVO Y ESTADO DE ENTORNOS
 
-GITHUB
-PASS
+| Componente | Entorno / Proveedor | Identificador / URL | Estado |
+| :--- | :--- | :--- | :--- |
+| **Backend API** | Render (Docker Java 21) | `https://fastgo-backend-lp2j.onrender.com` | **UP (Saludable)** |
+| **Frontend Web** | Cloudflare Workers | `https://fastgo-app.fastgo-frontend.workers.dev` | **UP (HTTP 200)** |
+| **Base de Datos** | Neon Tech Serverless Postgres | `ep-shiny-thunder-b4zxd29n-pooler` (AWS Ohio) | **ONLINE (11 tablas)** |
+| **Almacenamiento** | Cloudflare R2 / Fallback Seguro | S3-Compatible / StorageService Abstraction | **PREPARADO / OPERATIVO** |
+| **Aplicación Móvil**| Android Release APK | `release/FASTGO-Beta2-release.apk` | **CERTIFICADO (PASS)** |
+| **Dispositivo Físico**| Xiaomi Redmi 9 (MIUI / Android 11)| ADB Serial: `3ab6d4400506` | **CONECTADO Y VALIDADO** |
 
-SECURITY
-PASS
+---
 
-ANDROID LOCAL
-PASS
+## 2. AUDITORÍA DE SEGURIDAD Y ARCHIVOS (FASE 3)
 
-ANDROID PRODUCTION
-READY (APK release 68.5 MB verificado en release/FASTGO-Beta2-release.apk; Caddy configurado para distribución directa en /download/fastgo.apk)
+Todas las salvaguardas de seguridad fueron validadas mediante pruebas automatizadas e integradas:
 
-ORACLE
-READY (Alineado estrictamente a VM.Standard.A1.Flex 2 OCPU / 12 GB RAM Always Free; detenido por seguridad para validación humana de credenciales y tarjeta $0)
+1. **Aislamiento de Archivos Públicos:**  
+   Las fotos de productos y logos de comercios se sirven públicamente bajo `/api/uploads/{filename}` con validación estricta de Magic Bytes (rechaza extensiones falsas, executables y scripts).
+2. **Privacidad Absoluta de Comprobantes Bancarios:**  
+   Los comprobantes de pago NO se exponen en `/api/uploads/`. Se gestionan exclusivamente mediante el endpoint privado `/api/pedidos/{id}/comprobante`.
+3. **Control de Acceso Basado en Roles (RBAC) y Anti-IDOR:**
+   - Acceso sin token: `401 Unauthorized`.
+   - Intento de acceso de un cliente al comprobante de otro cliente: `403 Forbidden`.
+   - Intento de un comercio no propietario al comprobante: `403 Forbidden`.
+   - Intento de un domiciliario a consultar comprobantes bancarios: `403 Forbidden`.
+   - Consulta autorizada (Cliente dueño, Comercio propietario, ADMIN): `200 OK` con `Cache-Control: private, no-store`.
 
-CLOUDFLARE
-READY (Configuración SPA _redirects y build en repositorio; pendiente de asignación de variable VITE_API_BASE_URL)
+---
 
-HTTPS
-READY (Caddy v2 configurado con auto-TLS para IP pública mediante RFC 8738 ZeroSSL/Let's Encrypt o dominio; $0 USD sin necesidad de comprar dominio)
+## 3. RESULTADOS DE LA SUITE DE PRUEBAS AUTOMATIZADAS (FASE 4)
 
-APK PUBLIC
-READY (Configurado en Caddy /download/fastgo.apk; pendiente de obtención de IP pública de Oracle para activar URL de descarga)
+| Suite | Comando | Total Tests | Pasaron | Fallaron | Estado |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Backend Spring Boot** | `mvnw.cmd test` | 55 | 55 | 0 | **PASS (100%)** |
+| **Frontend Web (Vitest)**| `npm test -- --run` | 14 | 14 | 0 | **PASS (100%)** |
+| **Frontend Web Build** | `npm run build` (tsc -b && vite) | Compilación | OK | 0 | **PASS (100%)** |
+| **Android TypeScript** | `npx tsc --noEmit` | Verificación de tipos | OK | 0 | **PASS (100%)** |
 
-QR
-BLOCKED (Pendiente de IP pública de la instancia Oracle para generar QR final verificable)
+---
 
-INTERNET E2E
-BLOCKED (Requiere que la instancia de Oracle Cloud esté encendida con IP pública)
+## 4. MATRIZ DE PARIDAD DE FUNCIONALIDADES: WEB VS ANDROID (FASE 5)
 
-COST
-$0 TARGET
+| Funcionalidad / Módulo | Web (`workers.dev`) | Android (`FASTGO-Beta2-release.apk`) | Estado de Paridad |
+| :--- | :---: | :---: | :---: |
+| **Registro con selector de Rol** (Cliente, Comercio, Domiciliario) | Soportado | Soportado | **MATCH** |
+| **Login con JWT y redirección por Rol** | Soportado | Soportado | **MATCH** |
+| **Recuperación de Contraseña** | Soportado | Soportado | **MATCH** |
+| **Catálogo de Comercios y Productos** | Soportado con imágenes reales | Soportado con imágenes reales | **MATCH** |
+| **Carrito de Compras y Checkout** | Soportado | Soportado | **MATCH** |
+| **Gestión de Direcciones de Entrega** | Soportado | Soportado | **MATCH** |
+| **Tarifa de Domicilio Dinámica por Comercio** (mínimo $2.000 COP) | Soportado | Soportado | **MATCH** |
+| **Pago en Efectivo** | Soportado | Soportado | **MATCH** |
+| **Pago Bancolombia Transferencia** (con datos de cuenta y titular) | Soportado | Soportado | **MATCH** |
+| **Subida de Comprobante Bancario** (cámara/galería) | Soportado (Input file seguro) | Soportado (Galería nativa Android) | **MATCH** |
+| **Tracking de Pedido en Tiempo Real** | Soportado | Soportado | **MATCH** |
+| **Panel de Comercio (Configuración)** (Tarifa y Bancolombia) | Soportado | Soportado | **MATCH** |
+| **Panel de Comercio (Catálogo)** (Subida de fotos de productos) | Soportado | Soportado | **MATCH** |
+| **Cocina: Flujo PENDIENTE -> CONFIRMAR -> PREPARAR -> LISTO** | Soportado | Soportado | **MATCH** |
+| **Cocina: Verificación y Aprobación/Rechazo de Comprobante** | Soportado | Soportado | **MATCH** |
+| **Cocina: Bloqueo de avance a LISTO sin aprobación de pago** | Soportado | Soportado | **MATCH** |
+| **Domiciliario: Pedidos disponibles con tarifa ganada** | Soportado | Soportado | **MATCH** |
+| **Domiciliario: Asignación atómica (Anti-colisión 409)** | Soportado | Soportado | **MATCH** |
+| **Domiciliario: Flujo ASIGNADO -> EN_CAMINO -> ENTREGADO** | Soportado | Soportado | **MATCH** |
+| **Panel de Administración General** (Usuarios, Comercios, Métricas) | Soportado (`/admin/dashboard`) | No aplica a app móvil operativa | **DIFERENTE POR DISEÑO** |
 
-============================================
+---
 
-URLs reales:
+## 5. REPORTE DE USUARIO ADMINISTRADOR REAL (FASE 8)
 
-Frontend:
-BLOCKED (Pendiente de despliegue en Cloudflare Pages tras obtener URL pública del backend)
+- **Usuario Generado:** `admin@fastgo.com` (Rol ADMIN, ID: 4).
+- **Almacenamiento Seguro de Credenciales:** `C:\Users\PC\Desktop\FastGo_Admin_Credentials.txt`  
+  *(Contraseña generada con entropía criptográfica de 22 caracteres, protegida mediante BCrypt con factor de costo 12).*
+- **Validación en Vivo:** Login autenticado exitosamente contra la API de producción (`HTTP 200`, JWT emitido).
+- **Ruta Web del Panel Admin:** `https://fastgo-app.fastgo-frontend.workers.dev/admin/dashboard`
+- **Ruta Android del Panel Admin:** **ADMIN PANEL NO IMPLEMENTADO EN ANDROID** (La app Android está diseñada y optimizada exclusivamente para Cliente, Comercio y Domiciliario).
 
-API:
-BLOCKED (Pendiente de provisión de instancia VM en Oracle Cloud para obtener IP pública)
+---
 
-APK:
-READY LOCAL (C:\Users\PC\Desktop\FastGo_beta2\release\FASTGO-Beta2-release.apk - 68.5 MB, SHA-256: D37DA89E68B7575271842D82F2C4E0F62EE5043E49BA9B277F1855554D5A7B60)
-READY SERVER (Configurado en Caddy: https://<PUBLIC_IP>/download/fastgo.apk)
+## 6. DISTRIBUCIÓN Y DESCARGA OFICIAL DEL APK (FASE 9)
 
-GitHub:
-https://github.com/OscarJHF/fastgo-platform
-
-Oracle:
-https://cloud.oracle.com
-
-============================================
-
-PROBLEMAS RESUELTOS:
-
-1. HTTPS sin dominio: Caddy v2 configurado con soporte nativo de certificados TLS emitidos directamente a direcciones IP públicas (RFC 8738). NO se requiere comprar ni pagar por ningún dominio.
-2. Límite de 25 MB en Cloudflare Pages: Resuelto integrando Caddy como servidor de descargas estáticas (/srv/downloads) para el APK de 68.5 MB, aprovechando los 10 TB/mes de ancho de banda gratuito de Oracle Cloud.
-
-BLOQUEOS ACTIVOS (GATEWAYS DE SEGURIDAD):
-
-1. Proceso de registro en Oracle Cloud Free Tier: Requiere validación manual de identidad (contraseña, SMS/OTP, CAPTCHA y retención temporal de verificación bancaria de $0 USD) que nunca debe ser automatizada ni vulnerada.
-2. IP Pública de Producción: A la espera de que el usuario complete el alta de la instancia VM.Standard.A1.Flex (2 OCPU / 12 GB RAM) con la clave pública generada en C:\Users\PC\Desktop\FASTGO_ORACLE\ssh\fastgo_oracle_rsa.pub.
-
-PASOS SIGUIENTES:
-
-1. Usuario accede a https://signup.cloud.oracle.com/ y completa la verificación humana.
-2. Usuario crea la instancia Compute VM.Standard.A1.Flex (2 OCPU / 12 GB RAM / 50 GB boot) pegando fastgo_oracle_rsa.pub.
-3. El usuario suministra la IP pública asignada.
-4. Conexión automatizada vía SSH, subida del APK vía SCP, ejecución de deploy.sh y verificación de Caddy + PostgreSQL + Spring Boot.
-5. Despliegue de Frontend en Cloudflare Pages con VITE_API_BASE_URL=https://<PUBLIC_IP>.
-6. Generación del código QR y archivo FASTGO_ANDROID_DOWNLOAD_URL.txt.
-
-============================================
-
-REGLA FINAL:
-
-NO se declara FASTGO "EN PRODUCCIÓN" hasta verificar la conectividad real sobre Internet.
-Oracle y Cloudflare se encuentran en estado READY y preparados para despliegue inmediato en $0.00 USD.
-============================================
+- **Nombre de archivo:** `FASTGO-Beta2-release.apk`
+- **SHA-256 Verificado:** `CE2C416EFFFE0A80C35CF711E282B10319ABF79A2EB8738D782199C6EF53EF1E`
+- **Tamaño:** `68,986,918 bytes` (65.7 MB)
+- **Tag en Repositorio GitHub:** `v1.0.0-beta2`
+- **URL Pública de Descarga:**  
+  `https://github.com/OscarJHF/fastgo-platform/releases/download/v2.0-beta/FASTGO-Beta2-release.apk`
+- **Página Oficial del Release:**  
+  `https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.0-beta`
