@@ -36,8 +36,7 @@ public class PedidoService {
     private final ProductoRepository productoRepository;
     private final TarifaService tarifaService;
     private final PagoRepository pagoRepository;
-    private final Path uploadDir;
-    private final Path proofsDir;
+    private final StorageService storageService;
 
     public PedidoService(
             PedidoRepository pedidoRepository,
@@ -51,7 +50,7 @@ public class PedidoService {
             ProductoRepository productoRepository,
             TarifaService tarifaService,
             PagoRepository pagoRepository,
-            @Value("${fastgo.upload.dir:uploads}") String uploadDirPath) {
+            StorageService storageService) {
         this.pedidoRepository = pedidoRepository;
         this.detallePedidoRepository = detallePedidoRepository;
         this.carritoService = carritoService;
@@ -63,22 +62,7 @@ public class PedidoService {
         this.productoRepository = productoRepository;
         this.tarifaService = tarifaService;
         this.pagoRepository = pagoRepository;
-        Path targetUploadDir = Paths.get(uploadDirPath != null ? uploadDirPath : "uploads").toAbsolutePath().normalize();
-        Path targetProofsDir = targetUploadDir.resolve("payment-proofs").normalize();
-        try {
-            Files.createDirectories(targetProofsDir);
-        } catch (Exception e) {
-            Path fallback = Paths.get(System.getProperty("java.io.tmpdir", "/tmp")).resolve("fastgo-uploads").normalize();
-            try {
-                Files.createDirectories(fallback.resolve("payment-proofs").normalize());
-                targetUploadDir = fallback;
-                targetProofsDir = fallback.resolve("payment-proofs").normalize();
-            } catch (Exception ex) {
-                // If even fallback fails, retain targetUploadDir without crashing startup
-            }
-        }
-        this.uploadDir = targetUploadDir;
-        this.proofsDir = targetProofsDir;
+        this.storageService = storageService;
     }
 
     @Transactional
@@ -223,9 +207,8 @@ public class PedidoService {
             FileValidationUtils.validatePaymentProof(comprobanteArchivo);
             String extension = FileValidationUtils.getCleanExtension(comprobanteArchivo.getOriginalFilename());
             String secureFilename = "proof_" + pedido.getId() + "_" + UUID.randomUUID() + "." + extension;
-            Path targetPath = this.proofsDir.resolve(secureFilename).normalize();
             try {
-                Files.copy(comprobanteArchivo.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+                storageService.storePrivateProof(comprobanteArchivo, secureFilename);
             } catch (IOException e) {
                 throw new RuntimeException("Error al guardar el comprobante: " + e.getMessage(), e);
             }
@@ -738,61 +721,13 @@ public class PedidoService {
             throw new RuntimeException("El comprobante no existe o no ha sido cargado para este pedido");
         }
 
-        Path filePath = null;
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.proofsDir, "proof_" + pedido.getId() + "_*")) {
-            for (Path p : stream) {
-                if (Files.isReadable(p)) {
-                    filePath = p;
-                    break;
-                }
-            }
-        } catch (IOException ignored) {}
-
-        if (filePath == null) {
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(this.proofsDir, "proof_" + pedido.getId() + ".*")) {
-                for (Path p : stream) {
-                    if (Files.isReadable(p)) {
-                        filePath = p;
-                        break;
-                    }
-                }
-            } catch (IOException ignored) {}
-        }
-
-        if (filePath == null) {
-            String filename = Paths.get(comprobanteUrl).getFileName().toString();
-            Path candidate = this.proofsDir.resolve(filename).normalize();
-            if (Files.exists(candidate) && Files.isReadable(candidate)) {
-                filePath = candidate;
-            } else {
-                candidate = this.uploadDir.resolve(filename).normalize();
-                if (Files.exists(candidate) && Files.isReadable(candidate)) {
-                    filePath = candidate;
-                }
-            }
-        }
-
-        if (filePath == null || !Files.exists(filePath) || !Files.isReadable(filePath)) {
+        Resource resource = storageService.loadPrivateProof(pedido.getId(), comprobanteUrl);
+        if (resource == null || !resource.exists() || !resource.isReadable()) {
             throw new RuntimeException("El archivo del comprobante no existe en el servidor");
         }
 
-        try {
-            Resource resource = new UrlResource(filePath.toUri());
-            if (!resource.exists() || !resource.isReadable()) {
-                throw new RuntimeException("El archivo del comprobante no existe en el servidor");
-            }
-
-            MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
-            String lower = filePath.getFileName().toString().toLowerCase();
-            if (lower.endsWith(".png")) mediaType = MediaType.IMAGE_PNG;
-            else if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) mediaType = MediaType.IMAGE_JPEG;
-            else if (lower.endsWith(".webp")) mediaType = MediaType.parseMediaType("image/webp");
-            else if (lower.endsWith(".pdf")) mediaType = MediaType.APPLICATION_PDF;
-
-            return new ComprobanteResourceInfo(resource, mediaType);
-        } catch (MalformedURLException e) {
-            throw new RuntimeException("Error al leer el archivo del comprobante", e);
-        }
+        MediaType mediaType = storageService.getPrivateProofMediaType(resource.getFilename());
+        return new ComprobanteResourceInfo(resource, mediaType);
     }
 
     @Transactional
@@ -808,14 +743,9 @@ public class PedidoService {
 
         String extension = FileValidationUtils.getCleanExtension(file.getOriginalFilename());
         String secureFilename = "proof_" + pedido.getId() + "_" + UUID.randomUUID() + "." + extension;
-        Path targetPath = this.proofsDir.resolve(secureFilename).normalize();
-
-        if (!targetPath.getParent().equals(this.proofsDir)) {
-            throw new SecurityException("Intento de navegación de directorios no permitido.");
-        }
 
         try {
-            Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+            storageService.storePrivateProof(file, secureFilename);
         } catch (IOException e) {
             throw new RuntimeException("Error al guardar el comprobante en el servidor: " + e.getMessage(), e);
         }
