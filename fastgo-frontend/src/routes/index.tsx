@@ -33,6 +33,7 @@ import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from '../pages/admin/AdminUsersPage';
 import { AdminCategoriesPage } from '../pages/admin/AdminCategoriesPage';
 import { AdminCommercesPage } from '../pages/admin/AdminCommercesPage';
+import { DownloadPage } from '../pages/DownloadPage';
 
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { APP_ROUTES } from '../constants/routes';
@@ -43,6 +44,8 @@ export const AppRoutes: React.FC = () => {
       <Routes>
         {/* Rutas Públicas */}
         <Route path={APP_ROUTES.HOME} element={<HomePage />} />
+        <Route path={APP_ROUTES.DOWNLOAD} element={<DownloadPage />} />
+        <Route path="/descargar" element={<DownloadPage />} />
         <Route path={APP_ROUTES.LOGIN} element={<LoginPage />} />
         <Route path={APP_ROUTES.REGISTER} element={<RegisterPage />} />
         <Route path={APP_ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordPage />} />
@@ -202,11 +205,14 @@ export const AppRoutes: React.FC = () => {
         />
 
         {/* Rutas Aliases para compatibilidad REST y navegación directa */}
+        <Route path="/cliente" element={<HomePage />} />
+        <Route path="/comercio" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceDashboardPage /></RoleRoute>} />
         <Route path="/comercio/dashboard" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceDashboardPage /></RoleRoute>} />
         <Route path="/comercio/pedidos" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceOrdersPage /></RoleRoute>} />
         <Route path="/comercio/productos" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceProductsPage /></RoleRoute>} />
         <Route path="/comercio/sucursales" element={<RoleRoute allowedRoles={['COMERCIO', 'ADMIN']}><CommerceBranchesPage /></RoleRoute>} />
 
+        <Route path="/domiciliario" element={<RoleRoute allowedRoles={['DOMICILIARIO', 'ADMIN']}><DeliveryDashboardPage /></RoleRoute>} />
         <Route path="/domiciliario/dashboard" element={<RoleRoute allowedRoles={['DOMICILIARIO', 'ADMIN']}><DeliveryDashboardPage /></RoleRoute>} />
         <Route path="/domiciliario/pedidos" element={<RoleRoute allowedRoles={['DOMICILIARIO', 'ADMIN']}><DeliveryDashboardPage /></RoleRoute>} />
         <Route path="/encomiendas" element={<ProtectedRoute><EncomiendasPage /></ProtectedRoute>} />

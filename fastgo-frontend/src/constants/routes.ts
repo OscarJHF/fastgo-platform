@@ -12,6 +12,7 @@ export const APP_ROUTES = {
   ORDER_DETAIL: '/pedidos/:id',
   PROFILE: '/perfil',
   ENCOMIENDAS: '/encomiendas',
+  DOWNLOAD: '/descargar',
 
   // Comercio
   COMMERCE_DASHBOARD: '/comercio-panel',

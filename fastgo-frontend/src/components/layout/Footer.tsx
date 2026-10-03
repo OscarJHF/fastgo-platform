@@ -72,6 +72,14 @@ export const Footer: React.FC = () => {
                   Envíos Express
                 </Link>
               </li>
+              <li>
+                <a
+                  href="https://fastgo-app.fastgo-frontend.workers.dev/descargar"
+                  className="text-emerald-700 font-bold hover:text-emerald-800 transition-colors flex items-center gap-1"
+                >
+                  📲 Descargar App Android
+                </a>
+              </li>
             </ul>
           </div>
 
