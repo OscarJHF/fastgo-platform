@@ -13,3 +13,5 @@ export * from './mapsService';
 export * from './uploadService';
 export * from './trackingService';
 export * from './adminService';
+export * from './geografiaService';
+export * from './analyticsService';

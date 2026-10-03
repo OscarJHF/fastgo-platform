@@ -158,6 +158,12 @@ class BusinessAndIdorSecurityTests {
             c.setActivo(true);
             return comercioRepository.save(c);
         });
+        comercioA.setHoraApertura(java.time.LocalTime.of(0, 0));
+        comercioA.setHoraCierre(java.time.LocalTime.of(23, 59, 59));
+        comercioA.setActivo(true);
+        comercioA.setEstado("ACTIVA");
+        comercioA.setPausaManual(false);
+        comercioA = comercioRepository.save(comercioA);
 
         sucursalA = sucursalRepository.findByComercioId(comercioA.getId()).stream().findFirst().orElseGet(() -> {
             Sucursal s = new Sucursal();
@@ -196,7 +202,10 @@ class BusinessAndIdorSecurityTests {
     }
 
     private Usuario obtenerOCrearUsuario(String correo, String nombre, String apellido, Rol rol) {
-        return usuarioRepository.findByCorreo(correo).orElseGet(() -> {
+        return usuarioRepository.findByCorreo(correo).map(u -> {
+            u.setEstado(true);
+            return usuarioRepository.save(u);
+        }).orElseGet(() -> {
             Usuario u = new Usuario();
             u.setNombre(nombre);
             u.setApellido(apellido);

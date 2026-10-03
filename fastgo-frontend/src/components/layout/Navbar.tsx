@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Package,
   Smartphone,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useCart } from '../../context/CartContext';
@@ -150,10 +151,16 @@ export const Navbar: React.FC = () => {
             )}
 
             {role === 'ADMIN' && (
-              <Link to={APP_ROUTES.ADMIN_DASHBOARD} className="text-sm font-semibold text-rose-600 hover:text-rose-800 transition-colors flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4" />
-                Panel Admin
-              </Link>
+              <>
+                <Link to={APP_ROUTES.ADMIN_DASHBOARD} className="text-sm font-semibold text-rose-600 hover:text-rose-800 transition-colors flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4" />
+                  Panel Admin
+                </Link>
+                <Link to={APP_ROUTES.ADMIN_METRICS} className="text-sm font-semibold text-emerald-600 hover:text-emerald-800 transition-colors flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4" />
+                  Métricas
+                </Link>
+              </>
             )}
           </nav>
 
@@ -324,13 +331,22 @@ export const Navbar: React.FC = () => {
           )}
 
           {role === 'ADMIN' && (
-            <Link
-              to={APP_ROUTES.ADMIN_DASHBOARD}
-              onClick={() => setMobileMenuOpen(false)}
-              className="block px-3 py-2 rounded-lg text-base font-semibold text-rose-700 hover:bg-rose-50"
-            >
-              Panel Administrador
-            </Link>
+            <>
+              <Link
+                to={APP_ROUTES.ADMIN_DASHBOARD}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-base font-semibold text-rose-700 hover:bg-rose-50"
+              >
+                Panel Administrador
+              </Link>
+              <Link
+                to={APP_ROUTES.ADMIN_METRICS}
+                onClick={() => setMobileMenuOpen(false)}
+                className="block px-3 py-2 rounded-lg text-base font-semibold text-emerald-700 hover:bg-emerald-50"
+              >
+                Analítica y Métricas
+              </Link>
+            </>
           )}
 
           {isAuthenticated && (

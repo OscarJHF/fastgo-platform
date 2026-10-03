@@ -8,3 +8,5 @@ export * from './payment';
 export * from './maps';
 export * from './api';
 export * from './encomienda';
+export * from './geografia';
+export * from './analytics';

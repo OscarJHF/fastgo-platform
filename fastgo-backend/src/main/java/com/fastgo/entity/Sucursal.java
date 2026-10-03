@@ -18,6 +18,8 @@ public class Sucursal {
     @Column(precision=10, scale=8) private BigDecimal latitud;
     @Column(precision=11, scale=8) private BigDecimal longitud;
     @Column(name="radio_entrega_km", precision=5, scale=2) private BigDecimal radioEntregaKm;
+    @Column(name="departamento_id") private Integer departamentoId;
+    @Column(name="municipio_id") private Integer municipioId;
     private Boolean abierta;
     @Column(name="creado_en") private LocalDateTime creadoEn;
     public Sucursal() {}
@@ -29,6 +31,8 @@ public class Sucursal {
     public String getDireccion(){return direccion;} public void setDireccion(String v){direccion=v;}
     public String getCiudad(){return ciudad;} public void setCiudad(String v){ciudad=v;}
     public String getDepartamento(){return departamento;} public void setDepartamento(String v){departamento=v;}
+    public Integer getDepartamentoId(){return departamentoId;} public void setDepartamentoId(Integer v){departamentoId=v;}
+    public Integer getMunicipioId(){return municipioId;} public void setMunicipioId(Integer v){municipioId=v;}
     public String getTelefono(){return telefono;} public void setTelefono(String v){telefono=v;}
     public BigDecimal getLatitud(){return latitud;} public void setLatitud(BigDecimal v){latitud=v;}
     public BigDecimal getLongitud(){return longitud;} public void setLongitud(BigDecimal v){longitud=v;}

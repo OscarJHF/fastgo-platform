@@ -62,6 +62,21 @@ export const AdminDashboardPage: React.FC = () => {
             <span className="text-xs font-bold text-purple-700 mt-4 inline-block">Ver comercios →</span>
           </Card>
         </Link>
+
+        <Link to={APP_ROUTES.ADMIN_METRICS}>
+          <Card hoverable className="p-6 h-full flex flex-col justify-between border-emerald-200 hover:border-emerald-300">
+            <div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                <Users className="w-5 h-5" />
+              </div>
+              <h3 className="font-black text-base text-gray-900">Analítica y Métricas</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Embudo de conversión, descargas APK, aperturas Android y reportes en tiempo real.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-emerald-700 mt-4 inline-block">Ver métricas y embudo →</span>
+          </Card>
+        </Link>
       </div>
 
       <div className="p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-3">

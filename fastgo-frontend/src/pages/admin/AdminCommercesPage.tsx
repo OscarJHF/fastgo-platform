@@ -18,9 +18,15 @@ import {
   DollarSign,
   Search,
   Filter,
+  Trash2,
+  MapPin,
+  Building2,
+  Boxes,
+  ShoppingBag,
 } from 'lucide-react';
 import { adminService } from '../../services/adminService';
-import { AdminTienda, ConfiguracionSuscripcion, AuditoriaAdmin } from '../../types';
+import { geografiaService } from '../../services/geografiaService';
+import { AdminTienda, ConfiguracionSuscripcion, AuditoriaAdmin, Departamento, Municipio } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
@@ -41,9 +47,15 @@ export const AdminCommercesPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [stateFilter, setStateFilter] = useState('TODOS');
 
+  // Filtros geográficos oficiales DANE
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  const [municipios, setMunicipios] = useState<Municipio[]>([]);
+  const [selectedDepto, setSelectedDepto] = useState<string>('');
+  const [selectedMuni, setSelectedMuni] = useState<string>('');
+
   // Modal de acción administrativa
   const [selectedStore, setSelectedStore] = useState<AdminTienda | null>(null);
-  const [actionType, setActionType] = useState<'activar' | 'desactivar' | 'suspender' | 'reactivar' | null>(null);
+  const [actionType, setActionType] = useState<'activar' | 'desactivar' | 'suspender' | 'reactivar' | 'eliminar' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
 
@@ -75,9 +87,21 @@ export const AdminCommercesPage: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    geografiaService.getDepartamentos().then(setDepartamentos).catch(() => {});
   }, []);
 
-  const handleOpenAction = (store: AdminTienda, type: 'activar' | 'desactivar' | 'suspender' | 'reactivar') => {
+  useEffect(() => {
+    if (selectedDepto) {
+      geografiaService.getMunicipiosPorDepartamento(selectedDepto)
+        .then(setMunicipios)
+        .catch(() => setMunicipios([]));
+    } else {
+      setMunicipios([]);
+    }
+    setSelectedMuni('');
+  }, [selectedDepto]);
+
+  const handleOpenAction = (store: AdminTienda, type: 'activar' | 'desactivar' | 'suspender' | 'reactivar' | 'eliminar') => {
     setSelectedStore(store);
     setActionType(type);
     setActionReason('');
@@ -99,6 +123,9 @@ export const AdminCommercesPage: React.FC = () => {
       } else if (actionType === 'reactivar') {
         await adminService.reactivateStore(selectedStore.id, actionReason);
         addToast('success', `Tienda "${selectedStore.nombre}" reactivada exitosamente`);
+      } else if (actionType === 'eliminar') {
+        await adminService.deleteStore(selectedStore.id, actionReason);
+        addToast('success', `Tienda "${selectedStore.nombre}" eliminada lógicamente (soft-delete)`);
       }
       setSelectedStore(null);
       setActionType(null);
@@ -161,7 +188,9 @@ export const AdminCommercesPage: React.FC = () => {
       (s.propietarioNombre && s.propietarioNombre.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (s.propietarioCorreo && s.propietarioCorreo.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesState = stateFilter === 'TODOS' || s.estado?.toUpperCase() === stateFilter.toUpperCase();
-    return matchesSearch && matchesState;
+    const matchesDepto = !selectedDepto || String(s.departamentoId) === String(selectedDepto);
+    const matchesMuni = !selectedMuni || String(s.municipioId) === String(selectedMuni);
+    return matchesSearch && matchesState && matchesDepto && matchesMuni;
   });
 
   if (isLoading) {
@@ -219,7 +248,7 @@ export const AdminCommercesPage: React.FC = () => {
       {activeTab === 'tiendas' && (
         <div className="space-y-4">
           {/* Filters */}
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-3">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -230,20 +259,53 @@ export const AdminCommercesPage: React.FC = () => {
                 className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-gray-400" />
+            <div className="flex flex-wrap items-center gap-2">
               <select
-                value={stateFilter}
-                onChange={(e) => setStateFilter(e.target.value)}
-                className="px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                aria-label="Filtrar por Departamento"
+                value={selectedDepto}
+                onChange={(e) => setSelectedDepto(e.target.value)}
+                className="px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
               >
-                <option value="TODOS">Todos los estados</option>
-                <option value="ACTIVA">Activas</option>
-                <option value="PENDIENTE_ACTIVACION">Pendientes de Activación</option>
-                <option value="PENDIENTE_PAGO">Pendientes de Pago</option>
-                <option value="SUSPENDIDA">Suspendidas</option>
-                <option value="DESACTIVADA">Desactivadas</option>
+                <option value="">🇨🇴 Todos los Departamentos</option>
+                {departamentos.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
               </select>
+
+              {selectedDepto && (
+                <select
+                  aria-label="Filtrar por Municipio"
+                  value={selectedMuni}
+                  onChange={(e) => setSelectedMuni(e.target.value)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="">Todos los Municipios</option>
+                  {municipios.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nombre}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-gray-400" />
+                <select
+                  aria-label="Filtrar por Estado"
+                  value={stateFilter}
+                  onChange={(e) => setStateFilter(e.target.value)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                >
+                  <option value="TODOS">Todos los estados</option>
+                  <option value="ACTIVA">Activas</option>
+                  <option value="PENDIENTE_ACTIVACION">Pendientes de Activación</option>
+                  <option value="PENDIENTE_PAGO">Pendientes de Pago</option>
+                  <option value="SUSPENDIDA">Suspendidas</option>
+                  <option value="DESACTIVADA">Desactivadas</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -303,11 +365,41 @@ export const AdminCommercesPage: React.FC = () => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Indicadores Operativos y Geográficos DANE */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-1 text-gray-500">
+                      {s.departamentoNombre && (
+                        <span className="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded font-medium text-slate-700">
+                          <MapPin className="w-3 h-3 text-emerald-600" />
+                          {s.municipioNombre || ''}, {s.departamentoNombre}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded">
+                        <Building2 className="w-3 h-3 text-blue-500" />
+                        {s.totalSucursales ?? 0} sucursal(es)
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded">
+                        <Boxes className="w-3 h-3 text-indigo-500" />
+                        {s.totalProductos ?? 0} producto(s)
+                      </span>
+                      <span className="inline-flex items-center gap-1 bg-gray-100 px-2 py-0.5 rounded">
+                        <ShoppingBag className="w-3 h-3 text-amber-500" />
+                        {s.totalPedidos ?? 0} pedido(s)
+                        {(s.pedidosActivos ?? 0) > 0 && (
+                          <span className="font-bold text-amber-700 ml-0.5">({s.pedidosActivos} activos)</span>
+                        )}
+                      </span>
+                      {s.eliminado && (
+                        <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded">
+                          ELIMINADA (SOFT-DELETE)
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Administrative Action Buttons */}
                   <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
-                    {s.estado !== 'ACTIVA' && (
+                    {s.estado !== 'ACTIVA' && !s.eliminado && (
                       <Button
                         size="sm"
                         variant="primary"
@@ -318,7 +410,7 @@ export const AdminCommercesPage: React.FC = () => {
                       </Button>
                     )}
 
-                    {s.estado === 'ACTIVA' && (
+                    {s.estado === 'ACTIVA' && !s.eliminado && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -329,7 +421,7 @@ export const AdminCommercesPage: React.FC = () => {
                       </Button>
                     )}
 
-                    {s.estado === 'SUSPENDIDA' && (
+                    {s.estado === 'SUSPENDIDA' && !s.eliminado && (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -340,14 +432,26 @@ export const AdminCommercesPage: React.FC = () => {
                       </Button>
                     )}
 
-                    {s.estado !== 'DESACTIVADA' && (
+                    {s.estado !== 'DESACTIVADA' && !s.eliminado && (
                       <Button
                         size="sm"
                         variant="secondary"
                         onClick={() => handleOpenAction(s, 'desactivar')}
-                        className="text-xs text-red-600 bg-red-50 hover:bg-red-100 border-red-200 flex items-center gap-1 ml-auto"
+                        className="text-xs text-red-600 bg-red-50 hover:bg-red-100 border-red-200 flex items-center gap-1"
                       >
                         <XCircle className="w-3.5 h-3.5" /> Desactivar
+                      </Button>
+                    )}
+
+                    {!s.eliminado && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleOpenAction(s, 'eliminar')}
+                        className="text-xs text-rose-700 bg-rose-50 hover:bg-rose-100 border-rose-200 flex items-center gap-1 ml-auto"
+                        title="Eliminación lógica segura"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Eliminar
                       </Button>
                     )}
                   </div>
@@ -514,7 +618,7 @@ export const AdminCommercesPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Modal para acciones administrativas (activar, suspender, etc.) */}
+      {/* Modal para acciones administrativas (activar, suspender, eliminar, etc.) */}
       {selectedStore && actionType && (
         <Modal
           isOpen={true}
@@ -522,13 +626,47 @@ export const AdminCommercesPage: React.FC = () => {
             setSelectedStore(null);
             setActionType(null);
           }}
-          title={`Confirmar Acción Administrativa: ${actionType.toUpperCase()}`}
+          title={
+            actionType === 'eliminar'
+              ? 'Eliminar Tienda (Desactivación Segura)'
+              : `Confirmar Acción Administrativa: ${actionType.toUpperCase()}`
+          }
         >
           <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              ¿Estás seguro de que deseas <strong>{actionType}</strong> la tienda{' '}
-              <strong>"{selectedStore.nombre}"</strong>?
-            </p>
+            {actionType === 'eliminar' ? (
+              <div className="space-y-3">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-2">
+                  <div className="font-bold flex items-center gap-1.5 text-rose-900">
+                    <AlertTriangle className="w-4 h-4 text-rose-600" />
+                    Advertencia de Eliminación Segura (Soft-Delete)
+                  </div>
+                  <p>
+                    Vas a eliminar la tienda <strong>"{selectedStore.nombre}"</strong>. Esta acción desactiva la tienda y previene nuevas operaciones, sin destruir el historial de ventas ni la base de datos.
+                  </p>
+                </div>
+
+                {/* Métricas del comercio antes de eliminar */}
+                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 text-xs space-y-1.5">
+                  <div className="font-bold text-gray-700">Métricas operativas asociadas:</div>
+                  <div className="grid grid-cols-2 gap-2 text-gray-600">
+                    <div>• Sucursales: <strong>{selectedStore.totalSucursales ?? 0}</strong></div>
+                    <div>• Productos: <strong>{selectedStore.totalProductos ?? 0}</strong></div>
+                    <div>• Total Pedidos: <strong>{selectedStore.totalPedidos ?? 0}</strong></div>
+                    <div>• Pedidos Activos: <strong className={(selectedStore.pedidosActivos ?? 0) > 0 ? 'text-amber-600' : ''}>{selectedStore.pedidosActivos ?? 0}</strong></div>
+                  </div>
+                  {selectedStore.departamentoNombre && (
+                    <div className="text-[11px] text-gray-500 pt-1">
+                      Ubicación: {selectedStore.municipioNombre || ''}, {selectedStore.departamentoNombre}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600">
+                ¿Estás seguro de que deseas <strong>{actionType}</strong> la tienda{' '}
+                <strong>"{selectedStore.nombre}"</strong>?
+              </p>
+            )}
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">
@@ -536,7 +674,11 @@ export const AdminCommercesPage: React.FC = () => {
               </label>
               <Input
                 type="text"
-                placeholder="Ej. Pago verificado / Suspensión por mora / Reactivación..."
+                placeholder={
+                  actionType === 'eliminar'
+                    ? 'Ej. Solicitud expresa del propietario / Cierre definitivo...'
+                    : 'Ej. Pago verificado / Suspensión por mora / Reactivación...'
+                }
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
                 required
@@ -553,8 +695,12 @@ export const AdminCommercesPage: React.FC = () => {
               >
                 Cancelar
               </Button>
-              <Button variant="primary" onClick={handleExecuteAction} isLoading={isProcessingAction}>
-                Confirmar {actionType}
+              <Button
+                variant={actionType === 'eliminar' ? 'danger' : 'primary'}
+                onClick={handleExecuteAction}
+                isLoading={isProcessingAction}
+              >
+                {actionType === 'eliminar' ? 'Confirmar Eliminación Segura' : `Confirmar ${actionType}`}
               </Button>
             </div>
           </div>

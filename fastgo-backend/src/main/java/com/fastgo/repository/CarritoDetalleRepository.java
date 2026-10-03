@@ -16,5 +16,6 @@ public interface CarritoDetalleRepository
             Integer productoId
     );
 
+    @org.springframework.transaction.annotation.Transactional
     void deleteByCarritoId(Integer carritoId);
 }

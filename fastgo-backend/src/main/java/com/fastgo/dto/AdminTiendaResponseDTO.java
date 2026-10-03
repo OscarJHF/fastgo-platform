@@ -26,6 +26,12 @@ public class AdminTiendaResponseDTO {
     private BigDecimal montoSuscripcion;
     private String fechaUltimoPago;
     private String referenciaPago;
+    private String departamentoId;
+    private String departamentoNombre;
+    private String municipioId;
+    private String municipioNombre;
+    private Long totalProductos;
+    private Long totalPedidos;
 
     public AdminTiendaResponseDTO() {
     }
@@ -96,4 +102,22 @@ public class AdminTiendaResponseDTO {
 
     public String getReferenciaPago() { return referenciaPago; }
     public void setReferenciaPago(String referenciaPago) { this.referenciaPago = referenciaPago; }
+
+    public String getDepartamentoId() { return departamentoId; }
+    public void setDepartamentoId(String departamentoId) { this.departamentoId = departamentoId; }
+
+    public String getDepartamentoNombre() { return departamentoNombre; }
+    public void setDepartamentoNombre(String departamentoNombre) { this.departamentoNombre = departamentoNombre; }
+
+    public String getMunicipioId() { return municipioId; }
+    public void setMunicipioId(String municipioId) { this.municipioId = municipioId; }
+
+    public String getMunicipioNombre() { return municipioNombre; }
+    public void setMunicipioNombre(String municipioNombre) { this.municipioNombre = municipioNombre; }
+
+    public Long getTotalProductos() { return totalProductos; }
+    public void setTotalProductos(Long totalProductos) { this.totalProductos = totalProductos; }
+
+    public Long getTotalPedidos() { return totalPedidos; }
+    public void setTotalPedidos(Long totalPedidos) { this.totalPedidos = totalPedidos; }
 }

@@ -87,6 +87,15 @@ export interface AdminTienda {
   montoSuscripcion?: number;
   fechaUltimoPago?: string;
   referenciaPago?: string;
+  departamentoId?: number;
+  departamentoNombre?: string;
+  municipioId?: number;
+  municipioNombre?: string;
+  totalSucursales?: number;
+  totalProductos?: number;
+  totalPedidos?: number;
+  pedidosActivos?: number;
+  eliminado?: boolean;
 }
 
 export interface AuditoriaAdmin {

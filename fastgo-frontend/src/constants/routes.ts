@@ -30,4 +30,5 @@ export const APP_ROUTES = {
   ADMIN_USERS: '/admin-panel/usuarios',
   ADMIN_CATEGORIES: '/admin-panel/categorias',
   ADMIN_COMMERCES: '/admin-panel/comercios',
+  ADMIN_METRICS: '/admin-panel/metricas',
 } as const;

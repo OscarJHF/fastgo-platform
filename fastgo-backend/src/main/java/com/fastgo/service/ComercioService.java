@@ -23,6 +23,10 @@ public class ComercioService {
     private final SucursalRepository sucursalRepository;
     private final SuscripcionService suscripcionService;
     private final AuditoriaAdminRepository auditoriaRepository;
+    private final DepartamentoRepository departamentoRepository;
+    private final MunicipioRepository municipioRepository;
+    private final ProductoRepository productoRepository;
+    private final PedidoRepository pedidoRepository;
 
     public ComercioService(
             ComercioRepository c,
@@ -30,20 +34,72 @@ public class ComercioService {
             CategoriaComercioRepository cat,
             SucursalRepository suc,
             SuscripcionService suscripcionService,
-            AuditoriaAdminRepository auditoriaRepository) {
+            AuditoriaAdminRepository auditoriaRepository,
+            DepartamentoRepository departamentoRepository,
+            MunicipioRepository municipioRepository,
+            ProductoRepository productoRepository,
+            PedidoRepository pedidoRepository) {
         this.comercioRepository = c;
         this.usuarioRepository = u;
         this.categoriaRepository = cat;
         this.sucursalRepository = suc;
         this.suscripcionService = suscripcionService;
         this.auditoriaRepository = auditoriaRepository;
+        this.departamentoRepository = departamentoRepository;
+        this.municipioRepository = municipioRepository;
+        this.productoRepository = productoRepository;
+        this.pedidoRepository = pedidoRepository;
     }
 
     public List<ComercioResponseDTO> listarComercios() {
+        return listarComerciosFiltrados(null, null);
+    }
+
+    public List<ComercioResponseDTO> listarComerciosFiltrados(String departamentoParam, String municipioParam) {
+        final Integer depTargetId = resolverDepartamentoId(departamentoParam);
+        final Integer munTargetId = resolverMunicipioId(municipioParam);
+
         return comercioRepository.findByActivoTrue().stream()
                 .filter(Comercio::isOperativa)
+                .filter(c -> {
+                    if (depTargetId != null) {
+                        boolean matchComercio = depTargetId.equals(c.getDepartamentoId());
+                        boolean matchSucursal = sucursalRepository.findByComercioId(c.getId()).stream()
+                                .anyMatch(s -> depTargetId.equals(s.getDepartamentoId()));
+                        if (!matchComercio && !matchSucursal) return false;
+                    }
+                    if (munTargetId != null) {
+                        boolean matchComercio = munTargetId.equals(c.getMunicipioId());
+                        boolean matchSucursal = sucursalRepository.findByComercioId(c.getId()).stream()
+                                .anyMatch(s -> munTargetId.equals(s.getMunicipioId()));
+                        if (!matchComercio && !matchSucursal) return false;
+                    }
+                    return true;
+                })
                 .map(this::dto)
                 .toList();
+    }
+
+    private Integer resolverDepartamentoId(String input) {
+        if (input == null || input.isBlank()) return null;
+        try {
+            Integer id = Integer.parseInt(input.trim());
+            if (departamentoRepository.existsById(id)) return id;
+        } catch (NumberFormatException ignored) {}
+        return departamentoRepository.findByCodigoDane(input.trim())
+                .map(Departamento::getId)
+                .orElse(null);
+    }
+
+    private Integer resolverMunicipioId(String input) {
+        if (input == null || input.isBlank()) return null;
+        try {
+            Integer id = Integer.parseInt(input.trim());
+            if (municipioRepository.existsById(id)) return id;
+        } catch (NumberFormatException ignored) {}
+        return municipioRepository.findByCodigoDane(input.trim())
+                .map(Municipio::getId)
+                .orElse(null);
     }
 
     public ComercioResponseDTO buscarPorId(Integer id) {
@@ -118,6 +174,16 @@ public class ComercioService {
             s.setDireccion((d.getDireccion() != null && !d.getDireccion().isBlank()) ? d.getDireccion().trim() : "Dirección principal");
             s.setCiudad((d.getCiudad() != null && !d.getCiudad().isBlank()) ? d.getCiudad().trim() : "Bogotá");
             s.setDepartamento("Cundinamarca");
+            Integer depId = resolverDepartamentoId(d.getDepartamentoId());
+            if (depId != null) {
+                s.setDepartamentoId(depId);
+                departamentoRepository.findById(depId).ifPresent(dep -> s.setDepartamento(dep.getNombre()));
+            }
+            Integer munId = resolverMunicipioId(d.getMunicipioId());
+            if (munId != null) {
+                s.setMunicipioId(munId);
+                municipioRepository.findById(munId).ifPresent(mun -> s.setCiudad(mun.getNombre()));
+            }
             s.setTelefono(saved.getTelefono());
             s.setAbierta(true);
             sucursalRepository.save(s);
@@ -147,16 +213,36 @@ public class ComercioService {
             s.setDireccion((d.getDireccion() != null && !d.getDireccion().isBlank()) ? d.getDireccion().trim() : "Dirección principal");
             s.setCiudad((d.getCiudad() != null && !d.getCiudad().isBlank()) ? d.getCiudad().trim() : "Bogotá");
             s.setDepartamento("Cundinamarca");
+            Integer depId = resolverDepartamentoId(d.getDepartamentoId());
+            if (depId != null) {
+                s.setDepartamentoId(depId);
+                departamentoRepository.findById(depId).ifPresent(dep -> s.setDepartamento(dep.getNombre()));
+            }
+            Integer munId = resolverMunicipioId(d.getMunicipioId());
+            if (munId != null) {
+                s.setMunicipioId(munId);
+                municipioRepository.findById(munId).ifPresent(mun -> s.setCiudad(mun.getNombre()));
+            }
             s.setTelefono(saved.getTelefono());
             s.setAbierta(true);
             sucursalRepository.save(s);
-        } else if ((d.getDireccion() != null && !d.getDireccion().isBlank()) || (d.getCiudad() != null && !d.getCiudad().isBlank())) {
+        } else {
             Sucursal s = sucursales.get(0);
             if (d.getDireccion() != null && !d.getDireccion().isBlank()) {
                 s.setDireccion(d.getDireccion().trim());
             }
             if (d.getCiudad() != null && !d.getCiudad().isBlank()) {
                 s.setCiudad(d.getCiudad().trim());
+            }
+            Integer depId = resolverDepartamentoId(d.getDepartamentoId());
+            if (depId != null) {
+                s.setDepartamentoId(depId);
+                departamentoRepository.findById(depId).ifPresent(dep -> s.setDepartamento(dep.getNombre()));
+            }
+            Integer munId = resolverMunicipioId(d.getMunicipioId());
+            if (munId != null) {
+                s.setMunicipioId(munId);
+                municipioRepository.findById(munId).ifPresent(mun -> s.setCiudad(mun.getNombre()));
             }
             if (saved.getTelefono() != null) {
                 s.setTelefono(saved.getTelefono());
@@ -285,6 +371,29 @@ public class ComercioService {
         return toAdminDTO(saved);
     }
 
+    @Transactional
+    public AdminTiendaResponseDTO eliminarTiendaAdmin(Integer id, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        String estadoAnterior = c.getEstado();
+        c.setEstado("ELIMINADA");
+        c.setActivo(false);
+        Comercio saved = comercioRepository.save(c);
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                "ELIMINAR_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                estadoAnterior,
+                "ELIMINADA",
+                razon != null && !razon.isBlank() ? razon : "Eliminación lógica administrativa de tienda"
+        ));
+
+        return toAdminDTO(saved);
+    }
+
     private void copiar(ComercioRequestDTO d, Comercio c) {
         if (d.getNombre() == null || d.getNombre().isBlank()) {
             throw new RuntimeException("El nombre del comercio es obligatorio");
@@ -353,6 +462,14 @@ public class ComercioService {
         if (d.getBancolombiaDocTitular() != null) {
             c.setBancolombiaDocTitular(d.getBancolombiaDocTitular().trim());
         }
+        Integer depId = resolverDepartamentoId(d.getDepartamentoId());
+        if (depId != null) {
+            c.setDepartamentoId(depId);
+        }
+        Integer munId = resolverMunicipioId(d.getMunicipioId());
+        if (munId != null) {
+            c.setMunicipioId(munId);
+        }
     }
 
     private Comercio propio(Integer id, Usuario u) {
@@ -398,6 +515,24 @@ public class ComercioService {
             dto.setDireccion(sucursales.get(0).getDireccion());
             dto.setCiudad(sucursales.get(0).getCiudad());
         }
+
+        dto.setDepartamentoId(c.getDepartamentoId() != null ? String.valueOf(c.getDepartamentoId()) : null);
+        if (c.getDepartamentoId() != null) {
+            departamentoRepository.findById(c.getDepartamentoId()).ifPresent(d -> dto.setDepartamentoNombre(d.getNombre()));
+        }
+        dto.setMunicipioId(c.getMunicipioId() != null ? String.valueOf(c.getMunicipioId()) : null);
+        if (c.getMunicipioId() != null) {
+            municipioRepository.findById(c.getMunicipioId()).ifPresent(m -> dto.setMunicipioNombre(m.getNombre()));
+        }
+
+        long prodCount = 0;
+        long pedCount = 0;
+        for (Sucursal s : sucursales) {
+            prodCount += productoRepository.countBySucursalId(s.getId());
+            pedCount += pedidoRepository.countBySucursalId(s.getId());
+        }
+        dto.setTotalProductos(prodCount);
+        dto.setTotalPedidos(pedCount);
 
         suscripcionService.obtenerUltimaSuscripcion(c.getId()).ifPresent(sub -> {
             dto.setTipoPlan(sub.getTipoPlan());
@@ -469,6 +604,15 @@ public class ComercioService {
             Sucursal s = sucursales.get(0);
             r.setDireccion(s.getDireccion());
             r.setCiudad(s.getCiudad());
+        }
+
+        r.setDepartamentoId(c.getDepartamentoId() != null ? String.valueOf(c.getDepartamentoId()) : null);
+        if (c.getDepartamentoId() != null) {
+            departamentoRepository.findById(c.getDepartamentoId()).ifPresent(d -> r.setDepartamentoNombre(d.getNombre()));
+        }
+        r.setMunicipioId(c.getMunicipioId() != null ? String.valueOf(c.getMunicipioId()) : null);
+        if (c.getMunicipioId() != null) {
+            municipioRepository.findById(c.getMunicipioId()).ifPresent(m -> r.setMunicipioNombre(m.getNombre()));
         }
 
         return r;

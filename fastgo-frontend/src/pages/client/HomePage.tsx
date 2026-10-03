@@ -16,7 +16,9 @@ import {
 import { commerceService } from '../../services/commerceService';
 import { categoriaService } from '../../services/categoriaService';
 import { productoService } from '../../services/productoService';
-import { Comercio, CategoriaComercio, Producto } from '../../types';
+import { geografiaService } from '../../services/geografiaService';
+import { analyticsService } from '../../services/analyticsService';
+import { Comercio, CategoriaComercio, Producto, Departamento, Municipio } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
@@ -34,13 +36,49 @@ export const HomePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Filtros geográficos oficiales DANE
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  const [municipios, setMunicipios] = useState<Municipio[]>([]);
+  const [selectedDepartamento, setSelectedDepartamento] = useState<string>('');
+  const [selectedMunicipio, setSelectedMunicipio] = useState<string>('');
+
+  useEffect(() => {
+    // Registrar analítica de visita pública/cliente
+    analyticsService.track({
+      eventType: 'PAGE_VIEW',
+      platform: 'WEB',
+      pathOrScreen: '/',
+    });
+
+    // Cargar catálogo de departamentos DANE
+    geografiaService.getDepartamentos()
+      .then(setDepartamentos)
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (selectedDepartamento) {
+      geografiaService.getMunicipiosPorDepartamento(selectedDepartamento)
+        .then(setMunicipios)
+        .catch(() => setMunicipios([]));
+    } else {
+      setMunicipios([]);
+    }
+    setSelectedMunicipio('');
+  }, [selectedDepartamento]);
+
   useEffect(() => {
     if (isAuthenticated && (!user?.rol || user.rol === 'CLIENTE')) {
       const loadInitialData = async () => {
         setIsLoading(true);
         try {
+          const params: Record<string, any> = {};
+          if (selectedDepartamento) params.departamentoId = selectedDepartamento;
+          if (selectedMunicipio) params.municipioId = selectedMunicipio;
+          if (selectedCategory) params.categoriaId = selectedCategory;
+
           const [commercesData, categoriesData, featuredData] = await Promise.all([
-            commerceService.listCommerces(),
+            commerceService.listCommerces(params),
             categoriaService.listActiveCommerceCategories(),
             productoService.listDestacados(),
           ]);
@@ -55,7 +93,7 @@ export const HomePage: React.FC = () => {
       };
       loadInitialData();
     }
-  }, [isAuthenticated, user?.rol]);
+  }, [isAuthenticated, user?.rol, selectedDepartamento, selectedMunicipio, selectedCategory]);
 
   if (authLoading) {
     return (
@@ -367,6 +405,42 @@ export const HomePage: React.FC = () => {
                 className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white text-gray-900 placeholder-gray-400 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-emerald-500/40 shadow-lg border border-gray-100"
               />
             </div>
+          </div>
+
+          {/* Selector Geográfico DANE Colombia */}
+          <div className="pt-1 flex flex-wrap items-center gap-2 max-w-lg">
+            <div className="flex-1 min-w-[150px]">
+              <select
+                aria-label="Seleccionar Departamento"
+                value={selectedDepartamento}
+                onChange={(e) => setSelectedDepartamento(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-slate-800/90 text-white text-xs font-medium border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
+              >
+                <option value="">🇨🇴 Todo Colombia (Departamentos)</option>
+                {departamentos.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectedDepartamento && (
+              <div className="flex-1 min-w-[150px]">
+                <select
+                  aria-label="Seleccionar Municipio"
+                  value={selectedMunicipio}
+                  onChange={(e) => setSelectedMunicipio(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-800/90 text-white text-xs font-medium border border-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-sm"
+                >
+                  <option value="">Todos los municipios</option>
+                  {municipios.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 

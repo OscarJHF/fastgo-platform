@@ -47,6 +47,10 @@ public class ComercioRequestDTO {
     private String direccion;
     @Size(max=100, message="La ciudad no puede superar 100 caracteres")
     private String ciudad;
+    @Size(max=5, message="El departamentoId no puede superar 5 caracteres")
+    private String departamentoId;
+    @Size(max=5, message="El municipioId no puede superar 5 caracteres")
+    private String municipioId;
 
     public ComercioRequestDTO(){}
     public Integer getCategoriaId(){return categoriaId;} public void setCategoriaId(Integer v){categoriaId=v;}
@@ -72,4 +76,6 @@ public class ComercioRequestDTO {
     public String getBancolombiaDocTitular(){return bancolombiaDocTitular;} public void setBancolombiaDocTitular(String v){bancolombiaDocTitular=v;}
     public String getDireccion(){return direccion;} public void setDireccion(String v){direccion=v;}
     public String getCiudad(){return ciudad;} public void setCiudad(String v){ciudad=v;}
+    public String getDepartamentoId(){return departamentoId;} public void setDepartamentoId(String v){departamentoId=v;}
+    public String getMunicipioId(){return municipioId;} public void setMunicipioId(String v){municipioId=v;}
 }

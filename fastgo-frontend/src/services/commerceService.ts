@@ -2,8 +2,8 @@ import { apiClient } from '../api/apiClient';
 import { Comercio, ComercioRequest } from '../types';
 
 export const commerceService = {
-  async listCommerces(): Promise<Comercio[]> {
-    const response = await apiClient.get<Comercio[]>('/api/comercios');
+  async listCommerces(params?: { departamentoId?: number | string; municipioId?: number | string; categoriaId?: number }): Promise<Comercio[]> {
+    const response = await apiClient.get<Comercio[]>('/api/comercios', { params });
     return response.data;
   },
 

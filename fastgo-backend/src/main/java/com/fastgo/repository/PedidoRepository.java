@@ -16,6 +16,8 @@ public interface PedidoRepository extends JpaRepository<Pedido, Integer> {
     List<Pedido> findByUsuarioIdAndEstado(Integer id, String estado);
     List<Pedido> findByDomiciliarioId(Integer id);
     List<Pedido> findByEstadoAndDomiciliarioIdIsNull(String estado);
+    long countBySucursalId(Integer id);
+    long countByEstado(String estado);
 
     @Modifying
     @Query("""

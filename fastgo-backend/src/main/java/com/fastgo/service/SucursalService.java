@@ -148,6 +148,16 @@ public class SucursalService {
         sucursal.setDireccion(datos.getDireccion());
         sucursal.setCiudad(datos.getCiudad());
         sucursal.setDepartamento(datos.getDepartamento());
+        if (datos.getDepartamentoId() != null && !datos.getDepartamentoId().isBlank()) {
+            try {
+                sucursal.setDepartamentoId(Integer.parseInt(datos.getDepartamentoId().trim()));
+            } catch (Exception ignored) {}
+        }
+        if (datos.getMunicipioId() != null && !datos.getMunicipioId().isBlank()) {
+            try {
+                sucursal.setMunicipioId(Integer.parseInt(datos.getMunicipioId().trim()));
+            } catch (Exception ignored) {}
+        }
         sucursal.setTelefono(datos.getTelefono());
         sucursal.setLatitud(datos.getLatitud());
         sucursal.setLongitud(datos.getLongitud());

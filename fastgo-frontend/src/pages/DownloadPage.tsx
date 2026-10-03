@@ -1,8 +1,27 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Download, Smartphone, ShieldCheck, QrCode } from 'lucide-react';
 import { FastGoLogo } from '../components/common/FastGoLogo';
+import { analyticsService } from '../services/analyticsService';
 
 export const DownloadPage: React.FC = () => {
+  useEffect(() => {
+    analyticsService.track({
+      eventType: 'DOWNLOAD_PAGE_VIEW',
+      platform: 'WEB',
+      pathOrScreen: '/descargar',
+    });
+  }, []);
+
+  const handleDownloadClick = () => {
+    analyticsService.track({
+      eventType: 'APK_DOWNLOAD',
+      platform: 'WEB',
+      appVersion: '2.2.3',
+      pathOrScreen: '/descargar/apk',
+      utmSource: 'web_button',
+    });
+  };
+
   return (
     <div className="min-h-[80vh] flex flex-col items-center justify-center py-10 px-4 sm:px-6">
       <div className="max-w-md w-full bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 p-8 sm:p-10 text-center relative overflow-hidden">
@@ -55,7 +74,8 @@ export const DownloadPage: React.FC = () => {
           <div className="mt-8 w-full">
             <a
               href="https://fastgo-app.fastgo-frontend.workers.dev/descargar/apk"
-              download="FASTGO-Beta2-release.apk"
+              download="FASTGO-release-2.2.3.apk"
+              onClick={handleDownloadClick}
               className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-base shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all duration-200 active:scale-[0.98] group"
               id="btn-descargar-apk"
             >
@@ -65,7 +85,7 @@ export const DownloadPage: React.FC = () => {
 
             <div className="flex items-center justify-center gap-2 mt-3 text-[11px] text-slate-400 font-semibold">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Instalador oficial seguro • Versión 2.2.2</span>
+              <span>Instalador oficial seguro • Versión 2.2.3</span>
             </div>
           </div>
 

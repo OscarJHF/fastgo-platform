@@ -108,6 +108,10 @@ class AuthAndSecurityTests {
         clienteTest = usuarioRepository.save(clienteTest);
 
         adminTest = usuarioRepository.findByCorreo("test.auth.admin@fastgo.com")
+                .map(u -> {
+                    u.setEstado(true);
+                    return usuarioRepository.save(u);
+                })
                 .orElseGet(() -> {
                     Usuario u = new Usuario();
                     u.setNombre("Admin");

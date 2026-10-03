@@ -93,6 +93,12 @@ public class Comercio {
     @Column(name = "estado", length = 30)
     private String estado;
 
+    @Column(name = "departamento_id")
+    private Integer departamentoId;
+
+    @Column(name = "municipio_id")
+    private Integer municipioId;
+
     public Comercio() {
     }
 
@@ -120,11 +126,11 @@ public class Comercio {
         }
 
         if (horaApertura == null) {
-            horaApertura = java.time.LocalTime.of(8, 0);
+            horaApertura = java.time.LocalTime.of(0, 0);
         }
 
         if (horaCierre == null) {
-            horaCierre = java.time.LocalTime.of(22, 0);
+            horaCierre = java.time.LocalTime.of(23, 59, 59);
         }
 
         if (diasAtencion == null) {
@@ -451,5 +457,21 @@ public class Comercio {
 
     public boolean isOperativa() {
         return Boolean.TRUE.equals(activo) && "ACTIVA".equalsIgnoreCase(getEstado());
+    }
+
+    public Integer getDepartamentoId() {
+        return departamentoId;
+    }
+
+    public void setDepartamentoId(Integer departamentoId) {
+        this.departamentoId = departamentoId;
+    }
+
+    public Integer getMunicipioId() {
+        return municipioId;
+    }
+
+    public void setMunicipioId(Integer municipioId) {
+        this.municipioId = municipioId;
     }
 }

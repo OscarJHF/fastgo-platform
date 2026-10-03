@@ -18,6 +18,8 @@ public class SucursalRequestDTO {
     @NotBlank(message="La ciudad es obligatoria") @Size(max=100, message="La ciudad no puede superar 100 caracteres")
     private String ciudad;
     @Size(max=100, message="El departamento no puede superar 100 caracteres") private String departamento;
+    @Size(max=5) private String departamentoId;
+    @Size(max=5) private String municipioId;
     @Size(max=20, message="El teléfono no puede superar 20 caracteres") private String telefono;
     @DecimalMin(value="-90.0") @DecimalMax(value="90.0") private BigDecimal latitud;
     @DecimalMin(value="-180.0") @DecimalMax(value="180.0") private BigDecimal longitud;
@@ -29,6 +31,8 @@ public class SucursalRequestDTO {
     public String getDireccion(){return direccion;} public void setDireccion(String v){direccion=v;}
     public String getCiudad(){return ciudad;} public void setCiudad(String v){ciudad=v;}
     public String getDepartamento(){return departamento;} public void setDepartamento(String v){departamento=v;}
+    public String getDepartamentoId(){return departamentoId;} public void setDepartamentoId(String v){departamentoId=v;}
+    public String getMunicipioId(){return municipioId;} public void setMunicipioId(String v){municipioId=v;}
     public String getTelefono(){return telefono;} public void setTelefono(String v){telefono=v;}
     public BigDecimal getLatitud(){return latitud;} public void setLatitud(BigDecimal v){latitud=v;}
     public BigDecimal getLongitud(){return longitud;} public void setLongitud(BigDecimal v){longitud=v;}

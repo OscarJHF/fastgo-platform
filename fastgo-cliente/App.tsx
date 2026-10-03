@@ -158,6 +158,27 @@ interface DetallePedidoItem {
   subtotal: number;
 }
 
+interface Departamento {
+  id: number;
+  codigoDane: string;
+  nombre: string;
+}
+
+interface Municipio {
+  id: number;
+  codigoDane: string;
+  nombre: string;
+  departamentoId: number;
+}
+
+const generateUUID = (): string => {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 // ==========================================
 // SESIÓN PERSISTENTE SEGURA
 // ==========================================
@@ -311,6 +332,20 @@ export default function App() {
   const [selectedComercio, setSelectedComercio] = useState<Comercio | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
   const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Geografía Colombiana (DANE)
+  const [departamentos, setDepartamentos] = useState<Departamento[]>([]);
+  const [municipios, setMunicipios] = useState<Municipio[]>([]);
+  const [selectedDepartamentoId, setSelectedDepartamentoId] = useState<number | null>(null);
+  const [selectedMunicipioId, setSelectedMunicipioId] = useState<number | null>(null);
+  const [showGeoModal, setShowGeoModal] = useState<boolean>(false);
+  const [geoSearchDepto, setGeoSearchDepto] = useState<string>("");
+  const [geoSearchMuni, setGeoSearchMuni] = useState<string>("");
+
+  // Tienda Adicional - Geografía
+  const [newStoreDeptoId, setNewStoreDeptoId] = useState<number | null>(null);
+  const [newStoreMuniId, setNewStoreMuniId] = useState<number | null>(null);
+  const [newStoreMunicipios, setNewStoreMunicipios] = useState<Municipio[]>([]);
 
   // Carrito de compras
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -595,9 +630,19 @@ export default function App() {
     }
   };
 
-  const loadComercios = async (baseUrl = apiUrl) => {
+  const loadComercios = async (
+    baseUrl = apiUrl,
+    deptoId: number | null = selectedDepartamentoId,
+    muniId: number | null = selectedMunicipioId
+  ) => {
     try {
-      const res = await fetch(`${baseUrl}/api/comercios`, {
+      let query = `${baseUrl}/api/comercios`;
+      const params: string[] = [];
+      if (deptoId != null) params.push(`departamentoId=${deptoId}`);
+      if (muniId != null) params.push(`municipioId=${muniId}`);
+      if (params.length > 0) query += `?${params.join("&")}`;
+
+      const res = await fetch(query, {
         headers: { Accept: "application/json" },
       });
       if (res.ok) {
@@ -606,6 +651,61 @@ export default function App() {
         loadProducts(baseUrl);
       }
     } catch {}
+  };
+
+  const handleSelectDepartamento = async (deptId: number | null) => {
+    setSelectedDepartamentoId(deptId);
+    setSelectedMunicipioId(null);
+    if (deptId != null) {
+      try {
+        const res = await fetch(`${apiUrl}/api/geografia/departamentos/${deptId}/municipios`, {
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const mData = await res.json();
+          setMunicipios(mData);
+        }
+      } catch {}
+    } else {
+      setMunicipios([]);
+    }
+    loadComercios(apiUrl, deptId, null);
+  };
+
+  const handleSelectMunicipio = (muniId: number | null) => {
+    setSelectedMunicipioId(muniId);
+    loadComercios(apiUrl, selectedDepartamentoId, muniId);
+    setShowGeoModal(false);
+  };
+
+  const fetchDepartamentos = async (baseUrl = apiUrl) => {
+    try {
+      const res = await fetch(`${baseUrl}/api/geografia/departamentos`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDepartamentos(data);
+      }
+    } catch {}
+  };
+
+  const handleSelectNewStoreDepto = async (deptId: number | null) => {
+    setNewStoreDeptoId(deptId);
+    setNewStoreMuniId(null);
+    if (deptId != null) {
+      try {
+        const res = await fetch(`${apiUrl}/api/geografia/departamentos/${deptId}/municipios`, {
+          headers: { Accept: "application/json" },
+        });
+        if (res.ok) {
+          const mData = await res.json();
+          setNewStoreMunicipios(mData);
+        }
+      } catch {}
+    } else {
+      setNewStoreMunicipios([]);
+    }
   };
 
   const loadProducts = async (baseUrl: string) => {
@@ -623,6 +723,45 @@ export default function App() {
   useEffect(() => {
     const initApp = async () => {
       checkConnection(apiUrl);
+
+      // 1. Reportar APP_FIRST_OPEN de forma idempotente con UUID anónimo
+      try {
+        let anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+        if (!anonId) {
+          anonId = generateUUID();
+          await AsyncStorage.setItem("fastgo_anonymous_device_id", anonId);
+        }
+        const alreadyReported = await AsyncStorage.getItem("fastgo_first_open_reported");
+        if (!alreadyReported) {
+          fetch(`${apiUrl}/api/analytics/track`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              eventType: "APP_FIRST_OPEN",
+              platform: "ANDROID",
+              appVersion: "2.2.3",
+              anonymousId: anonId,
+              metadata: JSON.stringify({
+                os: Platform.OS,
+                version: Platform.Version,
+                appVersion: "2.2.3",
+              }),
+            }),
+          }).then((r) => {
+            if (r.ok) {
+              AsyncStorage.setItem("fastgo_first_open_reported", "true");
+            }
+          }).catch(() => {});
+        }
+      } catch {}
+
+      // 2. Cargar Departamentos de Colombia (DANE)
+      fetch(`${apiUrl}/api/geografia/departamentos`, {
+        headers: { Accept: "application/json" },
+      })
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => setDepartamentos(data))
+        .catch(() => {});
 
       const saved = await getStoredSession();
       if (saved && saved.token) {
@@ -663,6 +802,7 @@ export default function App() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await checkConnection(apiUrl);
+    await fetchDepartamentos(apiUrl);
     if (token && user) {
       if (user.rol === "CLIENTE") {
         await fetchPedidosCliente();
@@ -831,6 +971,8 @@ export default function App() {
           telefono: newStoreTelefono.trim(),
           correo: newStoreCorreo.trim(),
           ciudad: newStoreCiudad.trim() || "Bogotá",
+          departamentoId: newStoreDeptoId || undefined,
+          municipioId: newStoreMuniId || undefined,
           categoriaId: 1,
           horaApertura: "08:00",
           horaCierre: "20:00",
@@ -853,6 +995,8 @@ export default function App() {
         setNewStoreDireccion("");
         setNewStoreTelefono("");
         setNewStoreCorreo("");
+        setNewStoreDeptoId(null);
+        setNewStoreMuniId(null);
         await fetchComercioPropio(token, created.id);
       } else {
         const err = await res.json().catch(() => ({}));
@@ -1080,6 +1224,22 @@ export default function App() {
             return;
           }
 
+          // Track LOGIN analytics
+          try {
+            const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+            fetch(`${apiUrl}/api/analytics/track`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+              body: JSON.stringify({
+                eventType: "LOGIN",
+                platform: "ANDROID",
+                appVersion: "2.2.3",
+                anonymousId: anonId || undefined,
+                pathOrScreen: "login",
+              }),
+            }).catch(() => {});
+          } catch {}
+
           routeUserToDashboard(profile.activeRole || profile.rol, jwt);
         }
       } else {
@@ -1250,6 +1410,22 @@ export default function App() {
             setRegPassword("");
             setRegConfirmPassword("");
             setReusableData(null);
+
+            // Track REGISTER analytics
+            try {
+              const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+              fetch(`${apiUrl}/api/analytics/track`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
+                body: JSON.stringify({
+                  eventType: "REGISTER",
+                  platform: "ANDROID",
+                  appVersion: "2.2.3",
+                  anonymousId: anonId || undefined,
+                  pathOrScreen: "register",
+                }),
+              }).catch(() => {});
+            } catch {}
 
             // Redirección inmediata según el rol
             routeUserToDashboard(profile.activeRole || profile.rol, jwt);
@@ -1558,6 +1734,27 @@ export default function App() {
 
         if (pedRes.ok) {
           const nuevoPedido = await pedRes.json();
+          // Track ORDER_CREATED analytics
+          try {
+            const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+            fetch(`${apiUrl}/api/analytics/track`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                eventType: "ORDER_CREATED",
+                platform: "ANDROID",
+                appVersion: "2.2.3",
+                anonymousId: anonId || undefined,
+                pathOrScreen: "carrito",
+                metadata: JSON.stringify({
+                  pedidoId: nuevoPedido.id,
+                  total: nuevoPedido.total || totalCart,
+                  metodoPago: metodoPagoSeleccionado,
+                }),
+              }),
+            }).catch(() => {});
+          } catch {}
+
           Alert.alert(
             "¡Pedido Confirmado!",
             `Tu pedido #${nuevoPedido.id} ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${Number(nuevoPedido.total || totalCart).toLocaleString()} COP.\n${metodoPagoSeleccionado === "BANCOLOMBIA" ? "Comprobante en verificación por el comercio." : "En breve el restaurante iniciará su preparación."}`
@@ -1830,6 +2027,23 @@ export default function App() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
+        // Track ORDER_DELIVERED analytics
+        try {
+          const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+          fetch(`${apiUrl}/api/analytics/track`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({
+              eventType: "ORDER_DELIVERED",
+              platform: "ANDROID",
+              appVersion: "2.2.3",
+              anonymousId: anonId || undefined,
+              pathOrScreen: "domi_disponibles",
+              metadata: JSON.stringify({ pedidoId }),
+            }),
+          }).catch(() => {});
+        } catch {}
+
         Alert.alert("¡Entrega Exitosa!", `Pedido #${pedidoId} entregado satisfactoriamente.`);
         fetchPedidosDomiciliario();
       }
@@ -2461,6 +2675,31 @@ export default function App() {
               </TouchableOpacity>
             )}
           </View>
+        )}
+
+        {/* Selector de Ubicación Colombiana DANE */}
+        {activeTab === "explorar" && !selectedComercio && (
+          <TouchableOpacity
+            style={styles.geoFilterBar}
+            onPress={() => {
+              if (departamentos.length === 0) fetchDepartamentos();
+              setShowGeoModal(true);
+            }}
+          >
+            <Text style={{ fontSize: 14 }}>📍</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.geoFilterText} numberOfLines={1}>
+                {selectedDepartamentoId
+                  ? `${departamentos.find((d) => d.id === selectedDepartamentoId)?.nombre || "Departamento"}${
+                      selectedMunicipioId
+                        ? ` • ${municipios.find((m) => m.id === selectedMunicipioId)?.nombre || "Municipio"}`
+                        : " • Todos los municipios"
+                    }`
+                  : "🇨🇴 Toda Colombia • Todos los departamentos"}
+              </Text>
+            </View>
+            <Text style={styles.geoFilterArrow}>▼</Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -5118,7 +5357,62 @@ export default function App() {
                 </View>
 
                 <View>
-                  <Text style={styles.inputLabel}>Ciudad *</Text>
+                  <Text style={styles.inputLabel}>Departamento (Colombia) *</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      {departamentos.map((d) => {
+                        const isSel = newStoreDeptoId === d.id;
+                        return (
+                          <TouchableOpacity
+                            key={d.id}
+                            style={[
+                              styles.categoryChip,
+                              isSel && styles.categoryChipActive,
+                            ]}
+                            onPress={() => handleSelectNewStoreDepto(d.id)}
+                          >
+                            <Text style={[styles.categoryChipText, isSel && styles.categoryChipTextActive]}>
+                              {d.nombre}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+                </View>
+
+                {newStoreDeptoId != null && newStoreMunicipios.length > 0 && (
+                  <View>
+                    <Text style={styles.inputLabel}>Municipio *</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 6 }}>
+                      <View style={{ flexDirection: "row", gap: 6 }}>
+                        {newStoreMunicipios.map((m) => {
+                          const isSel = newStoreMuniId === m.id;
+                          return (
+                            <TouchableOpacity
+                              key={m.id}
+                              style={[
+                                styles.categoryChip,
+                                isSel && styles.categoryChipActive,
+                              ]}
+                              onPress={() => {
+                                setNewStoreMuniId(m.id);
+                                setNewStoreCiudad(m.nombre);
+                              }}
+                            >
+                              <Text style={[styles.categoryChipText, isSel && styles.categoryChipTextActive]}>
+                                {m.nombre}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
+                  </View>
+                )}
+
+                <View>
+                  <Text style={styles.inputLabel}>Ciudad / Cabecera *</Text>
                   <TextInput
                     style={styles.textInput}
                     value={newStoreCiudad}
@@ -5150,6 +5444,153 @@ export default function App() {
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL DE SELECCIÓN DE GEOGRAFÍA (DANE) */}
+      {showGeoModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { maxHeight: "88%", padding: 18 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
+                  📍 Ubicación de Comercios
+                </Text>
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                  Filtra por Departamento y Municipio de Colombia (DANE)
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowGeoModal(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Opción Restablecer / Toda Colombia */}
+            <TouchableOpacity
+              style={[
+                styles.geoOptionCard,
+                !selectedDepartamentoId && { borderColor: Theme.primary, backgroundColor: "#ECFDF5" },
+              ]}
+              onPress={() => {
+                handleSelectDepartamento(null);
+                setShowGeoModal(false);
+              }}
+            >
+              <Text style={{ fontSize: 18, marginRight: 8 }}>🇨🇴</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>
+                  Toda Colombia
+                </Text>
+                <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                  Mostrar todos los comercios aliados del país
+                </Text>
+              </View>
+              {!selectedDepartamentoId && (
+                <Text style={{ color: Theme.primary, fontWeight: "900" }}>✓</Text>
+              )}
+            </TouchableOpacity>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginTop: 10 }}>
+              {/* Sección Departamentos */}
+              <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.secondary, marginBottom: 6 }}>
+                1. Selecciona Departamento ({departamentos.length})
+              </Text>
+              <TextInput
+                style={[styles.textInput, { height: 38, marginBottom: 8, fontSize: 12 }]}
+                placeholder="Buscar departamento (ej. Caldas, Antioquia)..."
+                placeholderTextColor="#94A3B8"
+                value={geoSearchDepto}
+                onChangeText={setGeoSearchDepto}
+              />
+              <View style={{ maxHeight: 160, marginBottom: 14 }}>
+                <ScrollView nestedScrollEnabled style={{ borderWidth: 1, borderColor: Theme.border, borderRadius: 10, padding: 4 }}>
+                  {departamentos
+                    .filter((d) => d.nombre.toLowerCase().includes(geoSearchDepto.toLowerCase()))
+                    .map((d) => {
+                      const isDeptActive = selectedDepartamentoId === d.id;
+                      return (
+                        <TouchableOpacity
+                          key={d.id}
+                          style={[
+                            styles.geoListItem,
+                            isDeptActive && { backgroundColor: "#D1FAE5" },
+                          ]}
+                          onPress={() => handleSelectDepartamento(d.id)}
+                        >
+                          <Text style={[styles.geoListItemText, isDeptActive && { fontWeight: "900", color: "#065F46" }]}>
+                            {d.nombre} ({d.codigoDane})
+                          </Text>
+                          {isDeptActive && <Text style={{ color: "#065F46", fontWeight: "bold" }}>✓</Text>}
+                        </TouchableOpacity>
+                      );
+                    })}
+                </ScrollView>
+              </View>
+
+              {/* Sección Municipios (si hay departamento seleccionado) */}
+              {selectedDepartamentoId && (
+                <View>
+                  <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.secondary, marginBottom: 6 }}>
+                    2. Selecciona Municipio ({municipios.length})
+                  </Text>
+
+                  {/* Opción Todos los municipios del departamento */}
+                  <TouchableOpacity
+                    style={[
+                      styles.geoListItem,
+                      !selectedMunicipioId && { backgroundColor: "#D1FAE5" },
+                      { marginBottom: 6, borderWidth: 1, borderColor: Theme.border, borderRadius: 8 },
+                    ]}
+                    onPress={() => handleSelectMunicipio(null)}
+                  >
+                    <Text style={[styles.geoListItemText, !selectedMunicipioId && { fontWeight: "900", color: "#065F46" }]}>
+                      📍 Todos los municipios de este departamento
+                    </Text>
+                    {!selectedMunicipioId && <Text style={{ color: "#065F46", fontWeight: "bold" }}>✓</Text>}
+                  </TouchableOpacity>
+
+                  <TextInput
+                    style={[styles.textInput, { height: 38, marginBottom: 8, fontSize: 12 }]}
+                    placeholder="Buscar municipio (ej. Aguadas, Pácora)..."
+                    placeholderTextColor="#94A3B8"
+                    value={geoSearchMuni}
+                    onChangeText={setGeoSearchMuni}
+                  />
+                  <View style={{ maxHeight: 160 }}>
+                    <ScrollView nestedScrollEnabled style={{ borderWidth: 1, borderColor: Theme.border, borderRadius: 10, padding: 4 }}>
+                      {municipios
+                        .filter((m) => m.nombre.toLowerCase().includes(geoSearchMuni.toLowerCase()))
+                        .map((m) => {
+                          const isMuniActive = selectedMunicipioId === m.id;
+                          return (
+                            <TouchableOpacity
+                              key={m.id}
+                              style={[
+                                styles.geoListItem,
+                                isMuniActive && { backgroundColor: "#D1FAE5" },
+                              ]}
+                              onPress={() => handleSelectMunicipio(m.id)}
+                            >
+                              <Text style={[styles.geoListItemText, isMuniActive && { fontWeight: "900", color: "#065F46" }]}>
+                                {m.nombre} ({m.codigoDane})
+                              </Text>
+                              {isMuniActive && <Text style={{ color: "#065F46", fontWeight: "bold" }}>✓</Text>}
+                            </TouchableOpacity>
+                          );
+                        })}
+                    </ScrollView>
+                  </View>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.outlineBtn, { marginTop: 12 }]}
+              onPress={() => setShowGeoModal(false)}
+            >
+              <Text style={{ color: Theme.text, fontWeight: "bold" }}>Listo / Cerrar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -6367,5 +6808,48 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+  },
+  geoFilterBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    marginTop: 8,
+    gap: 8,
+  },
+  geoFilterText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  geoFilterArrow: {
+    color: "#A7F3D0",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
+  geoOptionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Theme.border,
+    backgroundColor: "#F8FAFC",
+    marginBottom: 10,
+  },
+  geoListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 2,
+  },
+  geoListItemText: {
+    fontSize: 12,
+    color: Theme.text,
   },
 });

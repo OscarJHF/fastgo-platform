@@ -33,6 +33,7 @@ import { AdminDashboardPage } from '../pages/admin/AdminDashboardPage';
 import { AdminUsersPage } from '../pages/admin/AdminUsersPage';
 import { AdminCategoriesPage } from '../pages/admin/AdminCategoriesPage';
 import { AdminCommercesPage } from '../pages/admin/AdminCommercesPage';
+import { AdminMetricsPage } from '../pages/admin/AdminMetricsPage';
 import { DownloadPage } from '../pages/DownloadPage';
 
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -203,6 +204,14 @@ export const AppRoutes: React.FC = () => {
             </RoleRoute>
           }
         />
+        <Route
+          path={APP_ROUTES.ADMIN_METRICS}
+          element={
+            <RoleRoute allowedRoles={['ADMIN']}>
+              <AdminMetricsPage />
+            </RoleRoute>
+          }
+        />
 
         {/* Rutas Aliases para compatibilidad REST y navegación directa */}
         <Route path="/cliente" element={<HomePage />} />
@@ -222,6 +231,7 @@ export const AppRoutes: React.FC = () => {
         <Route path="/admin/usuarios" element={<RoleRoute allowedRoles={['ADMIN']}><AdminUsersPage /></RoleRoute>} />
         <Route path="/admin/categorias" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCategoriesPage /></RoleRoute>} />
         <Route path="/admin/comercios" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCommercesPage /></RoleRoute>} />
+        <Route path="/admin/metricas" element={<RoleRoute allowedRoles={['ADMIN']}><AdminMetricsPage /></RoleRoute>} />
 
         <Route path="/pedidos" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />
 

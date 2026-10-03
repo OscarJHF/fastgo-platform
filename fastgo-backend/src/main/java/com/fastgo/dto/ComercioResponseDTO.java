@@ -18,6 +18,10 @@ public class ComercioResponseDTO {
     private Integer categoriaId;
     private String direccion;
     private String ciudad;
+    private String departamentoId;
+    private String departamentoNombre;
+    private String municipioId;
+    private String municipioNombre;
     private String metodosPago;
     private String horaApertura;
     private String horaCierre;
@@ -251,4 +255,16 @@ public class ComercioResponseDTO {
 
     public Boolean getEsGratuito() { return esGratuito; }
     public void setEsGratuito(Boolean esGratuito) { this.esGratuito = esGratuito; }
+
+    public String getDepartamentoId() { return departamentoId; }
+    public void setDepartamentoId(String departamentoId) { this.departamentoId = departamentoId; }
+
+    public String getDepartamentoNombre() { return departamentoNombre; }
+    public void setDepartamentoNombre(String departamentoNombre) { this.departamentoNombre = departamentoNombre; }
+
+    public String getMunicipioId() { return municipioId; }
+    public void setMunicipioId(String municipioId) { this.municipioId = municipioId; }
+
+    public String getMunicipioNombre() { return municipioNombre; }
+    public void setMunicipioNombre(String municipioNombre) { this.municipioNombre = municipioNombre; }
 }

@@ -50,3 +50,15 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
 }
+
+export interface AdminUsuario {
+  id: number;
+  nombre: string;
+  apellido: string;
+  correo: string;
+  telefono: string;
+  estado: boolean;
+  rolPrincipal?: string;
+  roles: string[];
+  fechaCreacion?: string;
+}

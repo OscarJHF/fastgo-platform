@@ -16,4 +16,6 @@ public interface ProductoRepository extends JpaRepository<Producto, Integer> {
     List<Producto> findByDestacadoTrue();
 
     List<Producto> findBySucursalIdAndDisponibleTrue(Integer sucursalId);
+
+    long countBySucursalId(Integer sucursalId);
 }

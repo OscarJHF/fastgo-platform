@@ -26,9 +26,11 @@ public class ComercioController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ComercioResponseDTO>> listar() {
+    public ResponseEntity<List<ComercioResponseDTO>> listar(
+            @RequestParam(required = false) String departamentoId,
+            @RequestParam(required = false) String municipioId) {
         return ResponseEntity.ok(
-                comercioService.listarComercios());
+                comercioService.listarComerciosFiltrados(departamentoId, municipioId));
     }
 
     @GetMapping("/{id}")
