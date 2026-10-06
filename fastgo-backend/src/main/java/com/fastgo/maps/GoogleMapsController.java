@@ -16,14 +16,14 @@ public class GoogleMapsController {
     public GoogleMapsController(GoogleMapsService service) { this.service = service; }
 
     @GetMapping("/config")
-    @PreAuthorize("hasRole('CLIENTE') or hasRole('DOMICILIARIO') or hasRole('COMERCIO')")
+    @PreAuthorize("hasAnyRole('CLIENTE', 'DOMICILIARIO', 'COMERCIO', 'ADMIN')")
     public ResponseEntity<Map<String,Object>> config() { return ResponseEntity.ok(service.clientConfig()); }
 
     @PostMapping("/geocode")
-    @PreAuthorize("hasRole('CLIENTE') or hasRole('DOMICILIARIO') or hasRole('COMERCIO')")
+    @PreAuthorize("hasAnyRole('CLIENTE', 'DOMICILIARIO', 'COMERCIO', 'ADMIN')")
     public ResponseEntity<Map<String,Object>> geocode(@Valid @RequestBody MapGeocodeRequest request) { return ResponseEntity.ok(service.geocode(request)); }
 
     @PostMapping("/route")
-    @PreAuthorize("hasRole('CLIENTE') or hasRole('DOMICILIARIO') or hasRole('COMERCIO')")
+    @PreAuthorize("hasAnyRole('CLIENTE', 'DOMICILIARIO', 'COMERCIO', 'ADMIN')")
     public ResponseEntity<Map<String,Object>> route(@Valid @RequestBody MapRouteRequest request) { return ResponseEntity.ok(service.route(request)); }
 }

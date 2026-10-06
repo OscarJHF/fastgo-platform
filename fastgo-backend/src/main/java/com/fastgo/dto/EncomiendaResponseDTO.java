@@ -21,6 +21,9 @@ public class EncomiendaResponseDTO {
     private String tamanoPeso;
     private BigDecimal distanciaKm;
     private BigDecimal costoEnvio;
+    private BigDecimal valorInicial;
+    private Integer numeroOfertas;
+    private java.util.List<OfertaEncomiendaResponseDTO> ofertas;
     private Boolean tarifaAceptada;
     private Integer domiciliarioId;
     private String domiciliarioNombre;
@@ -78,6 +81,15 @@ public class EncomiendaResponseDTO {
 
     public BigDecimal getCostoEnvio() { return costoEnvio; }
     public void setCostoEnvio(BigDecimal costoEnvio) { this.costoEnvio = costoEnvio; }
+
+    public BigDecimal getValorInicial() { return valorInicial; }
+    public void setValorInicial(BigDecimal valorInicial) { this.valorInicial = valorInicial; }
+
+    public Integer getNumeroOfertas() { return numeroOfertas; }
+    public void setNumeroOfertas(Integer numeroOfertas) { this.numeroOfertas = numeroOfertas; }
+
+    public java.util.List<OfertaEncomiendaResponseDTO> getOfertas() { return ofertas; }
+    public void setOfertas(java.util.List<OfertaEncomiendaResponseDTO> ofertas) { this.ofertas = ofertas; }
 
     public Boolean getTarifaAceptada() { return tarifaAceptada; }
     public void setTarifaAceptada(Boolean tarifaAceptada) { this.tarifaAceptada = tarifaAceptada; }

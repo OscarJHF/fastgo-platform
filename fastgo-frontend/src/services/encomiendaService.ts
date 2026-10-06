@@ -1,5 +1,5 @@
 import { apiClient } from '../api/apiClient';
-import { CrearEncomiendaRequest, Encomienda, EstadoEncomienda } from '../types';
+import { CrearEncomiendaRequest, Encomienda, EstadoEncomienda, OfertaEncomienda, CrearOfertaRequest } from '../types';
 
 export const encomiendaService = {
   async crear(data: CrearEncomiendaRequest): Promise<Encomienda> {
@@ -32,6 +32,36 @@ export const encomiendaService = {
     return response.data;
   },
 
+  async crearOferta(encomiendaId: number, data: CrearOfertaRequest): Promise<OfertaEncomienda> {
+    const response = await apiClient.post<OfertaEncomienda>(`/api/encomiendas/${encomiendaId}/ofertas`, data);
+    return response.data;
+  },
+
+  async listarOfertas(encomiendaId: number): Promise<OfertaEncomienda[]> {
+    const response = await apiClient.get<OfertaEncomienda[]>(`/api/encomiendas/${encomiendaId}/ofertas`);
+    return response.data;
+  },
+
+  async aceptarOferta(encomiendaId: number, ofertaId: number): Promise<Encomienda> {
+    const response = await apiClient.put<Encomienda>(`/api/encomiendas/${encomiendaId}/ofertas/${ofertaId}/aceptar`);
+    return response.data;
+  },
+
+  async rechazarOferta(encomiendaId: number, ofertaId: number): Promise<OfertaEncomienda> {
+    const response = await apiClient.put<OfertaEncomienda>(`/api/encomiendas/${encomiendaId}/ofertas/${ofertaId}/rechazar`);
+    return response.data;
+  },
+
+  async cancelarOferta(encomiendaId: number, ofertaId: number): Promise<OfertaEncomienda> {
+    const response = await apiClient.put<OfertaEncomienda>(`/api/encomiendas/${encomiendaId}/ofertas/${ofertaId}/cancelar`);
+    return response.data;
+  },
+
+  async misOfertas(): Promise<OfertaEncomienda[]> {
+    const response = await apiClient.get<OfertaEncomienda[]>('/api/encomiendas/mis-ofertas');
+    return response.data;
+  },
+
   async actualizarEstado(
     id: number,
     estado: EstadoEncomienda,
@@ -49,3 +79,4 @@ export const encomiendaService = {
     return response.data;
   },
 };
+

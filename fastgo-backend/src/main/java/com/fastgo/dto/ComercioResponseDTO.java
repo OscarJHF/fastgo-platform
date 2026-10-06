@@ -52,6 +52,18 @@ public class ComercioResponseDTO {
     private BigDecimal precioMensual;
     private BigDecimal precioActivacion;
     private Boolean esGratuito;
+    private Long diasRestantes;
+    private Boolean alertaVencimiento;
+    private String comprobanteSuscripcionUrl;
+    private String motivoRechazoSuscripcion;
+
+    private String bancoNombre;
+    private String bancoTipoCuenta;
+    private String bancoNumeroCuenta;
+    private String bancoTitular;
+    private String bancoDocumento;
+    private String instruccionesPago;
+    private Boolean destacado;
 
     public ComercioResponseDTO() {
     }
@@ -267,4 +279,37 @@ public class ComercioResponseDTO {
 
     public String getMunicipioNombre() { return municipioNombre; }
     public void setMunicipioNombre(String municipioNombre) { this.municipioNombre = municipioNombre; }
+
+    public Long getDiasRestantes() { return diasRestantes; }
+    public void setDiasRestantes(Long diasRestantes) { this.diasRestantes = diasRestantes; }
+
+    public Boolean getAlertaVencimiento() { return alertaVencimiento; }
+    public void setAlertaVencimiento(Boolean alertaVencimiento) { this.alertaVencimiento = alertaVencimiento; }
+
+    public String getComprobanteSuscripcionUrl() { return comprobanteSuscripcionUrl; }
+    public void setComprobanteSuscripcionUrl(String comprobanteSuscripcionUrl) { this.comprobanteSuscripcionUrl = comprobanteSuscripcionUrl; }
+
+    public String getMotivoRechazoSuscripcion() { return motivoRechazoSuscripcion; }
+    public void setMotivoRechazoSuscripcion(String motivoRechazoSuscripcion) { this.motivoRechazoSuscripcion = motivoRechazoSuscripcion; }
+
+    public String getBancoNombre() { return bancoNombre; }
+    public void setBancoNombre(String bancoNombre) { this.bancoNombre = bancoNombre; }
+
+    public String getBancoTipoCuenta() { return bancoTipoCuenta; }
+    public void setBancoTipoCuenta(String bancoTipoCuenta) { this.bancoTipoCuenta = bancoTipoCuenta; }
+
+    public String getBancoNumeroCuenta() { return bancoNumeroCuenta; }
+    public void setBancoNumeroCuenta(String bancoNumeroCuenta) { this.bancoNumeroCuenta = bancoNumeroCuenta; }
+
+    public String getBancoTitular() { return bancoTitular; }
+    public void setBancoTitular(String bancoTitular) { this.bancoTitular = bancoTitular; }
+
+    public String getBancoDocumento() { return bancoDocumento; }
+    public void setBancoDocumento(String bancoDocumento) { this.bancoDocumento = bancoDocumento; }
+
+    public String getInstruccionesPago() { return instruccionesPago; }
+    public void setInstruccionesPago(String instruccionesPago) { this.instruccionesPago = instruccionesPago; }
+
+    public Boolean getDestacado() { return destacado; }
+    public void setDestacado(Boolean destacado) { this.destacado = destacado; }
 }

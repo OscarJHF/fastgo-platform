@@ -11,6 +11,9 @@ import {
   Sparkles,
   Building2,
   X,
+  Eye,
+  Upload,
+  FileText,
 } from 'lucide-react';
 import { useMerchantStore } from '../../context/MerchantStoreContext';
 import { commerceService } from '../../services/commerceService';
@@ -95,6 +98,31 @@ export const StoreSwitcher: React.FC = () => {
     }
   };
 
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofRef, setProofRef] = useState('');
+
+  const handleUploadProof = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStore || !proofFile) {
+      showError('Por favor selecciona un archivo de comprobante');
+      return;
+    }
+    setIsUploadingProof(true);
+    try {
+      await commerceService.uploadSubscriptionProof(selectedStore.id, proofFile, proofRef);
+      success('¡Comprobante de pago enviado para verificación administrativa!');
+      setProofFile(null);
+      setProofRef('');
+      await refreshStores();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Error al subir comprobante';
+      showError(msg);
+    } finally {
+      setIsUploadingProof(false);
+    }
+  };
+
   if (!selectedStore && stores.length === 0) {
     return null;
   }
@@ -111,6 +139,13 @@ export const StoreSwitcher: React.FC = () => {
             ACTIVA
           </span>
         );
+      case 'PENDIENTE_VERIFICACION':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-800 border border-blue-300">
+            <Clock className="w-3 h-3 text-blue-600" />
+            EN REVISIÓN
+          </span>
+        );
       case 'PENDIENTE_ACTIVACION':
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-300">
@@ -123,6 +158,20 @@ export const StoreSwitcher: React.FC = () => {
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-orange-100 text-orange-800 border border-orange-300">
             <AlertTriangle className="w-3 h-3 text-orange-600" />
             PENDIENTE PAGO
+          </span>
+        );
+      case 'RECHAZADA':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
+            <ShieldAlert className="w-3 h-3 text-rose-600" />
+            RECHAZADA
+          </span>
+        );
+      case 'SUSPENDIDA_POR_MORA':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-red-100 text-red-800 border border-red-300">
+            <AlertTriangle className="w-3 h-3 text-red-600" />
+            MORA
           </span>
         );
       case 'SUSPENDIDA':
@@ -233,22 +282,140 @@ export const StoreSwitcher: React.FC = () => {
         </div>
       </div>
 
-      {/* Warning banner when active store is not ACTIVA */}
-      {selectedStore && selectedStore.estado !== 'ACTIVA' && (
-        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-start gap-3">
+      {/* Warning banner when subscription has upcoming expiration (3 days or fewer) */}
+      {selectedStore && selectedStore.alertaVencimiento && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 flex items-start gap-3 shadow-xs">
           <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-          <div className="space-y-1 text-xs text-amber-900">
-            <p className="font-black text-sm">
-              Tienda {selectedStore.estado === 'PENDIENTE_ACTIVACION' ? 'Pendiente de Activación' : selectedStore.estado}
+          <div className="space-y-1 text-xs text-amber-950 flex-1">
+            <p className="font-black text-sm text-amber-900">
+              ⚠️ Alerta de Vencimiento: Tu suscripción para {selectedStore.nombre} vence en {selectedStore.diasRestantes ?? 0} {selectedStore.diasRestantes === 1 ? 'día' : 'días'}
             </p>
             <p className="leading-relaxed">
-              {selectedStore.estado === 'PENDIENTE_ACTIVACION'
-                ? 'Esta tienda ha sido registrada y está esperando aprobación por parte de la administración de FASTGO. Puedes configurar su catálogo, horarios e información. No estará visible para clientes ni recibirá pedidos hasta ser activada.'
-                : selectedStore.estado === 'SUSPENDIDA'
-                ? 'Esta tienda ha sido suspendida temporalmente por la administración. Comunícate con soporte para más información.'
-                : 'La tienda requiere atención administrativa para quedar plenamente operativa.'}
+              Para garantizar la continuidad de tu tienda y evitar que se pause la recepción de pedidos, realiza el pago a la cuenta bancaria de FASTGO y adjunta tu comprobante.
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Subscription Status Card & Bank Details & Proof Upload when not ACTIVA */}
+      {selectedStore && selectedStore.estado !== 'ACTIVA' && (
+        <div
+          className={`p-4 rounded-2xl border space-y-3 ${
+            selectedStore.estado === 'RECHAZADA'
+              ? 'bg-rose-50 border-rose-200 text-rose-950'
+              : selectedStore.estado === 'PENDIENTE_VERIFICACION'
+              ? 'bg-blue-50 border-blue-200 text-blue-950'
+              : 'bg-amber-50 border-amber-200 text-amber-950'
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            {selectedStore.estado === 'RECHAZADA' ? (
+              <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            ) : selectedStore.estado === 'PENDIENTE_VERIFICACION' ? (
+              <Clock className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            )}
+            <div className="space-y-1 text-xs flex-1">
+              <p className="font-black text-sm">
+                {selectedStore.estado === 'PENDIENTE_ACTIVACION' && 'Tienda Pendiente de Activación'}
+                {selectedStore.estado === 'PENDIENTE_VERIFICACION' && 'Comprobante en Revisión por FASTGO'}
+                {selectedStore.estado === 'RECHAZADA' && 'Comprobante de Pago Rechazado'}
+                {selectedStore.estado === 'SUSPENDIDA_POR_MORA' && 'Tienda Suspendida por Mora'}
+                {selectedStore.estado === 'SUSPENDIDA' && 'Tienda Suspendida Administrativamente'}
+                {selectedStore.estado === 'DESACTIVADA' && 'Tienda Desactivada'}
+              </p>
+              <p className="leading-relaxed">
+                {selectedStore.estado === 'PENDIENTE_ACTIVACION' &&
+                  'Esta tienda requiere la verificación del pago para ser activada y visible para clientes.'}
+                {selectedStore.estado === 'PENDIENTE_VERIFICACION' &&
+                  'Hemos recibido tu comprobante de pago. La administración de FASTGO validará la consignación y activará tu tienda.'}
+                {selectedStore.estado === 'RECHAZADA' && (
+                  <span>
+                    El comprobante enviado fue rechazado: <strong>{selectedStore.motivoRechazoSuscripcion || 'No coincide con la transferencia esperada'}</strong>. Adjunta un nuevo comprobante corregido.
+                  </span>
+                )}
+                {selectedStore.estado === 'SUSPENDIDA_POR_MORA' &&
+                  'Tu periodo de suscripción ha vencido. Realiza la transferencia a la cuenta oficial de FASTGO para reactivar tu tienda de inmediato.'}
+                {selectedStore.estado === 'SUSPENDIDA' &&
+                  'Esta tienda ha sido suspendida temporalmente por la administración de FASTGO. Comunícate con soporte.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Official FastGo Bank Details */}
+          {(selectedStore.bancoNumeroCuenta || subscriptionConfig?.bancoNumeroCuenta) && (
+            <div className="p-3 bg-white/90 rounded-xl border border-gray-200 text-xs space-y-1.5 text-gray-800 shadow-2xs">
+              <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-purple-600" /> Cuenta Oficial FASTGO para Pago de Suscripción:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                <div>
+                  <span className="text-gray-500 font-medium">Banco:</span>{' '}
+                  <strong>{selectedStore.bancoNombre || subscriptionConfig?.bancoNombre || 'Bancolombia'}</strong> ({selectedStore.bancoTipoCuenta || subscriptionConfig?.bancoTipoCuenta || 'Ahorros'})
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium">Número de Cuenta:</span>{' '}
+                  <strong className="text-purple-700">{selectedStore.bancoNumeroCuenta || subscriptionConfig?.bancoNumeroCuenta}</strong>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium">Titular:</span>{' '}
+                  <strong>{selectedStore.bancoTitular || subscriptionConfig?.bancoTitular || 'FastGo S.A.S.'}</strong>
+                </div>
+                <div>
+                  <span className="text-gray-500 font-medium">Documento / NIT:</span>{' '}
+                  <strong>{selectedStore.bancoDocumento || subscriptionConfig?.bancoDocumento || 'NIT 901.888.777-1'}</strong>
+                </div>
+              </div>
+              {(selectedStore.instruccionesPago || subscriptionConfig?.instruccionesPago) && (
+                <p className="text-[11px] text-gray-600 pt-1 italic">
+                  💡 {selectedStore.instruccionesPago || subscriptionConfig?.instruccionesPago}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Upload Receipt Form */}
+          {selectedStore.estado !== 'PENDIENTE_VERIFICACION' && (
+            <form onSubmit={handleUploadProof} className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,application/pdf"
+                onChange={(e) => setProofFile(e.target.files?.[0] || null)}
+                className="text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-purple-600 file:text-white hover:file:bg-purple-700 cursor-pointer"
+                required
+              />
+              <input
+                type="text"
+                placeholder="Referencia de pago (opcional)"
+                value={proofRef}
+                onChange={(e) => setProofRef(e.target.value)}
+                className="px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                isLoading={isUploadingProof}
+                disabled={!proofFile}
+              >
+                Subir Comprobante
+              </Button>
+            </form>
+          )}
+
+          {selectedStore.comprobanteSuscripcionUrl && (
+            <div className="pt-1">
+              <a
+                href={selectedStore.comprobanteSuscripcionUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-bold text-purple-700 hover:text-purple-900 inline-flex items-center gap-1 underline"
+              >
+                <Eye className="w-3.5 h-3.5" /> Ver Comprobante Subido
+              </a>
+            </div>
+          )}
         </div>
       )}
 

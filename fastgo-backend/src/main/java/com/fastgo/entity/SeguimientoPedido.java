@@ -27,6 +27,15 @@ public class SeguimientoPedido {
     @Column(name = "actualizado_en", nullable = false)
     private LocalDateTime actualizadoEn;
 
+    @Column(precision = 10, scale = 2)
+    private BigDecimal precision;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal rumbo;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal velocidad;
+
     public SeguimientoPedido() {}
 
     public SeguimientoPedido(Integer pedidoId, Integer domiciliarioId, BigDecimal latitud, BigDecimal longitud) {
@@ -60,4 +69,13 @@ public class SeguimientoPedido {
 
     public LocalDateTime getActualizadoEn() { return actualizadoEn; }
     public void setActualizadoEn(LocalDateTime actualizadoEn) { this.actualizadoEn = actualizadoEn; }
+
+    public BigDecimal getPrecision() { return precision; }
+    public void setPrecision(BigDecimal precision) { this.precision = precision; }
+
+    public BigDecimal getRumbo() { return rumbo; }
+    public void setRumbo(BigDecimal rumbo) { this.rumbo = rumbo; }
+
+    public BigDecimal getVelocidad() { return velocidad; }
+    public void setVelocidad(BigDecimal velocidad) { this.velocidad = velocidad; }
 }

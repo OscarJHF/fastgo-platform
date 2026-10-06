@@ -409,9 +409,16 @@ public class GeografiaAndAdminAnalyticsTests {
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.zonaHoraria").value("America/Bogota"))
+                .andExpect(jsonPath("$.resumen").exists())
+                .andExpect(jsonPath("$.resumen.totalVisitas").isNumber())
                 .andExpect(jsonPath("$.embudo").isArray())
+                .andExpect(jsonPath("$.embudo.length()").value(6))
                 .andExpect(jsonPath("$.embudo[0].etapa").value("Visitas"))
-                .andExpect(jsonPath("$.embudo[1].etapa").value("Registros"))
+                .andExpect(jsonPath("$.embudo[1].etapa").value("Descargas APK"))
+                .andExpect(jsonPath("$.embudo[2].etapa").value("Primer Inicio App"))
+                .andExpect(jsonPath("$.embudo[3].etapa").value("Registros"))
+                .andExpect(jsonPath("$.embudo[4].etapa").value("Pedidos Creados"))
+                .andExpect(jsonPath("$.embudo[5].etapa").value("Pedidos Entregados"))
                 .andExpect(jsonPath("$.tendencias").isArray());
 
         // 5. Exportar CSV como ADMIN

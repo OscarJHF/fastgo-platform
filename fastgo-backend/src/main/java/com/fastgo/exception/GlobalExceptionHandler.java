@@ -48,6 +48,11 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.FORBIDDEN, "FORBIDDEN", "No tienes permisos para realizar esta operación");
     }
 
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<Map<String, Object>> security(SecurityException exception) {
+        return response(HttpStatus.FORBIDDEN, "FORBIDDEN", safeMessage(exception));
+    }
+
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> authentication(org.springframework.security.core.AuthenticationException exception) {
         return response(HttpStatus.UNAUTHORIZED, "UNAUTHORIZED", "Autenticación requerida o credenciales inválidas");

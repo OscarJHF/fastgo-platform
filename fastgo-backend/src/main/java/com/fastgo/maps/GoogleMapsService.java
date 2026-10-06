@@ -51,7 +51,12 @@ public class GoogleMapsService {
     }
 
     public Map<String,Object> clientConfig() {
-        return Map.of("mapsEnabled", enabled && !apiKey.isBlank(), "provider", "GOOGLE_MAPS");
+        boolean isEnabled = enabled && !apiKey.isBlank();
+        return Map.of(
+                "enabled", isEnabled,
+                "mapsEnabled", isEnabled,
+                "provider", "GOOGLE_MAPS"
+        );
     }
 
     private void requireEnabled() {

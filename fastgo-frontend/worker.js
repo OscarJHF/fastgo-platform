@@ -4,15 +4,24 @@ export default {
 
     // Endpoint técnico de descarga directa del APK oficial de FASTGO
     if (url.pathname === '/descargar/apk') {
+      const APK_V224 = 'https://github.com/OscarJHF/fastgo-platform/releases/download/v2.2.4/FASTGO-release-2.2.4.apk';
       const APK_V223 = 'https://github.com/OscarJHF/fastgo-platform/releases/download/v2.2.3/FASTGO-release-2.2.3.apk';
       const APK_V222 = 'https://github.com/OscarJHF/fastgo-platform/releases/download/v2.2.2/FASTGO-Beta2-release.apk';
 
       if (request.method === 'HEAD') {
-        let headRes = await fetch(APK_V223, {
+        let headRes = await fetch(APK_V224, {
           method: 'HEAD',
           headers: { 'User-Agent': 'FastGo-Worker' },
           redirect: 'follow'
         });
+
+        if (!headRes.ok) {
+          headRes = await fetch(APK_V223, {
+            method: 'HEAD',
+            headers: { 'User-Agent': 'FastGo-Worker' },
+            redirect: 'follow'
+          });
+        }
 
         if (!headRes.ok) {
           headRes = await fetch(APK_V222, {
@@ -24,13 +33,13 @@ export default {
 
         const headers = new Headers(headRes.headers);
         headers.set('Content-Type', 'application/vnd.android.package-archive');
-        headers.set('Content-Disposition', 'attachment; filename="FASTGO-release-2.2.3.apk"');
+        headers.set('Content-Disposition', 'attachment; filename="FASTGO-release-2.2.4.apk"');
         headers.set('Cache-Control', 'public, max-age=86400, s-maxage=86400');
         headers.delete('set-cookie');
         return new Response(null, { status: 200, headers });
       }
 
-      let upstream = await fetch(APK_V223, {
+      let upstream = await fetch(APK_V224, {
         method: 'GET',
         headers: {
           'User-Agent': 'FastGo-Worker'
@@ -39,7 +48,17 @@ export default {
       });
 
       if (!upstream.ok && upstream.status === 404) {
-        // Fallback temporal si v2.2.3 aún está sincronizándose
+        // Fallback temporal si v2.2.4 aún está sincronizándose
+        upstream = await fetch(APK_V223, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'FastGo-Worker'
+          },
+          redirect: 'follow'
+        });
+      }
+
+      if (!upstream.ok && upstream.status === 404) {
         upstream = await fetch(APK_V222, {
           method: 'GET',
           headers: {
@@ -62,14 +81,14 @@ export default {
             body: JSON.stringify({
               eventType: 'APK_DOWNLOAD',
               platform: 'WEB',
-              appVersion: '2.2.3',
+              appVersion: '2.2.4',
               pathOrScreen: '/descargar/apk',
               referrer: request.headers.get('referer') || '',
               utmSource: url.searchParams.get('utm_source') || '',
               utmMedium: url.searchParams.get('utm_medium') || '',
               utmCampaign: url.searchParams.get('utm_campaign') || '',
               metadata: JSON.stringify({
-                version: '2.2.3',
+                version: '2.2.4',
                 userAgent: request.headers.get('user-agent') || '',
                 ip: request.headers.get('cf-connecting-ip') || ''
               })
@@ -80,7 +99,7 @@ export default {
 
       const responseHeaders = new Headers(upstream.headers);
       responseHeaders.set('Content-Type', 'application/vnd.android.package-archive');
-      responseHeaders.set('Content-Disposition', 'attachment; filename="FASTGO-release-2.2.3.apk"');
+      responseHeaders.set('Content-Disposition', 'attachment; filename="FASTGO-release-2.2.4.apk"');
       responseHeaders.set('Cache-Control', 'public, max-age=86400, s-maxage=86400');
       responseHeaders.delete('set-cookie');
 

@@ -27,6 +27,11 @@ export const adminService = {
     return response.data;
   },
 
+  async toggleDestacado(id: number, destacado: boolean, razon?: string): Promise<AdminTienda> {
+    const response = await apiClient.put<AdminTienda>(`/api/admin/tiendas/${id}/destacado`, { destacado, razon });
+    return response.data;
+  },
+
   async deleteStore(id: number, motivo?: string): Promise<{ mensaje: string; id: number }> {
     const response = await apiClient.delete<{ mensaje: string; id: number }>(`/api/admin/tiendas/${id}`, {
       data: { motivo },
@@ -70,6 +75,23 @@ export const adminService = {
 
   async updateSubscriptionConfig(data: Partial<ConfiguracionSuscripcion>): Promise<ConfiguracionSuscripcion> {
     const response = await apiClient.put<ConfiguracionSuscripcion>('/api/admin/suscripciones/configuracion', data);
+    return response.data;
+  },
+
+  async listPendingSubscriptions(): Promise<import('../types').SuscripcionResponse[]> {
+    const response = await apiClient.get<import('../types').SuscripcionResponse[]>('/api/admin/suscripciones/pendientes');
+    return response.data;
+  },
+
+  async approveSubscription(subscriptionId: number): Promise<import('../types').SuscripcionResponse> {
+    const response = await apiClient.post<import('../types').SuscripcionResponse>(`/api/admin/suscripciones/${subscriptionId}/aprobar`);
+    return response.data;
+  },
+
+  async rejectSubscription(subscriptionId: number, motivo: string): Promise<import('../types').SuscripcionResponse> {
+    const response = await apiClient.post<import('../types').SuscripcionResponse>(`/api/admin/suscripciones/${subscriptionId}/rechazar`, {
+      motivo,
+    });
     return response.data;
   },
 

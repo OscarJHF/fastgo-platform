@@ -22,14 +22,17 @@ public class EncomiendaService {
     private final EncomiendaRepository encomiendaRepository;
     private final UsuarioRepository usuarioRepository;
     private final TarifaService tarifaService;
+    private final com.fastgo.repository.OfertaEncomiendaRepository ofertaEncomiendaRepository;
 
     public EncomiendaService(
             EncomiendaRepository encomiendaRepository,
             UsuarioRepository usuarioRepository,
-            TarifaService tarifaService) {
+            TarifaService tarifaService,
+            com.fastgo.repository.OfertaEncomiendaRepository ofertaEncomiendaRepository) {
         this.encomiendaRepository = encomiendaRepository;
         this.usuarioRepository = usuarioRepository;
         this.tarifaService = tarifaService;
+        this.ofertaEncomiendaRepository = ofertaEncomiendaRepository;
     }
 
     @Transactional
@@ -52,7 +55,10 @@ public class EncomiendaService {
             }
         }
 
-        BigDecimal costoEnvio = tarifaService.calcularTarifaPorDistancia(distancia);
+        BigDecimal costoEnvio = request.getCostoEnvio();
+        if (costoEnvio == null || costoEnvio.compareTo(BigDecimal.ZERO) <= 0) {
+            costoEnvio = tarifaService.calcularTarifaPorDistancia(distancia);
+        }
 
         Encomienda encomienda = new Encomienda();
         encomienda.setClienteId(usuario.getId());
@@ -72,6 +78,7 @@ public class EncomiendaService {
         encomienda.setTamanoPeso(request.getTamanoPeso());
         encomienda.setDistanciaKm(distancia);
         encomienda.setCostoEnvio(costoEnvio);
+        encomienda.setValorInicial(costoEnvio);
         encomienda.setTarifaAceptada(true);
         encomienda.setEstado("PENDIENTE");
         encomienda.setObservaciones(request.getObservaciones());
@@ -88,7 +95,7 @@ public class EncomiendaService {
     }
 
     public List<EncomiendaResponseDTO> listarDisponibles() {
-        return encomiendaRepository.findByEstadoOrderByCreadoEnDesc("PENDIENTE")
+        return encomiendaRepository.findByEstadoInOrderByCreadoEnDesc(java.util.List.of("PENDIENTE", "OFERTA"))
                 .stream()
                 .map(this::toDto)
                 .toList();
@@ -117,12 +124,13 @@ public class EncomiendaService {
         Encomienda encomienda = encomiendaRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Encomienda no encontrada"));
 
-        if (!"PENDIENTE".equalsIgnoreCase(encomienda.getEstado())) {
+        if (!"PENDIENTE".equalsIgnoreCase(encomienda.getEstado()) && !"OFERTA".equalsIgnoreCase(encomienda.getEstado())) {
             throw new IllegalStateException("La encomienda ya no está disponible (estado actual: " + encomienda.getEstado() + ")");
         }
 
         encomienda.setDomiciliarioId(domiciliario.getId());
         encomienda.setEstado("ACEPTADA");
+        ofertaEncomiendaRepository.cancelarTodasLasOfertasPendientes(id);
 
         return toDto(encomiendaRepository.save(encomienda));
     }
@@ -175,11 +183,12 @@ public class EncomiendaService {
             throw new AccessDeniedException("No tienes permiso para cancelar esta encomienda");
         }
 
-        if (!"PENDIENTE".equalsIgnoreCase(encomienda.getEstado())) {
+        if (!"PENDIENTE".equalsIgnoreCase(encomienda.getEstado()) && !"OFERTA".equalsIgnoreCase(encomienda.getEstado())) {
             throw new IllegalStateException("No se puede cancelar una encomienda que ya ha sido tomada o procesada");
         }
 
         encomienda.setEstado("CANCELADA");
+        ofertaEncomiendaRepository.cancelarTodasLasOfertasPendientes(id);
         return toDto(encomiendaRepository.save(encomienda));
     }
 
@@ -246,6 +255,11 @@ public class EncomiendaService {
         dto.setObservaciones(e.getObservaciones());
         dto.setCreadoEn(e.getCreadoEn());
         dto.setActualizadoEn(e.getActualizadoEn());
+
+        dto.setValorInicial(e.getValorInicial() != null ? e.getValorInicial() : e.getCostoEnvio());
+        long numOfertas = ofertaEncomiendaRepository.countByEncomiendaIdAndEstado(e.getId(), "PENDIENTE");
+        dto.setNumeroOfertas((int) numOfertas);
+
         return dto;
     }
 }

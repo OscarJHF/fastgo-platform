@@ -16,7 +16,7 @@ export const DownloadPage: React.FC = () => {
     analyticsService.track({
       eventType: 'APK_DOWNLOAD',
       platform: 'WEB',
-      appVersion: '2.2.3',
+      appVersion: '2.2.4',
       pathOrScreen: '/descargar/apk',
       utmSource: 'web_button',
     });
@@ -74,7 +74,7 @@ export const DownloadPage: React.FC = () => {
           <div className="mt-8 w-full">
             <a
               href="https://fastgo-app.fastgo-frontend.workers.dev/descargar/apk"
-              download="FASTGO-release-2.2.3.apk"
+              download="FASTGO-release-2.2.4.apk"
               onClick={handleDownloadClick}
               className="w-full inline-flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-base shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 transition-all duration-200 active:scale-[0.98] group"
               id="btn-descargar-apk"
@@ -85,7 +85,7 @@ export const DownloadPage: React.FC = () => {
 
             <div className="flex items-center justify-center gap-2 mt-3 text-[11px] text-slate-400 font-semibold">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Instalador oficial seguro • Versión 2.2.3</span>
+              <span>Instalador oficial seguro • Versión 2.2.4</span>
             </div>
           </div>
 

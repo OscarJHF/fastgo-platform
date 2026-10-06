@@ -17,4 +17,8 @@ public interface SuscripcionRepository extends JpaRepository<Suscripcion, Intege
     List<Suscripcion> findByUsuarioIdOrderByCreadoEnDesc(Integer usuarioId);
 
     Optional<Suscripcion> findFirstByComercioIdAndEstado(Integer comercioId, String estado);
+
+    List<Suscripcion> findByEstadoOrderByCreadoEnDesc(String estado);
+
+    List<Suscripcion> findByEstadoIn(List<String> estados);
 }

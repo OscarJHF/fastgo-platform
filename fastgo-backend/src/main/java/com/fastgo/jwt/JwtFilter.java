@@ -32,12 +32,15 @@ public class JwtFilter extends OncePerRequestFilter {
             FilterChain filterChain) throws ServletException, IOException {
 
         String authorization = request.getHeader("Authorization");
+        String token = null;
 
-        if (authorization != null && authorization.startsWith("Bearer ")
-                && SecurityContextHolder.getContext().getAuthentication() == null) {
+        if (authorization != null && authorization.startsWith("Bearer ")) {
+            token = authorization.substring(7).trim();
+        } else if (request.getParameter("token") != null && !request.getParameter("token").isBlank()) {
+            token = request.getParameter("token").trim();
+        }
 
-            String token = authorization.substring(7).trim();
-
+        if (token != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 if (jwtService.validarToken(token)) {
                     String correo = jwtService.extraerCorreo(token);

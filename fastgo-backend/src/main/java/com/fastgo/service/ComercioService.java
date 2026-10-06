@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
@@ -60,6 +61,31 @@ public class ComercioService {
         final Integer munTargetId = resolverMunicipioId(municipioParam);
 
         return comercioRepository.findByActivoTrue().stream()
+                .filter(Comercio::isOperativa)
+                .filter(c -> {
+                    if (depTargetId != null) {
+                        boolean matchComercio = depTargetId.equals(c.getDepartamentoId());
+                        boolean matchSucursal = sucursalRepository.findByComercioId(c.getId()).stream()
+                                .anyMatch(s -> depTargetId.equals(s.getDepartamentoId()));
+                        if (!matchComercio && !matchSucursal) return false;
+                    }
+                    if (munTargetId != null) {
+                        boolean matchComercio = munTargetId.equals(c.getMunicipioId());
+                        boolean matchSucursal = sucursalRepository.findByComercioId(c.getId()).stream()
+                                .anyMatch(s -> munTargetId.equals(s.getMunicipioId()));
+                        if (!matchComercio && !matchSucursal) return false;
+                    }
+                    return true;
+                })
+                .map(this::dto)
+                .toList();
+    }
+
+    public List<ComercioResponseDTO> listarComerciosDestacados(String departamentoParam, String municipioParam) {
+        final Integer depTargetId = resolverDepartamentoId(departamentoParam);
+        final Integer munTargetId = resolverMunicipioId(municipioParam);
+
+        return comercioRepository.findByDestacadoTrueAndActivoTrue().stream()
                 .filter(Comercio::isOperativa)
                 .filter(c -> {
                     if (depTargetId != null) {
@@ -138,6 +164,13 @@ public class ComercioService {
         }
 
         List<Comercio> misTiendas = comercioRepository.findAllByUsuarioIdOrderByCreadoEnAsc(u.getId());
+        String nombreNorm = d.getNombre() != null ? d.getNombre().trim() : "";
+        boolean nombreExiste = misTiendas.stream()
+                .anyMatch(t -> t.getNombre() != null && t.getNombre().trim().equalsIgnoreCase(nombreNorm));
+        if (nombreExiste) {
+            throw new IllegalArgumentException("Ya tienes una tienda con ese nombre. Utiliza un nombre comercial diferente.");
+        }
+
         int maxGratis = config.getFreePrimaryStores() != null ? config.getFreePrimaryStores() : 1;
         boolean esPrincipal = misTiendas.size() < maxGratis;
 
@@ -197,6 +230,18 @@ public class ComercioService {
         if (d == null) throw new IllegalArgumentException("Los datos del comercio son obligatorios");
         Usuario u = usuario();
         Comercio c = propio(id, u);
+
+        if (d.getNombre() != null && !d.getNombre().isBlank()) {
+            String nombreNorm = d.getNombre().trim();
+            List<Comercio> misTiendas = comercioRepository.findAllByUsuarioIdOrderByCreadoEnAsc(u.getId());
+            boolean nombreExiste = misTiendas.stream()
+                    .filter(t -> !t.getId().equals(c.getId()))
+                    .anyMatch(t -> t.getNombre() != null && t.getNombre().trim().equalsIgnoreCase(nombreNorm));
+            if (nombreExiste) {
+                throw new IllegalArgumentException("Ya tienes una tienda con ese nombre. Utiliza un nombre comercial diferente.");
+            }
+        }
+
         copiar(d, c);
 
         if (!c.isOperativa()) {
@@ -394,6 +439,34 @@ public class ComercioService {
         return toAdminDTO(saved);
     }
 
+    @Transactional
+    public AdminTiendaResponseDTO cambiarDestacadoAdmin(Integer id, Boolean destacado, String razon) {
+        Usuario admin = usuario();
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+
+        boolean nuevoValor = Boolean.TRUE.equals(destacado);
+        if (nuevoValor && !c.isOperativa()) {
+            throw new IllegalArgumentException("Solo se pueden destacar tiendas que se encuentren activas y operativas.");
+        }
+
+        boolean valorAnterior = Boolean.TRUE.equals(c.getDestacado());
+        c.setDestacado(nuevoValor);
+        Comercio saved = comercioRepository.save(c);
+
+        auditoriaRepository.save(new AuditoriaAdmin(
+                admin.getCorreo(),
+                nuevoValor ? "DESTACAR_TIENDA" : "QUITAR_DESTACADO_TIENDA",
+                "COMERCIO",
+                String.valueOf(id),
+                String.valueOf(valorAnterior),
+                String.valueOf(nuevoValor),
+                razon != null && !razon.isBlank() ? razon : (nuevoValor ? "Tienda marcada como destacada en banner principal" : "Tienda retirada de destacados")
+        ));
+
+        return toAdminDTO(saved);
+    }
+
     private void copiar(ComercioRequestDTO d, Comercio c) {
         if (d.getNombre() == null || d.getNombre().isBlank()) {
             throw new RuntimeException("El nombre del comercio es obligatorio");
@@ -502,6 +575,7 @@ public class ComercioService {
         dto.setEstado(c.getEstado());
         dto.setActivo(c.getActivo());
         dto.setFechaCreacion(c.getCreadoEn());
+        dto.setDestacado(Boolean.TRUE.equals(c.getDestacado()));
 
         if (c.getUsuario() != null) {
             dto.setUsuarioId(c.getUsuario().getId());
@@ -542,6 +616,18 @@ public class ComercioService {
             dto.setMontoSuscripcion(sub.getMonto());
             dto.setFechaUltimoPago(sub.getFechaPago());
             dto.setReferenciaPago(sub.getReferenciaPago());
+            dto.setComprobanteSuscripcionUrl(sub.getComprobanteUrl());
+            dto.setComprobanteSuscripcionKey(sub.getComprobanteKey());
+            dto.setMotivoRechazoSuscripcion(sub.getMotivoRechazo());
+
+            LocalDateTime ahora = LocalDateTime.now(SuscripcionService.BOGOTA_ZONE);
+            if (sub.getFechaFin() != null) {
+                long dias = java.time.temporal.ChronoUnit.DAYS.between(ahora.toLocalDate(), sub.getFechaFin().toLocalDate());
+                dto.setDiasRestantes(dias);
+                if (dias >= 0 && dias <= 3 && ("ACTIVA".equalsIgnoreCase(sub.getEstado()) || "GRATUITO".equalsIgnoreCase(sub.getEstado()))) {
+                    dto.setAlertaVencimiento(true);
+                }
+            }
         });
 
         return dto;
@@ -588,6 +674,14 @@ public class ComercioService {
             r.setUsuarioCorreo(c.getUsuario().getCorreo());
         }
 
+        ConfiguracionSuscripcion cfg = suscripcionService.obtenerConfiguracion();
+        r.setBancoNombre(cfg.getBancoNombre() != null ? cfg.getBancoNombre() : "Bancolombia");
+        r.setBancoTipoCuenta(cfg.getBancoTipoCuenta() != null ? cfg.getBancoTipoCuenta() : "Ahorros");
+        r.setBancoNumeroCuenta(cfg.getBancoNumeroCuenta() != null ? cfg.getBancoNumeroCuenta() : "123-456789-00");
+        r.setBancoTitular(cfg.getBancoTitular() != null ? cfg.getBancoTitular() : "FastGo S.A.S.");
+        r.setBancoDocumento(cfg.getBancoDocumento() != null ? cfg.getBancoDocumento() : "NIT 901.888.777-1");
+        r.setInstruccionesPago(cfg.getInstruccionesPago() != null ? cfg.getInstruccionesPago() : "Realiza la transferencia desde Bancolombia o Nequi y adjunta el comprobante para la verificación administrativa.");
+
         suscripcionService.obtenerUltimaSuscripcion(c.getId()).ifPresent(sub -> {
             r.setFechaInicioSuscripcion(sub.getFechaInicio());
             r.setFechaFinSuscripcion(sub.getFechaFin());
@@ -597,6 +691,17 @@ public class ComercioService {
             boolean gratuito = "GRATUITO".equalsIgnoreCase(sub.getEstado()) ||
                     ("TIENDA_PRINCIPAL".equalsIgnoreCase(sub.getTipoPlan()) && (sub.getMonto() == null || sub.getMonto().compareTo(BigDecimal.ZERO) == 0));
             r.setEsGratuito(gratuito);
+            r.setComprobanteSuscripcionUrl(sub.getComprobanteUrl());
+            r.setMotivoRechazoSuscripcion(sub.getMotivoRechazo());
+
+            LocalDateTime ahora = LocalDateTime.now(SuscripcionService.BOGOTA_ZONE);
+            if (sub.getFechaFin() != null) {
+                long dias = java.time.temporal.ChronoUnit.DAYS.between(ahora.toLocalDate(), sub.getFechaFin().toLocalDate());
+                r.setDiasRestantes(dias);
+                if (dias >= 0 && dias <= 3 && ("ACTIVA".equalsIgnoreCase(sub.getEstado()) || "GRATUITO".equalsIgnoreCase(sub.getEstado()))) {
+                    r.setAlertaVencimiento(true);
+                }
+            }
         });
 
         List<Sucursal> sucursales = sucursalRepository.findByComercioId(c.getId());
@@ -614,6 +719,8 @@ public class ComercioService {
         if (c.getMunicipioId() != null) {
             municipioRepository.findById(c.getMunicipioId()).ifPresent(m -> r.setMunicipioNombre(m.getNombre()));
         }
+
+        r.setDestacado(Boolean.TRUE.equals(c.getDestacado()));
 
         return r;
     }

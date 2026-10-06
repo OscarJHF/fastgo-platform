@@ -7,6 +7,11 @@ export const commerceService = {
     return response.data;
   },
 
+  async listFeaturedCommerces(params?: { departamentoId?: number | string; municipioId?: number | string }): Promise<Comercio[]> {
+    const response = await apiClient.get<Comercio[]>('/api/comercios/destacados', { params });
+    return response.data;
+  },
+
   async getCommerce(id: number): Promise<Comercio> {
     const response = await apiClient.get<Comercio>(`/api/comercios/${id}`);
     return response.data;
@@ -47,6 +52,29 @@ export const commerceService = {
 
   async togglePausaManual(id: number, pausaManual: boolean): Promise<Comercio> {
     const response = await apiClient.patch<Comercio>(`/api/comercios/${id}/pausa-manual?pausaManual=${pausaManual}`);
+    return response.data;
+  },
+
+  async getSuscripcion(comercioId: number): Promise<import('../types').SuscripcionResponse> {
+    const response = await apiClient.get<import('../types').SuscripcionResponse>(`/api/comercios/${comercioId}/suscripcion`);
+    return response.data;
+  },
+
+  async uploadSubscriptionProof(comercioId: number, file: File, referencia?: string): Promise<import('../types').SuscripcionResponse> {
+    const formData = new FormData();
+    formData.append('comprobante', file);
+    if (referencia) {
+      formData.append('referencia', referencia);
+    }
+    const response = await apiClient.post<import('../types').SuscripcionResponse>(
+      `/api/comercios/${comercioId}/suscripcion/comprobante`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
     return response.data;
   },
 };

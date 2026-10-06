@@ -20,7 +20,11 @@ import {
   CheckCircle2,
   ShieldAlert,
   Download,
+  Volume2,
+  VolumeX,
+  Bell,
 } from 'lucide-react';
+import { soundPlayer } from '../../utils/soundPlayer';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
 import { pedidoService } from '../../services/pedidoService';
@@ -50,6 +54,14 @@ export const CommerceOrdersPage: React.FC = () => {
   const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
   const [isPdfReceipt, setIsPdfReceipt] = useState(false);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
+
+  // Notificaciones sonoras y visuales
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('fastgo_merchant_sound_enabled') !== 'false';
+  });
+  const [newOrderAlert, setNewOrderAlert] = useState<Pedido | null>(null);
+  const knownOrderIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef<boolean>(true);
 
   useEffect(() => {
     let active = true;
@@ -85,7 +97,8 @@ export const CommerceOrdersPage: React.FC = () => {
 
   const { success, error: showError } = useToast();
 
-  const loadData = async () => {
+  const loadData = async (showSpinner = true) => {
+    if (showSpinner) setIsLoading(true);
     try {
       if (selectedStore) {
         const sucs = await sucursalService.listByCommerce(selectedStore.id).catch(() => []);
@@ -97,6 +110,23 @@ export const CommerceOrdersPage: React.FC = () => {
           setSelectedBranchId(branchId);
           const ords = await pedidoService.listBySucursal(branchId);
           setOrders(ords);
+
+          // Detección de nuevos pedidos para alerta visual y sonora
+          if (!isFirstLoadRef.current) {
+            const newlyArrived = ords.filter(
+              (o) => !knownOrderIdsRef.current.has(o.id) && (o.estado === 'PENDIENTE' || o.estado === 'CONFIRMADO')
+            );
+            if (newlyArrived.length > 0) {
+              const latest = newlyArrived[0];
+              setNewOrderAlert(latest);
+              if (soundEnabled) {
+                soundPlayer.playOrderAlertSound();
+              }
+            }
+          }
+
+          ords.forEach((o) => knownOrderIdsRef.current.add(o.id));
+          isFirstLoadRef.current = false;
         } else {
           setSelectedBranchId(null);
           setOrders([]);
@@ -109,13 +139,22 @@ export const CommerceOrdersPage: React.FC = () => {
     } catch (err) {
       console.error('Error al cargar pedidos:', err);
     } finally {
-      setIsLoading(false);
+      if (showSpinner) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, [selectedStore, selectedBranchId]);
+
+  // Polling automático cada 10 segundos para actualizar pedidos en tiempo real
+  useEffect(() => {
+    if (!selectedStore) return;
+    const interval = setInterval(() => {
+      loadData(false);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [selectedStore, selectedBranchId, soundEnabled]);
 
   const toggleOrderDetails = async (orderId: number) => {
     if (expandedOrders[orderId]) {
@@ -227,6 +266,10 @@ export const CommerceOrdersPage: React.FC = () => {
     );
   }
 
+  const pendingOrdersCount = orders.filter(
+    (o) => o.estado === 'PENDIENTE' || o.estado === 'CONFIRMADO'
+  ).length;
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <Link to={APP_ROUTES.COMMERCE_DASHBOARD} className="inline-flex items-center gap-1.5 text-xs font-bold text-gray-500 hover:text-black">
@@ -236,25 +279,95 @@ export const CommerceOrdersPage: React.FC = () => {
       {/* Multi-Store Switcher */}
       <StoreSwitcher />
 
+      {/* Banner de alerta de nuevo pedido recibido */}
+      {newOrderAlert && (
+        <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-xl flex items-center justify-between border-2 border-emerald-400 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2.5 rounded-xl">
+              <Bell className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-white text-emerald-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                  ¡NUEVO PEDIDO!
+                </span>
+                <span className="font-extrabold text-sm">Pedido #{newOrderAlert.id}</span>
+              </div>
+              <p className="text-xs text-emerald-100 mt-0.5">
+                Tienda: <strong className="text-white">{selectedStore?.nombre}</strong> | Total:{' '}
+                <strong className="text-white">{formatCurrency(newOrderAlert.total)}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                toggleOrderDetails(newOrderAlert.id);
+                setNewOrderAlert(null);
+              }}
+            >
+              Ver Pedido
+            </Button>
+            <button
+              onClick={() => setNewOrderAlert(null)}
+              className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 text-xs font-bold"
+              aria-label="Cerrar alerta"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-gray-900">Cocina y Despacho de Pedidos</h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black text-gray-900">Cocina y Despacho de Pedidos</h1>
+            {pendingOrdersCount > 0 && (
+              <span className="bg-emerald-500 text-white text-xs font-black px-2.5 py-0.5 rounded-full">
+                {pendingOrdersCount} pendiente{pendingOrdersCount > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500">Revisa clientes, direcciones, productos a empacar y despacha a repartidores</p>
         </div>
 
-        {branches.length > 0 && (
-          <select
-            value={selectedBranchId || ''}
-            onChange={(e) => setSelectedBranchId(Number(e.target.value))}
-            className="bg-white border border-gray-200 text-xs font-bold rounded-xl px-3 py-2"
+        <div className="flex items-center gap-2">
+          {/* Sound Toggle Button */}
+          <button
+            type="button"
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              localStorage.setItem('fastgo_merchant_sound_enabled', String(next));
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+              soundEnabled
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                : 'bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-200'
+            }`}
+            title={soundEnabled ? 'Alertas sonoras activadas' : 'Alertas sonoras silenciadas'}
           >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                📍 {b.nombre}
-              </option>
-            ))}
-          </select>
-        )}
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4 text-gray-400" />}
+            <span>{soundEnabled ? 'Sonido ON' : 'Silencio'}</span>
+          </button>
+
+          {branches.length > 0 && (
+            <select
+              value={selectedBranchId || ''}
+              onChange={(e) => setSelectedBranchId(Number(e.target.value))}
+              className="bg-white border border-gray-200 text-xs font-bold rounded-xl px-3 py-2"
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  📍 {b.nombre}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {orders.length === 0 ? (
@@ -319,8 +432,8 @@ export const CommerceOrdersPage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Bancolombia Payment Box */}
-                {order.metodoPago === 'BANCOLOMBIA' && (
+                {/* Bancolombia / Transferencia Payment Box */}
+                {(order.metodoPago === 'BANCOLOMBIA' || order.metodoPago === 'TRANSFERENCIA') && (
                   <div
                     className={`p-4 rounded-xl border space-y-3 ${
                       order.estadoPago === 'APROBADO'
@@ -335,7 +448,7 @@ export const CommerceOrdersPage: React.FC = () => {
                         <CreditCard className="w-5 h-5 text-amber-600 shrink-0" />
                         <div>
                           <span className="font-extrabold text-xs uppercase tracking-wider text-gray-900">
-                            Pago por Bancolombia
+                            Pago por {order.metodoPago === 'BANCOLOMBIA' ? 'Bancolombia' : 'Transferencia'}
                           </span>
                           <p className="text-[11px] text-gray-600">
                             {order.estadoPago === 'APROBADO' && 'El pago fue verificado y aprobado correctamente.'}

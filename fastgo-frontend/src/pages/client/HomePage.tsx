@@ -6,19 +6,18 @@ import {
   Sparkles,
   MapPin,
   ChevronRight,
-  Utensils,
   Package,
   Bike,
   ArrowRight,
   LogIn,
   UserPlus,
+  Star,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { categoriaService } from '../../services/categoriaService';
-import { productoService } from '../../services/productoService';
 import { geografiaService } from '../../services/geografiaService';
 import { analyticsService } from '../../services/analyticsService';
-import { Comercio, CategoriaComercio, Producto, Departamento, Municipio } from '../../types';
+import { Comercio, CategoriaComercio, Departamento, Municipio } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
@@ -31,7 +30,7 @@ export const HomePage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [commerces, setCommerces] = useState<Comercio[]>([]);
   const [categories, setCategories] = useState<CategoriaComercio[]>([]);
-  const [featuredProducts, setFeaturedProducts] = useState<Producto[]>([]);
+  const [featuredCommerces, setFeaturedCommerces] = useState<Comercio[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -80,11 +79,14 @@ export const HomePage: React.FC = () => {
           const [commercesData, categoriesData, featuredData] = await Promise.all([
             commerceService.listCommerces(params),
             categoriaService.listActiveCommerceCategories(),
-            productoService.listDestacados(),
+            commerceService.listFeaturedCommerces({
+              departamentoId: selectedDepartamento || undefined,
+              municipioId: selectedMunicipio || undefined,
+            }),
           ]);
           setCommerces(commercesData);
           setCategories(categoriesData);
-          setFeaturedProducts(featuredData);
+          setFeaturedCommerces(featuredData);
         } catch (err) {
           console.error('Error cargando catálogo:', err);
         } finally {
@@ -393,19 +395,44 @@ export const HomePage: React.FC = () => {
             Comercios aliados locales, seguimiento en tiempo real y pagos seguros garantizados.
           </p>
 
-          {/* Search Bar */}
-          <div className="pt-2 flex items-center max-w-lg">
-            <div className="relative w-full">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {/* Search Bar con Lupa Clickeable y Enter Submit */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const resultsSection = document.getElementById('seccion-comercios');
+              if (resultsSection) {
+                resultsSection.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+            className="pt-2 flex items-center max-w-lg"
+          >
+            <div className="relative w-full flex items-center">
+              <button
+                type="submit"
+                aria-label="Buscar restaurantes, tiendas o productos"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 p-2 rounded-xl text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer z-10"
+              >
+                <Search className="w-5 h-5" />
+              </button>
               <input
                 type="text"
-                placeholder="¿Qué se te antoja hoy? Busca restaurantes, platos..."
+                placeholder="🔍 Buscar restaurantes, tiendas o comercios..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-white text-gray-900 placeholder-gray-400 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-emerald-500/40 shadow-lg border border-gray-100"
+                className="w-full pl-12 pr-10 py-3.5 rounded-2xl bg-white text-gray-900 placeholder-gray-400 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-emerald-500/40 shadow-lg border border-gray-100"
               />
+              {searchQuery.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Limpiar búsqueda"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded-full"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-          </div>
+          </form>
 
           {/* Selector Geográfico DANE Colombia */}
           <div className="pt-1 flex flex-wrap items-center gap-2 max-w-lg">
@@ -513,43 +540,85 @@ export const HomePage: React.FC = () => {
         </div>
       </section>
 
-      {/* Featured Products */}
-      {featuredProducts.length > 0 && (
+      {/* Featured Stores (Tiendas Destacadas del Banner Principal autorizadas por ADMIN) */}
+      {featuredCommerces.length > 0 && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-emerald-600" /> Platos Destacados
+              <Star className="w-5 h-5 text-amber-500 fill-amber-400" /> Comercios Destacados
             </h2>
+            <span className="text-xs font-bold text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-200">
+              Selección Oficial FASTGO
+            </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {featuredProducts.slice(0, 4).map((p) => (
-              <Card key={p.id} hoverable className="flex flex-col justify-between">
-                <div className="space-y-2">
-                  <div className="h-36 bg-gray-100 rounded-xl flex items-center justify-center text-gray-400 overflow-hidden">
-                    {p.imagenPrincipal ? (
-                      <img src={p.imagenPrincipal} alt={p.nombre} className="w-full h-full object-cover" />
-                    ) : (
-                      <Utensils className="w-8 h-8 text-gray-300" />
-                    )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {featuredCommerces.map((c) => (
+              <Link
+                key={c.id}
+                to={`/comercio/${c.id}`}
+                className="group block rounded-3xl bg-white border border-gray-100 hover:border-amber-300 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
+              >
+                <div className="relative h-44 bg-slate-100 overflow-hidden">
+                  {c.banner ? (
+                    <img
+                      src={c.banner}
+                      alt={c.nombre}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-amber-500/20 via-emerald-500/10 to-slate-100 flex items-center justify-center">
+                      <Store className="w-12 h-12 text-gray-300" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  <span className="absolute top-3 right-3 px-2.5 py-1 rounded-full bg-amber-400 text-slate-950 text-xs font-black flex items-center gap-1 shadow-md">
+                    ⭐ Destacado
+                  </span>
+                  <div className="absolute bottom-3 left-3 flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-white p-1 shadow-md overflow-hidden border border-white/50 shrink-0">
+                      {c.logo ? (
+                        <img src={c.logo} alt={c.nombre} className="w-full h-full object-cover rounded-xl" />
+                      ) : (
+                        <div className="w-full h-full bg-slate-100 flex items-center justify-center font-black text-slate-700">
+                          {c.nombre.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-white drop-shadow-md">
+                      <h3 className="font-black text-base leading-tight group-hover:text-amber-300 transition-colors">
+                        {c.nombre}
+                      </h3>
+                      <p className="text-xs text-white/90 line-clamp-1">
+                        {c.categoria || 'Comercio Aliado'}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-bold text-gray-900 text-sm line-clamp-1">{p.nombre}</h3>
-                  <p className="text-xs text-gray-500 line-clamp-2">{p.descripcion || 'Sin descripción'}</p>
                 </div>
-                <div className="pt-3 flex items-center justify-between border-t border-gray-50 mt-3">
-                  <span className="font-black text-sm text-gray-900">{formatCurrency(p.precio)}</span>
-                  <Badge variant="primary">Destacado</Badge>
+
+                <div className="p-4 space-y-2.5">
+                  <p className="text-xs text-gray-500 line-clamp-2">
+                    {c.descripcion || 'Descubre los mejores productos y platos preparados de este comercio aliado.'}
+                  </p>
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-100">
+                    <span className="font-bold text-emerald-600">
+                      🛵 Domicilio: {formatCurrency(c.tarifaDomicilio || 2000)}
+                    </span>
+                    <span className="font-medium text-gray-400 flex items-center gap-1">
+                      {c.tiempoPreparacionMin || 25}-{(c.tiempoPreparacionMin || 25) + 15} min
+                    </span>
+                  </div>
                 </div>
-              </Card>
+              </Link>
             ))}
           </div>
         </section>
       )}
 
       {/* Commerces Grid */}
-      <section className="space-y-4">
+      <section id="seccion-comercios" className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2">
-            <Store className="w-5 h-5 text-emerald-700" /> Comercios Disponibles ({filteredCommerces.length})
+            <Store className="w-5 h-5 text-emerald-700" /> Comercios Disponibles
           </h2>
         </div>
 

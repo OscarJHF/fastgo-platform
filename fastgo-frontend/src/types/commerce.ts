@@ -36,6 +36,7 @@ export interface Comercio {
   bancolombiaNumeroCuenta?: string;
   bancolombiaTitular?: string;
   bancolombiaDocTitular?: string;
+  destacado?: boolean;
 
   // Multi-store & subscriptions
   esPrincipal?: boolean;
@@ -51,6 +52,16 @@ export interface Comercio {
   precioMensual?: number;
   precioActivacion?: number;
   esGratuito?: boolean;
+  diasRestantes?: number;
+  alertaVencimiento?: boolean;
+  comprobanteSuscripcionUrl?: string;
+  motivoRechazoSuscripcion?: string;
+  bancoNombre?: string;
+  bancoTipoCuenta?: string;
+  bancoNumeroCuenta?: string;
+  bancoTitular?: string;
+  bancoDocumento?: string;
+  instruccionesPago?: string;
 }
 
 export interface ConfiguracionSuscripcion {
@@ -61,6 +72,12 @@ export interface ConfiguracionSuscripcion {
   additionalStoreActivationPrice: number;
   additionalStoreMonthlyPrice: number;
   allowNewStores: boolean;
+  bancoNombre?: string;
+  bancoTipoCuenta?: string;
+  bancoNumeroCuenta?: string;
+  bancoTitular?: string;
+  bancoDocumento?: string;
+  instruccionesPago?: string;
   actualizadoPor?: string;
   actualizadoEn?: string;
 }
@@ -79,6 +96,7 @@ export interface AdminTienda {
   esPrincipal?: boolean;
   estado: string;
   activo: boolean;
+  destacado?: boolean;
   tipoPlan?: string;
   estadoSuscripcion?: string;
   fechaCreacion?: string;
@@ -96,6 +114,42 @@ export interface AdminTienda {
   totalPedidos?: number;
   pedidosActivos?: number;
   eliminado?: boolean;
+  diasRestantes?: number;
+  alertaVencimiento?: boolean;
+  comprobanteUrl?: string;
+  comprobanteKey?: string;
+  motivoRechazo?: string;
+  revisadoPor?: string;
+  revisadoEn?: string;
+}
+
+export interface SuscripcionResponse {
+  id: number;
+  comercioId: number;
+  comercioNombre?: string;
+  usuarioId: number;
+  tipoPlan: string;
+  estado: string;
+  monto: number;
+  periodo?: string;
+  fechaInicio: string;
+  fechaFin?: string;
+  fechaPago?: string;
+  referenciaPago?: string;
+  comprobanteUrl?: string;
+  comprobanteKey?: string;
+  motivoRechazo?: string;
+  revisadoPor?: string;
+  revisadoEn?: string;
+  esVencida?: boolean;
+  diasRestantes?: number;
+  alertaVencimiento?: boolean;
+  bancoNombre?: string;
+  bancoTipoCuenta?: string;
+  bancoNumeroCuenta?: string;
+  bancoTitular?: string;
+  bancoDocumento?: string;
+  instruccionesPago?: string;
 }
 
 export interface AuditoriaAdmin {

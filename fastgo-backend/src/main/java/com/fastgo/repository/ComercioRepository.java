@@ -14,6 +14,8 @@ public interface ComercioRepository extends JpaRepository<Comercio, Integer> {
 
     List<Comercio> findByActivoTrueAndEstado(String estado);
 
+    List<Comercio> findByDestacadoTrueAndActivoTrue();
+
     Optional<Comercio> findByIdAndUsuarioId(
             Integer id,
             Integer usuarioId

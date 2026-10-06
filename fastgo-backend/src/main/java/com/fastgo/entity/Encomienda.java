@@ -57,6 +57,9 @@ public class Encomienda {
     @Column(name = "costo_envio", nullable = false, precision = 12, scale = 2)
     private BigDecimal costoEnvio;
 
+    @Column(name = "valor_inicial", precision = 12, scale = 2)
+    private BigDecimal valorInicial;
+
     @Column(name = "tarifa_aceptada")
     private Boolean tarifaAceptada;
 
@@ -84,6 +87,7 @@ public class Encomienda {
         if (actualizadoEn == null) actualizadoEn = ahora;
         if (estado == null || estado.isBlank()) estado = "PENDIENTE";
         if (tarifaAceptada == null) tarifaAceptada = true;
+        if (valorInicial == null) valorInicial = costoEnvio;
     }
 
     @PreUpdate
@@ -138,6 +142,9 @@ public class Encomienda {
 
     public BigDecimal getCostoEnvio() { return costoEnvio; }
     public void setCostoEnvio(BigDecimal costoEnvio) { this.costoEnvio = costoEnvio; }
+
+    public BigDecimal getValorInicial() { return valorInicial; }
+    public void setValorInicial(BigDecimal valorInicial) { this.valorInicial = valorInicial; }
 
     public Boolean getTarifaAceptada() { return tarifaAceptada; }
     public void setTarifaAceptada(Boolean tarifaAceptada) { this.tarifaAceptada = tarifaAceptada; }

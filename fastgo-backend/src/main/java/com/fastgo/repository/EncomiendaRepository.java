@@ -13,5 +13,7 @@ public interface EncomiendaRepository extends JpaRepository<Encomienda, Integer>
 
     List<Encomienda> findByEstadoOrderByCreadoEnDesc(String estado);
 
+    List<Encomienda> findByEstadoInOrderByCreadoEnDesc(List<String> estados);
+
     List<Encomienda> findByDomiciliarioIdOrderByCreadoEnDesc(Integer domiciliarioId);
 }

@@ -24,7 +24,7 @@ public class AnalyticsController {
         this.analyticsService = analyticsService;
     }
 
-    @PostMapping("/track")
+    @PostMapping({"/track", "/eventos"})
     public ResponseEntity<Map<String, Object>> track(
             @Valid @RequestBody AnalyticsEventRequestDTO dto,
             HttpServletRequest request) {

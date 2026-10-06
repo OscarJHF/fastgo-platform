@@ -14,6 +14,10 @@ public class TrackingUbicacionRequest {
     @NotNull(message = "La longitud es obligatoria")
     private BigDecimal longitud;
 
+    private BigDecimal precision;
+    private BigDecimal rumbo;
+    private BigDecimal velocidad;
+
     public TrackingUbicacionRequest() {}
 
     public TrackingUbicacionRequest(Integer pedidoId, BigDecimal latitud, BigDecimal longitud) {
@@ -30,4 +34,13 @@ public class TrackingUbicacionRequest {
 
     public BigDecimal getLongitud() { return longitud; }
     public void setLongitud(BigDecimal longitud) { this.longitud = longitud; }
+
+    public BigDecimal getPrecision() { return precision; }
+    public void setPrecision(BigDecimal precision) { this.precision = precision; }
+
+    public BigDecimal getRumbo() { return rumbo; }
+    public void setRumbo(BigDecimal rumbo) { this.rumbo = rumbo; }
+
+    public BigDecimal getVelocidad() { return velocidad; }
+    public void setVelocidad(BigDecimal velocidad) { this.velocidad = velocidad; }
 }

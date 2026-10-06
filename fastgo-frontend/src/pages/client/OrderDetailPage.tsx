@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download, Navigation } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download, Navigation, Upload, X } from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { pagoService } from '../../services/pagoService';
 import { uploadService } from '../../services/uploadService';
@@ -31,6 +31,11 @@ export const OrderDetailPage: React.FC = () => {
   const [receiptBlobUrl, setReceiptBlobUrl] = useState<string | null>(null);
   const [isPdfReceipt, setIsPdfReceipt] = useState(false);
   const [isLoadingReceipt, setIsLoadingReceipt] = useState(false);
+
+  // Subida de comprobante
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const { success, error: showError } = useToast();
 
@@ -105,6 +110,51 @@ export const OrderDetailPage: React.FC = () => {
     }
     setReceiptBlobUrl(null);
     setIsReceiptModalOpen(false);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showError('El archivo no debe superar 5MB');
+      return;
+    }
+
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const allowedExts = ['jpg', 'jpeg', 'png', 'pdf'];
+    if (!allowedExts.includes(ext || '')) {
+      showError('Formato no soportado. Usa JPG, JPEG, PNG o PDF');
+      return;
+    }
+
+    setUploadFile(file);
+    if (file.type.startsWith('image/')) {
+      setUploadPreview(URL.createObjectURL(file));
+    } else {
+      setUploadPreview(null);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    if (uploadPreview) URL.revokeObjectURL(uploadPreview);
+    setUploadPreview(null);
+    setUploadFile(null);
+  };
+
+  const handleUploadSubmit = async () => {
+    if (!uploadFile) return;
+    setIsUploading(true);
+    try {
+      await pedidoService.subirComprobante(orderId, uploadFile);
+      success('Comprobante enviado para verificación');
+      handleRemoveFile();
+      await loadOrder();
+    } catch (err: any) {
+      showError(err?.response?.data?.message || 'Error al subir el comprobante');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   if (isLoading) {
@@ -268,7 +318,7 @@ export const OrderDetailPage: React.FC = () => {
           </span>
         </div>
 
-        {order.metodoPago === 'BANCOLOMBIA' ? (
+        {(order.metodoPago === 'BANCOLOMBIA' || order.metodoPago === 'TRANSFERENCIA') ? (
           <div className="space-y-3 pt-1">
             <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
               order.estadoPago === 'APROBADO'
@@ -287,9 +337,11 @@ export const OrderDetailPage: React.FC = () => {
                 )}
                 <span>
                   {order.estadoPago === 'APROBADO' && 'Pago verificado y aprobado por el comercio'}
-                  {order.estadoPago === 'RECHAZADO' && `Pago rechazado: ${order.motivoRechazoPago || 'Comprobante no válido'}`}
-                  {(!order.estadoPago || order.estadoPago === 'PENDIENTE_VERIFICACION') &&
+                  {order.estadoPago === 'RECHAZADO' && `Pago rechazado: ${order.motivoRechazoPago || 'Comprobante no válido. Por favor sube uno nuevo.'}`}
+                  {order.estadoPago === 'PENDIENTE_VERIFICACION' &&
                     'Comprobante adjunto. El comercio está verificando la transferencia en su cuenta.'}
+                  {(!order.estadoPago || order.estadoPago === 'PENDIENTE') &&
+                    'Pendiente de comprobante de pago. Por favor adjunta el recibo o comprobante de la transferencia.'}
                 </span>
               </div>
             </div>
@@ -297,7 +349,7 @@ export const OrderDetailPage: React.FC = () => {
             {order.comprobantePagoUrl && (
               <div className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200 text-xs">
                 <span className="text-gray-600 flex items-center gap-1.5 font-medium">
-                  <FileText className="w-4 h-4 text-purple-600" /> Comprobante enviado
+                  <FileText className="w-4 h-4 text-purple-600" /> Comprobante actual
                 </span>
                 <button
                   type="button"
@@ -306,6 +358,64 @@ export const OrderDetailPage: React.FC = () => {
                 >
                   <Eye className="w-3.5 h-3.5" /> Ver Comprobante
                 </button>
+              </div>
+            )}
+
+            {/* Subida o reenvío de comprobante si no está aprobado y el pedido está activo */}
+            {order.estadoPago !== 'APROBADO' && order.estado !== 'CANCELADO' && order.estado !== 'ENTREGADO' && (
+              <div className="p-3.5 bg-gray-50 rounded-xl border border-dashed border-gray-300 space-y-3">
+                <p className="text-xs font-bold text-gray-700">
+                  {order.comprobantePagoUrl ? '¿Deseas reenviar un comprobante actualizado?' : 'Adjuntar Comprobante de Pago'}
+                </p>
+
+                {uploadFile ? (
+                  <div className="flex items-center justify-between p-2 bg-white rounded-lg border border-gray-200 text-xs">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      {uploadPreview ? (
+                        <img src={uploadPreview} alt="Preview" className="w-10 h-10 object-cover rounded-md border shrink-0" />
+                      ) : (
+                        <div className="w-10 h-10 bg-rose-50 text-rose-700 rounded-md flex items-center justify-center font-bold text-xs shrink-0">
+                          PDF
+                        </div>
+                      )}
+                      <div className="truncate">
+                        <p className="font-bold text-gray-800 truncate">{uploadFile.name}</p>
+                        <p className="text-[10px] text-gray-400">{(uploadFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleRemoveFile}
+                        className="p-1 text-gray-400 hover:text-rose-600"
+                        title="Quitar archivo"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={handleUploadSubmit}
+                        isLoading={isUploading}
+                      >
+                        Subir Comprobante
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="flex items-center justify-center gap-2 p-3 bg-white border border-gray-300 rounded-xl cursor-pointer hover:border-black text-xs font-bold text-gray-700 transition-colors">
+                      <Upload className="w-4 h-4 text-gray-500" />
+                      Seleccionar imagen o PDF (máx. 5MB)
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/jpg,application/pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             )}
           </div>

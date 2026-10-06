@@ -383,8 +383,12 @@ public class DriverEarningAndDestinationTests {
         mockMvc.perform(put("/api/pedidos/" + pedidoId + "/tomar").header("Authorization", "Bearer " + authDomiAsignado.token)).andExpect(status().isOk());
         mockMvc.perform(put("/api/pedidos/" + pedidoId + "/en-camino").header("Authorization", "Bearer " + authDomiAsignado.token)).andExpect(status().isOk());
 
-        // A. Domiciliario asignado emite coordenadas GPS
+        // A. Domiciliario asignado emite coordenadas GPS con telemetría extendida
         TrackingUbicacionRequest trackReq = new TrackingUbicacionRequest(pedidoId, new BigDecimal("4.6534000"), new BigDecimal("-74.0521000"));
+        trackReq.setPrecision(new BigDecimal("5.50"));
+        trackReq.setVelocidad(new BigDecimal("28.00"));
+        trackReq.setRumbo(new BigDecimal("180.00"));
+
         mockMvc.perform(post("/api/tracking/ubicacion")
                 .header("Authorization", "Bearer " + authDomiAsignado.token)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -393,6 +397,10 @@ public class DriverEarningAndDestinationTests {
                 .andExpect(jsonPath("$.pedidoId").value(pedidoId))
                 .andExpect(jsonPath("$.latitud").value(4.6534000))
                 .andExpect(jsonPath("$.longitud").value(-74.0521000))
+                .andExpect(jsonPath("$.precision").value(5.50))
+                .andExpect(jsonPath("$.velocidad").value(28.00))
+                .andExpect(jsonPath("$.rumbo").value(180.00))
+                .andExpect(jsonPath("$.fechaHora").isNotEmpty())
                 .andExpect(jsonPath("$.activo").value(true));
 
         // B. Cliente dueño del pedido consulta el tracking
@@ -401,7 +409,11 @@ public class DriverEarningAndDestinationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.latitud").value(4.6534000))
                 .andExpect(jsonPath("$.longitud").value(-74.0521000))
-                .andExpect(jsonPath("$.estadoPedido").value("EN_CAMINO"));
+                .andExpect(jsonPath("$.precision").value(5.50))
+                .andExpect(jsonPath("$.velocidad").value(28.00))
+                .andExpect(jsonPath("$.fechaHora").isNotEmpty())
+                .andExpect(jsonPath("$.estadoPedido").value("EN_CAMINO"))
+                .andExpect(jsonPath("$.activo").value(true));
 
         // C. IDOR: Otro domiciliario no asignado intenta transmitir o consultar
         AuthResult authDomiIntruso = registrarYLogin("DOMICILIARIO", "DomiIntruso");
@@ -420,5 +432,31 @@ public class DriverEarningAndDestinationTests {
         mockMvc.perform(get("/api/tracking/pedido/" + pedidoId)
                 .header("Authorization", "Bearer " + authClienteIntruso.token))
                 .andExpect(status().isForbidden());
+
+        // E. Al pasar a ENTREGADO: cesa la transmisión y tracking queda inactivo
+        mockMvc.perform(put("/api/pedidos/" + pedidoId + "/entregado")
+                .header("Authorization", "Bearer " + authDomiAsignado.token))
+                .andExpect(status().isOk());
+
+        // Intento de transmitir después de entrega -> Rechazado
+        mockMvc.perform(post("/api/tracking/ubicacion")
+                .header("Authorization", "Bearer " + authDomiAsignado.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(trackReq)))
+                .andExpect(status().isBadRequest());
+
+        // Cliente consulta tracking -> Activo es false
+        mockMvc.perform(get("/api/tracking/pedido/" + pedidoId)
+                .header("Authorization", "Bearer " + authCliente.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estadoPedido").value("ENTREGADO"))
+                .andExpect(jsonPath("$.activo").value(false));
+
+        // F. Configuración de mapas sin exposición de secretos
+        mockMvc.perform(get("/api/maps/config")
+                .header("Authorization", "Bearer " + authCliente.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.provider").value("GOOGLE_MAPS"))
+                .andExpect(jsonPath("$.enabled").exists());
     }
 }

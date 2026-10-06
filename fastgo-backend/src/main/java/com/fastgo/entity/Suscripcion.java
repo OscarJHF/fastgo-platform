@@ -42,6 +42,21 @@ public class Suscripcion {
     @Column(name = "referencia_pago", length = 100)
     private String referenciaPago;
 
+    @Column(name = "comprobante_url", length = 500)
+    private String comprobanteUrl;
+
+    @Column(name = "comprobante_key", length = 500)
+    private String comprobanteKey;
+
+    @Column(name = "motivo_rechazo", columnDefinition = "TEXT")
+    private String motivoRechazo;
+
+    @Column(name = "revisado_por", length = 100)
+    private String revisadoPor;
+
+    @Column(name = "revisado_en")
+    private LocalDateTime revisadoEn;
+
     @Column(name = "creado_por", length = 100)
     private String creadoPor;
 
@@ -103,6 +118,21 @@ public class Suscripcion {
 
     public String getReferenciaPago() { return referenciaPago; }
     public void setReferenciaPago(String referenciaPago) { this.referenciaPago = referenciaPago; }
+
+    public String getComprobanteUrl() { return comprobanteUrl; }
+    public void setComprobanteUrl(String comprobanteUrl) { this.comprobanteUrl = comprobanteUrl; }
+
+    public String getComprobanteKey() { return comprobanteKey; }
+    public void setComprobanteKey(String comprobanteKey) { this.comprobanteKey = comprobanteKey; }
+
+    public String getMotivoRechazo() { return motivoRechazo; }
+    public void setMotivoRechazo(String motivoRechazo) { this.motivoRechazo = motivoRechazo; }
+
+    public String getRevisadoPor() { return revisadoPor; }
+    public void setRevisadoPor(String revisadoPor) { this.revisadoPor = revisadoPor; }
+
+    public LocalDateTime getRevisadoEn() { return revisadoEn; }
+    public void setRevisadoEn(LocalDateTime revisadoEn) { this.revisadoEn = revisadoEn; }
 
     public String getCreadoPor() { return creadoPor; }
     public void setCreadoPor(String creadoPor) { this.creadoPor = creadoPor; }

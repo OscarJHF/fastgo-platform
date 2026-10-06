@@ -32,6 +32,12 @@ public class AdminTiendaResponseDTO {
     private String municipioNombre;
     private Long totalProductos;
     private Long totalPedidos;
+    private String comprobanteSuscripcionUrl;
+    private String comprobanteSuscripcionKey;
+    private String motivoRechazoSuscripcion;
+    private Long diasRestantes;
+    private Boolean alertaVencimiento;
+    private Boolean destacado;
 
     public AdminTiendaResponseDTO() {
     }
@@ -120,4 +126,22 @@ public class AdminTiendaResponseDTO {
 
     public Long getTotalPedidos() { return totalPedidos; }
     public void setTotalPedidos(Long totalPedidos) { this.totalPedidos = totalPedidos; }
+
+    public String getComprobanteSuscripcionUrl() { return comprobanteSuscripcionUrl; }
+    public void setComprobanteSuscripcionUrl(String comprobanteSuscripcionUrl) { this.comprobanteSuscripcionUrl = comprobanteSuscripcionUrl; }
+
+    public String getComprobanteSuscripcionKey() { return comprobanteSuscripcionKey; }
+    public void setComprobanteSuscripcionKey(String comprobanteSuscripcionKey) { this.comprobanteSuscripcionKey = comprobanteSuscripcionKey; }
+
+    public String getMotivoRechazoSuscripcion() { return motivoRechazoSuscripcion; }
+    public void setMotivoRechazoSuscripcion(String motivoRechazoSuscripcion) { this.motivoRechazoSuscripcion = motivoRechazoSuscripcion; }
+
+    public Long getDiasRestantes() { return diasRestantes; }
+    public void setDiasRestantes(Long diasRestantes) { this.diasRestantes = diasRestantes; }
+
+    public Boolean getAlertaVencimiento() { return alertaVencimiento; }
+    public void setAlertaVencimiento(Boolean alertaVencimiento) { this.alertaVencimiento = alertaVencimiento; }
+
+    public Boolean getDestacado() { return destacado; }
+    public void setDestacado(Boolean destacado) { this.destacado = destacado; }
 }

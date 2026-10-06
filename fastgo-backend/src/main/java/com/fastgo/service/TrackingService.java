@@ -63,8 +63,11 @@ public class TrackingService {
 
         seguimiento.setLatitud(request.getLatitud());
         seguimiento.setLongitud(request.getLongitud());
+        if (request.getPrecision() != null) seguimiento.setPrecision(request.getPrecision());
+        if (request.getRumbo() != null) seguimiento.setRumbo(request.getRumbo());
+        if (request.getVelocidad() != null) seguimiento.setVelocidad(request.getVelocidad());
         seguimiento.setActualizadoEn(LocalDateTime.now());
-        seguimientoRepository.save(seguimiento);
+        seguimiento = seguimientoRepository.save(seguimiento);
 
         return mapearDTO(pedido, seguimiento);
     }
@@ -116,9 +119,14 @@ public class TrackingService {
         dto.setActivo("EN_CAMINO".equalsIgnoreCase(pedido.getEstado()));
 
         if (seguimiento != null) {
+            dto.setId(seguimiento.getId());
             dto.setLatitud(seguimiento.getLatitud());
             dto.setLongitud(seguimiento.getLongitud());
+            dto.setPrecision(seguimiento.getPrecision());
+            dto.setRumbo(seguimiento.getRumbo());
+            dto.setVelocidad(seguimiento.getVelocidad());
             dto.setActualizadoEn(seguimiento.getActualizadoEn());
+            dto.setFechaHora(seguimiento.getActualizadoEn() != null ? seguimiento.getActualizadoEn().toString() : null);
         }
 
         if (pedido.getSucursalId() != null) {

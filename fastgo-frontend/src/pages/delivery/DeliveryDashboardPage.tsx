@@ -13,11 +13,17 @@ import {
   DollarSign,
   Store,
   Building2,
+  Volume2,
+  VolumeX,
+  Bell,
+  MessageSquare,
+  X,
 } from 'lucide-react';
+import { soundPlayer } from '../../utils/soundPlayer';
 import { pedidoService } from '../../services/pedidoService';
 import { encomiendaService } from '../../services/encomiendaService';
 import { trackingService } from '../../services/trackingService';
-import { Pedido, Encomienda, EstadoEncomienda } from '../../types';
+import { Pedido, Encomienda, EstadoEncomienda, OfertaEncomienda } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { Spinner } from '../../components/common/Spinner';
@@ -25,6 +31,7 @@ import { Badge } from '../../components/common/Badge';
 import { useToast } from '../../context/ToastContext';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { ORDER_STATUS_DETAILS } from '../../constants/orderStatus';
+import { parseApiError } from '../../utils/errorHandler';
 
 export const DeliveryDashboardPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pedidos' | 'encomiendas'>('pedidos');
@@ -33,34 +40,77 @@ export const DeliveryDashboardPage: React.FC = () => {
 
   const [availableEncomiendas, setAvailableEncomiendas] = useState<Encomienda[]>([]);
   const [myEncomiendas, setMyEncomiendas] = useState<Encomienda[]>([]);
+  const [mySentOffers, setMySentOffers] = useState<OfertaEncomienda[]>([]);
+
+  // Modal de contraoferta
+  const [ofertaModalEnc, setOfertaModalEnc] = useState<Encomienda | null>(null);
+  const [ofertaValor, setOfertaValor] = useState<number | ''>('');
+  const [ofertaMensaje, setOfertaMensaje] = useState<string>('');
+  const [isSubmittingOferta, setIsSubmittingOferta] = useState<boolean>(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isClaiming, setIsClaiming] = useState<number | null>(null);
 
+  // Notificaciones de despachos disponibles
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('fastgo_delivery_sound_enabled') !== 'false';
+  });
+  const [newDeliveryAlert, setNewDeliveryAlert] = useState<Pedido | null>(null);
+  const knownAvailableOrderIdsRef = React.useRef<Set<number>>(new Set());
+  const isFirstLoadRef = React.useRef<boolean>(true);
+
   const { success, error: showError } = useToast();
 
-  const loadDeliveryData = async () => {
+  const loadDeliveryData = async (showSpinner = true) => {
+    if (showSpinner) setIsLoading(true);
     try {
-      const [available, myOrds, availEnc, myEnc] = await Promise.all([
+      const [available, myOrds, availEnc, myEnc, myOffers] = await Promise.all([
         pedidoService.listAvailableForDelivery().catch(() => []),
         pedidoService.listMyDeliveries().catch(() => []),
         encomiendaService.listarDisponibles().catch(() => []),
         encomiendaService.listarAsignadas().catch(() => []),
+        encomiendaService.misOfertas().catch(() => []),
       ]);
       setAvailableOrders(available);
       setMyDeliveries(myOrds);
       setAvailableEncomiendas(availEnc);
       setMyEncomiendas(myEnc);
+      setMySentOffers(myOffers);
+
+      // Detectar nuevos despachos disponibles listos para entrega
+      if (!isFirstLoadRef.current) {
+        const newlyAvailable = available.filter(
+          (o) => !knownAvailableOrderIdsRef.current.has(o.id)
+        );
+        if (newlyAvailable.length > 0) {
+          const latest = newlyAvailable[0];
+          setNewDeliveryAlert(latest);
+          if (soundEnabled) {
+            soundPlayer.playDeliveryAlertSound();
+          }
+        }
+      }
+
+      available.forEach((o) => knownAvailableOrderIdsRef.current.add(o.id));
+      isFirstLoadRef.current = false;
     } catch (err) {
       console.error(err);
     } finally {
-      setIsLoading(false);
+      if (showSpinner) setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadDeliveryData();
+    loadDeliveryData(true);
   }, []);
+
+  // Polling automático cada 10 segundos para nuevos despachos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadDeliveryData(false);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [soundEnabled]);
 
   // Telemetría GPS en tiempo real para pedidos en ruta (EN_CAMINO)
   useEffect(() => {
@@ -164,6 +214,53 @@ export const DeliveryDashboardPage: React.FC = () => {
     }
   };
 
+  const handleOpenOfertaModal = (enc: Encomienda) => {
+    setOfertaModalEnc(enc);
+    setOfertaValor(enc.costoEnvio || 2000);
+    setOfertaMensaje('');
+  };
+
+  const handleCloseOfertaModal = () => {
+    setOfertaModalEnc(null);
+    setOfertaValor('');
+    setOfertaMensaje('');
+  };
+
+  const handleSendOferta = async () => {
+    if (!ofertaModalEnc) return;
+    if (!ofertaValor || Number(ofertaValor) <= 0) {
+      showError('Ingresa un valor válido para tu contraoferta.');
+      return;
+    }
+
+    setIsSubmittingOferta(true);
+    try {
+      await encomiendaService.crearOferta(ofertaModalEnc.id, {
+        valor: Number(ofertaValor),
+        mensaje: ofertaMensaje.trim() || undefined,
+      });
+      success(`¡Contraoferta enviada para la encomienda #ENC-${ofertaModalEnc.id}!`);
+      handleCloseOfertaModal();
+      await loadDeliveryData();
+    } catch (err) {
+      const parsed = parseApiError(err);
+      showError(parsed.message || 'Error al enviar la contraoferta.');
+    } finally {
+      setIsSubmittingOferta(false);
+    }
+  };
+
+  const handleCancelarOferta = async (encomiendaId: number, ofertaId: number) => {
+    try {
+      await encomiendaService.cancelarOferta(encomiendaId, ofertaId);
+      success('Contraoferta retirada.');
+      await loadDeliveryData();
+    } catch (err) {
+      const parsed = parseApiError(err);
+      showError(parsed.message || 'Error al retirar la contraoferta.');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
@@ -177,6 +274,50 @@ export const DeliveryDashboardPage: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Banner de alerta de nuevo domicilio disponible */}
+      {newDeliveryAlert && (
+        <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-2 border-emerald-400 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2.5 rounded-xl shrink-0">
+              <Bike className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="bg-white text-emerald-800 text-[10px] font-black uppercase px-2 py-0.5 rounded-full">
+                  ¡NUEVO DOMICILIO DISPONIBLE!
+                </span>
+                <span className="font-extrabold text-sm">Pedido #{newDeliveryAlert.id}</span>
+              </div>
+              <p className="text-xs text-emerald-100 mt-0.5">
+                De: <strong className="text-white">{newDeliveryAlert.comercioNombre || newDeliveryAlert.sucursalNombre || 'Comercio Aliado'}</strong> | Para:{' '}
+                <strong className="text-white">{newDeliveryAlert.destinoDireccion || newDeliveryAlert.direccionTexto || 'Dirección Cliente'}</strong> | Ganancia:{' '}
+                <strong className="text-white">{formatCurrency(newDeliveryAlert.gananciaDomiciliario || newDeliveryAlert.costoEnvio)}</strong>
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                handleClaimOrder(newDeliveryAlert.id);
+                setNewDeliveryAlert(null);
+              }}
+              disabled={isClaiming === newDeliveryAlert.id}
+            >
+              Tomar Domicilio
+            </Button>
+            <button
+              onClick={() => setNewDeliveryAlert(null)}
+              className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 text-xs font-bold"
+              aria-label="Cerrar alerta"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-5">
         <div>
           <h1 className="text-2xl font-black text-gray-900 flex items-center gap-2">
@@ -185,30 +326,51 @@ export const DeliveryDashboardPage: React.FC = () => {
           <p className="text-xs text-gray-500">Toma pedidos y encomiendas para ganar dinero por cada servicio entregado</p>
         </div>
 
-        {/* Selector de Pestaña Pedidos vs Encomiendas */}
-        <div className="flex bg-gray-100 p-1.5 rounded-2xl">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sound Toggle Button */}
           <button
-            onClick={() => setActiveTab('pedidos')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'pedidos'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
+            type="button"
+            onClick={() => {
+              const next = !soundEnabled;
+              setSoundEnabled(next);
+              localStorage.setItem('fastgo_delivery_sound_enabled', String(next));
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+              soundEnabled
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100'
+                : 'bg-gray-100 border-gray-200 text-gray-500 hover:bg-gray-200'
             }`}
+            title={soundEnabled ? 'Alertas sonoras activadas' : 'Alertas sonoras silenciadas'}
           >
-            <Layers className="w-4 h-4 text-emerald-600" />
-            Pedidos Comercio ({availableOrders.length})
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4 text-gray-400" />}
+            <span>{soundEnabled ? 'Sonido ON' : 'Silencio'}</span>
           </button>
-          <button
-            onClick={() => setActiveTab('encomiendas')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'encomiendas'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Package className="w-4 h-4 text-blue-600" />
-            Encomiendas ({availableEncomiendas.length})
-          </button>
+
+          {/* Selector de Pestaña Pedidos vs Encomiendas */}
+          <div className="flex bg-gray-100 p-1.5 rounded-2xl">
+            <button
+              onClick={() => setActiveTab('pedidos')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'pedidos'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Layers className="w-4 h-4 text-emerald-600" />
+              Pedidos Comercio ({availableOrders.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('encomiendas')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'encomiendas'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <Package className="w-4 h-4 text-blue-600" />
+              Encomiendas ({availableEncomiendas.length})
+            </button>
+          </div>
         </div>
       </div>
 
@@ -536,40 +698,214 @@ export const DeliveryDashboardPage: React.FC = () => {
               </Card>
             ) : (
               <div className="space-y-3">
-                {availableEncomiendas.map((enc) => (
-                  <Card key={enc.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-black text-base text-gray-900">#ENC-{enc.id}</span>
-                        <Badge variant="warning">Disponible</Badge>
-                        <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                          Tarifa: {formatCurrency(enc.costoEnvio || 2000)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-700">
-                        <strong>Origen:</strong> {enc.direccionOrigen} → <strong>Destino:</strong> {enc.direccionDestino}
-                      </p>
-                      <p className="text-[11px] text-gray-500">
-                        Detalle: {enc.descripcion} ({enc.tamanoPeso || 'Estándar'})
-                      </p>
-                    </div>
+                {availableEncomiendas.map((enc) => {
+                  const myOffer = mySentOffers.find(
+                    (o) => o.encomiendaId === enc.id && o.estado === 'PENDIENTE'
+                  );
+                  const numOfertas = enc.numeroOfertas || 0;
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleClaimEncomienda(enc.id)}
-                      isLoading={isClaiming === enc.id}
-                      icon={<Package className="w-4 h-4" />}
-                    >
-                      Tomar Encomienda
-                    </Button>
-                  </Card>
-                ))}
+                  return (
+                    <Card key={enc.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-l-4 border-l-emerald-500">
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-black text-base text-gray-900">#ENC-{enc.id}</span>
+                          <Badge variant="warning">{enc.estado === 'OFERTA' ? 'En Negociación' : 'Disponible'}</Badge>
+                          <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-lg border border-emerald-200">
+                            Tarifa Cliente: {formatCurrency(enc.costoEnvio || 2000)}
+                          </span>
+                          {numOfertas > 0 && (
+                            <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                              {numOfertas} {numOfertas === 1 ? 'oferta' : 'ofertas'}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-gray-700">
+                          <strong>Origen:</strong> {enc.direccionOrigen} → <strong>Destino:</strong> {enc.direccionDestino}
+                        </p>
+                        <p className="text-[11px] text-gray-500">
+                          Detalle: {enc.descripcion} ({enc.tamanoPeso || 'Estándar'})
+                        </p>
+
+                        {myOffer && (
+                          <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-center justify-between mt-1">
+                            <span>
+                              Has enviado contraoferta por <strong>{formatCurrency(myOffer.valor)}</strong> (Esperando respuesta)
+                            </span>
+                            <button
+                              onClick={() => handleCancelarOferta(enc.id, myOffer.id)}
+                              className="text-rose-600 hover:text-rose-800 text-[11px] font-bold underline ml-2"
+                            >
+                              Retirar
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        {!myOffer && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenOfertaModal(enc)}
+                            icon={<MessageSquare className="w-4 h-4 text-amber-600" />}
+                            className="text-xs font-bold border-amber-300 text-amber-900 hover:bg-amber-50"
+                          >
+                            Contraofertar
+                          </Button>
+                        )}
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => handleClaimEncomienda(enc.id)}
+                          isLoading={isClaiming === enc.id}
+                          icon={<Package className="w-4 h-4" />}
+                          className="bg-emerald-600 hover:bg-emerald-700 font-bold text-xs"
+                        >
+                          Aceptar Tarifa
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </section>
+
+          {/* Mis Ofertas Enviadas */}
+          {mySentOffers.length > 0 && (
+            <section className="space-y-4">
+              <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                📨 Mis Ofertas Enviadas ({mySentOffers.length})
+              </h2>
+              <div className="space-y-2.5">
+                {mySentOffers.map((of) => (
+                  <Card key={of.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-gray-900">Encomienda #ENC-{of.encomiendaId}</span>
+                        <Badge
+                          variant={
+                            of.estado === 'ACEPTADA'
+                              ? 'success'
+                              : of.estado === 'RECHAZADA'
+                              ? 'danger'
+                              : of.estado === 'CANCELADA'
+                              ? 'secondary'
+                              : 'warning'
+                          }
+                        >
+                          {of.estado}
+                        </Badge>
+                      </div>
+                      {of.mensaje && <p className="text-[11px] text-gray-600 italic mt-0.5">"{of.mensaje}"</p>}
+                      <span className="text-[10px] text-gray-400 mt-0.5 block">{formatDate(of.creadoEn)}</span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <span className="text-[10px] text-gray-400 uppercase block">Tu oferta</span>
+                        <span className="text-base font-black text-emerald-700">{formatCurrency(of.valor)}</span>
+                      </div>
+                      {of.estado === 'PENDIENTE' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs px-2.5 py-1"
+                          onClick={() => handleCancelarOferta(of.encomiendaId, of.id)}
+                        >
+                          Retirar
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+
+      {/* Modal de Contraoferta */}
+      {ofertaModalEnc && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-amber-100 text-amber-800">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-gray-900 text-base">Enviar Contraoferta</h3>
+                  <p className="text-xs text-gray-500">Encomienda #ENC-{ofertaModalEnc.id}</p>
+                </div>
+              </div>
+              <button
+                onClick={handleCloseOfertaModal}
+                className="p-1.5 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-gray-50 text-xs space-y-1">
+              <p className="text-gray-600">
+                <strong>Ruta:</strong> {ofertaModalEnc.direccionOrigen} → {ofertaModalEnc.direccionDestino}
+              </p>
+              <p className="text-gray-600">
+                <strong>Tarifa inicial ofrecida:</strong> {formatCurrency(ofertaModalEnc.costoEnvio || 2000)}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Tu Tarifa Propuesta (COP)
+                </label>
+                <input
+                  type="number"
+                  step={500}
+                  min={1000}
+                  value={ofertaValor}
+                  onChange={(e) => setOfertaValor(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Ej. 10000"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                  Mensaje para el Cliente (Opcional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={255}
+                  value={ofertaMensaje}
+                  onChange={(e) => setOfertaMensaje(e.target.value)}
+                  placeholder="Ej. Llego en 3 min, voy en moto con baúl seguro"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button variant="ghost" size="sm" onClick={handleCloseOfertaModal}>
+                Cancelar
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-500 text-white font-bold"
+                isLoading={isSubmittingOferta}
+                onClick={handleSendOferta}
+              >
+                Enviar Contraoferta
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
+

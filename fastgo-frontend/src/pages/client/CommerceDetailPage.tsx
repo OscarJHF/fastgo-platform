@@ -320,7 +320,14 @@ export const CommerceDetailPage: React.FC = () => {
                             </div>
                             <div>
                               <div className="flex items-start justify-between gap-2">
-                                <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                <div>
+                                  <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                  {(!p.disponible || (p.stock !== undefined && p.stock <= 0)) && (
+                                    <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                      Agotado
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="font-black text-base text-gray-900 shrink-0">
                                   {formatCurrency(p.precio)}
                                 </span>
@@ -355,9 +362,9 @@ export const CommerceDetailPage: React.FC = () => {
                               size="sm"
                               onClick={() => handleAddToCart(p)}
                               icon={<ShoppingBag className="w-4 h-4" />}
-                              disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                              disabled={!p.disponible || (p.stock !== undefined && p.stock <= 0) || !commerce.abierto || commerce.pausaManual}
                             >
-                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : (!p.disponible || (p.stock !== undefined && p.stock <= 0)) ? 'Agotado' : 'Agregar'}
                             </Button>
                           </div>
                         </Card>
@@ -399,7 +406,14 @@ export const CommerceDetailPage: React.FC = () => {
                             </div>
                             <div>
                               <div className="flex items-start justify-between gap-2">
-                                <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                <div>
+                                  <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                                  {(!p.disponible || (p.stock !== undefined && p.stock <= 0)) && (
+                                    <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                      Agotado
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="font-black text-base text-gray-900 shrink-0">
                                   {formatCurrency(p.precio)}
                                 </span>
@@ -434,9 +448,9 @@ export const CommerceDetailPage: React.FC = () => {
                               size="sm"
                               onClick={() => handleAddToCart(p)}
                               icon={<ShoppingBag className="w-4 h-4" />}
-                              disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                              disabled={!p.disponible || (p.stock !== undefined && p.stock <= 0) || !commerce.abierto || commerce.pausaManual}
                             >
-                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                              {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : (!p.disponible || (p.stock !== undefined && p.stock <= 0)) ? 'Agotado' : 'Agregar'}
                             </Button>
                           </div>
                         </Card>
@@ -469,7 +483,14 @@ export const CommerceDetailPage: React.FC = () => {
                       </div>
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                          <div>
+                            <h3 className="font-extrabold text-base text-gray-900">{p.nombre}</h3>
+                            {(!p.disponible || (p.stock !== undefined && p.stock <= 0)) && (
+                              <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                Agotado
+                              </span>
+                            )}
+                          </div>
                           <span className="font-black text-base text-gray-900 shrink-0">
                             {formatCurrency(p.precio)}
                           </span>
@@ -504,9 +525,9 @@ export const CommerceDetailPage: React.FC = () => {
                         size="sm"
                         onClick={() => handleAddToCart(p)}
                         icon={<ShoppingBag className="w-4 h-4" />}
-                        disabled={!p.disponible || !commerce.abierto || commerce.pausaManual}
+                        disabled={!p.disponible || (p.stock !== undefined && p.stock <= 0) || !commerce.abierto || commerce.pausaManual}
                       >
-                        {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : p.disponible ? 'Agregar' : 'Agotado'}
+                        {!commerce.abierto || commerce.pausaManual ? 'Cerrado' : (!p.disponible || (p.stock !== undefined && p.stock <= 0)) ? 'Agotado' : 'Agregar'}
                       </Button>
                     </div>
                   </Card>

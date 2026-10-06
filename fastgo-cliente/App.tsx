@@ -16,12 +16,15 @@ import {
   Image,
   Modal,
   Switch,
+  Linking,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
+import * as DocumentPicker from "expo-document-picker";
 
 // URL de conexión oficial FastGo (Producción por defecto / configurable vía EXPO_PUBLIC_FASTGO_API_URL)
 const DEFAULT_API_URL = process.env.EXPO_PUBLIC_FASTGO_API_URL || "https://fastgo-backend-lp2j.onrender.com";
+const APP_VERSION = "2.2.4";
 
 // ==========================================
 // PALETA DE COLORES OFICIAL FASTGO
@@ -82,6 +85,17 @@ interface Comercio {
   fechaFinSuscripcion?: string;
   precioMensual?: number;
   precioActivacion?: number;
+  diasRestantes?: number;
+  alertaVencimiento?: boolean;
+  comprobanteSuscripcionUrl?: string;
+  motivoRechazoSuscripcion?: string;
+  bancoNombre?: string;
+  bancoTipoCuenta?: string;
+  bancoNumeroCuenta?: string;
+  bancoTitular?: string;
+  bancoDocumento?: string;
+  instruccionesPago?: string;
+  destacado?: boolean;
 }
 
 interface Producto {
@@ -141,6 +155,7 @@ interface PedidoItem {
   destinoDireccion?: string;
   destinoCiudad?: string;
   destinoReferencia?: string;
+  motivoRechazoPago?: string;
   destinoLatitud?: number | null;
   destinoLongitud?: number | null;
   origenLatitud?: number | null;
@@ -326,6 +341,19 @@ export default function App() {
   const [encTarifaAceptada, setEncTarifaAceptada] = useState<boolean>(false);
   const [encSubmitting, setEncSubmitting] = useState<boolean>(false);
 
+  // Negociación y Ofertas de Encomienda
+  const [encValorInicialPropuesto, setEncValorInicialPropuesto] = useState<string>("");
+  const [ofertasPorEncomienda, setOfertasPorEncomienda] = useState<Record<number, any[]>>({});
+  const [expandedEncClienteId, setExpandedEncClienteId] = useState<number | null>(null);
+  const [loadingOfertasCliente, setLoadingOfertasCliente] = useState<boolean>(false);
+  const [processingOfertaId, setProcessingOfertaId] = useState<number | null>(null);
+
+  // Modal Contraoferta Domiciliario
+  const [domiOfertaModalEnc, setDomiOfertaModalEnc] = useState<any | null>(null);
+  const [domiOfertaValor, setDomiOfertaValor] = useState<string>("");
+  const [domiOfertaMensaje, setDomiOfertaMensaje] = useState<string>("");
+  const [isSubmittingDomiOferta, setIsSubmittingDomiOferta] = useState<boolean>(false);
+
   // Catálogos y Exploración
   const [comercios, setComercios] = useState<Comercio[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -366,6 +394,14 @@ export default function App() {
   const [pedidosDisponibles, setPedidosDisponibles] = useState<PedidoItem[]>([]);
   const [misEntregas, setMisEntregas] = useState<PedidoItem[]>([]);
 
+  // Notificaciones Móviles de Nuevos Pedidos y Despachos (Fase I)
+  const [newMobileOrderAlert, setNewMobileOrderAlert] = useState<PedidoItem | null>(null);
+  const [newMobileDeliveryAlert, setNewMobileDeliveryAlert] = useState<PedidoItem | null>(null);
+  const knownMerchantOrdersRef = React.useRef<Set<number>>(new Set());
+  const isFirstMerchantLoadRef = React.useRef<boolean>(true);
+  const knownDomiOrdersRef = React.useRef<Set<number>>(new Set());
+  const isFirstDomiLoadRef = React.useRef<boolean>(true);
+
   // Administrador
   const [adminUsuarios, setAdminUsuarios] = useState<any[]>([]);
   const [adminCategorias, setAdminCategorias] = useState<any[]>([]);
@@ -391,6 +427,7 @@ export default function App() {
   const [isSavingStoreConfig, setIsSavingStoreConfig] = useState<boolean>(false);
   const [isUploadingStoreLogo, setIsUploadingStoreLogo] = useState<boolean>(false);
   const [isUploadingStoreBanner, setIsUploadingStoreBanner] = useState<boolean>(false);
+  const [isUploadingSubProof, setIsUploadingSubProof] = useState<boolean>(false);
 
   // Gestión de Productos del Comercio
   const [showProductModal, setShowProductModal] = useState<boolean>(false);
@@ -542,34 +579,166 @@ export default function App() {
     }
   };
 
-  // Helper para seleccionar comprobante bancario privado de forma local
+  // Helper para seleccionar comprobante bancario (JPG, PNG o PDF)
   const pickComprobanteLocal = async () => {
+    Alert.alert(
+      "Adjuntar Comprobante",
+      "Selecciona el origen del comprobante:",
+      [
+        {
+          text: "Galería de Fotos",
+          onPress: async () => {
+            try {
+              const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!permissionResult.granted) {
+                Alert.alert(
+                  "Permiso Requerido",
+                  "Se necesita acceso a la galería para seleccionar la foto del comprobante."
+                );
+                return;
+              }
+
+              const pickerResult = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                quality: 0.8,
+              });
+
+              if (!pickerResult.canceled && pickerResult.assets && pickerResult.assets.length > 0) {
+                const asset = pickerResult.assets[0];
+                setCheckoutComprobanteAsset(asset);
+                setCheckoutComprobanteUrl(asset.uri);
+                Alert.alert("Comprobante Seleccionado", "Comprobante listo. Se enviará al confirmar el pedido.");
+              }
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Error al seleccionar la imagen.");
+            }
+          },
+        },
+        {
+          text: "Archivos / PDF",
+          onPress: async () => {
+            try {
+              const docRes = await DocumentPicker.getDocumentAsync({
+                type: ["application/pdf", "image/*"],
+                copyToCacheDirectory: true,
+              });
+              if (!docRes.canceled && docRes.assets && docRes.assets.length > 0) {
+                const doc = docRes.assets[0];
+                if (doc.size && doc.size > 5 * 1024 * 1024) {
+                  Alert.alert("Archivo muy pesado", "El archivo no debe superar 5MB.");
+                  return;
+                }
+                const isPdf = doc.name.toLowerCase().endsWith(".pdf") || doc.mimeType?.includes("pdf");
+                setCheckoutComprobanteAsset({
+                  uri: doc.uri,
+                  fileName: doc.name,
+                  mimeType: isPdf ? "application/pdf" : (doc.mimeType || "image/jpeg"),
+                });
+                setCheckoutComprobanteUrl(doc.uri);
+                Alert.alert("Comprobante Seleccionado", `Archivo "${doc.name}" adjuntado correctamente.`);
+              }
+            } catch (e: any) {
+              Alert.alert("Error", e.message || "Error al seleccionar el archivo.");
+            }
+          },
+        },
+        { text: "Cancelar", style: "cancel" },
+      ]
+    );
+  };
+
+  // Helper para subir o actualizar comprobante en un pedido ya creado
+  const uploadOrderComprobante = async (orderId: number) => {
+    Alert.alert(
+      "Subir Comprobante de Pago",
+      "Selecciona el origen del archivo:",
+      [
+        {
+          text: "Galería de Fotos",
+          onPress: async () => {
+            try {
+              const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+              if (!perm.granted) {
+                Alert.alert("Permiso Requerido", "Se necesita acceso a la galería.");
+                return;
+              }
+              const pickerRes = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ['images'],
+                allowsEditing: true,
+                quality: 0.8,
+              });
+              if (!pickerRes.canceled && pickerRes.assets && pickerRes.assets.length > 0) {
+                const asset = pickerRes.assets[0];
+                await doUploadComprobante(orderId, {
+                  uri: asset.uri,
+                  fileName: asset.fileName || "comprobante.jpg",
+                  mimeType: asset.mimeType || "image/jpeg",
+                });
+              }
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Error al seleccionar imagen.");
+            }
+          },
+        },
+        {
+          text: "Archivos / PDF",
+          onPress: async () => {
+            try {
+              const docRes = await DocumentPicker.getDocumentAsync({
+                type: ["application/pdf", "image/*"],
+                copyToCacheDirectory: true,
+              });
+              if (!docRes.canceled && docRes.assets && docRes.assets.length > 0) {
+                const doc = docRes.assets[0];
+                if (doc.size && doc.size > 5 * 1024 * 1024) {
+                  Alert.alert("Archivo muy pesado", "El archivo no debe superar 5MB.");
+                  return;
+                }
+                const isPdf = doc.name.toLowerCase().endsWith(".pdf") || doc.mimeType?.includes("pdf");
+                await doUploadComprobante(orderId, {
+                  uri: doc.uri,
+                  fileName: doc.name,
+                  mimeType: isPdf ? "application/pdf" : (doc.mimeType || "image/jpeg"),
+                });
+              }
+            } catch (err: any) {
+              Alert.alert("Error", err.message || "Error al seleccionar archivo.");
+            }
+          },
+        },
+        { text: "Cancelar", style: "cancel" },
+      ]
+    );
+  };
+
+  const doUploadComprobante = async (orderId: number, fileAsset: { uri: string; fileName: string; mimeType: string }) => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert(
-          "Permiso Requerido",
-          "Se necesita acceso a la galería para seleccionar el comprobante."
-        );
-        return;
+      const res = await uploadMultipartAsync(
+        `${apiUrl}/api/pedidos/${orderId}/comprobante`,
+        "POST",
+        token,
+        "file",
+        fileAsset
+      );
+      if (res.ok) {
+        Alert.alert("Comprobante Enviado", "Comprobante enviado para verificación.");
+        fetchPedidosCliente();
+        if (selectedPedido && selectedPedido.id === orderId) {
+          const updRes = await fetch(`${apiUrl}/api/pedidos/${orderId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (updRes.ok) {
+            const updData = await updRes.json();
+            setSelectedPedido(updData);
+          }
+        }
+      } else {
+        const err = res.data || {};
+        Alert.alert("Error", err.message || "No se pudo subir el comprobante.");
       }
-
-      const pickerResult = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        quality: 0.8,
-      });
-
-      if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
-        return;
-      }
-
-      const asset = pickerResult.assets[0];
-      setCheckoutComprobanteAsset(asset);
-      setCheckoutComprobanteUrl(asset.uri);
-      Alert.alert("Comprobante Seleccionado", "Comprobante listo. Se enviará de forma privada y protegida al confirmar el pedido.");
     } catch (err: any) {
-      Alert.alert("Error", err.message || "Error al seleccionar el comprobante.");
+      Alert.alert("Error", err.message || "Error al subir el comprobante.");
     }
   };
 
@@ -739,12 +908,12 @@ export default function App() {
             body: JSON.stringify({
               eventType: "APP_FIRST_OPEN",
               platform: "ANDROID",
-              appVersion: "2.2.3",
+              appVersion: APP_VERSION,
               anonymousId: anonId,
               metadata: JSON.stringify({
                 os: Platform.OS,
                 version: Platform.Version,
-                appVersion: "2.2.3",
+                appVersion: APP_VERSION,
               }),
             }),
           }).then((r) => {
@@ -818,10 +987,34 @@ export default function App() {
     setRefreshing(false);
   }, [apiUrl, token, user]);
 
+  // Registro de Push Tokens para Notificaciones Móviles (Fase I)
+  const registrarDispositivoPush = async (jwt?: string | null) => {
+    const activeJwt = jwt || token;
+    if (!activeJwt) return;
+    try {
+      const pushToken = `FASTGO_EXPO_PUSH_${Platform.OS}_${Date.now()}`;
+      await fetch(`${apiUrl}/api/dispositivos/registrar`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${activeJwt}`,
+        },
+        body: JSON.stringify({
+          pushToken,
+          plataforma: Platform.OS === "android" ? "ANDROID" : Platform.OS === "ios" ? "IOS" : "WEB",
+          dispositivoId: `${Platform.OS}-${Platform.Version || "v1"}`,
+        }),
+      });
+    } catch {}
+  };
+
   // ==========================================
   // AUTENTICACIÓN Y REGISTRO MULTI-ROL
   // ==========================================
   const routeUserToDashboard = (role: string, jwt = token) => {
+    if (jwt) {
+      registrarDispositivoPush(jwt);
+    }
     if (role === "CLIENTE") {
       navigateTo("explorar");
       fetchPedidosCliente(jwt);
@@ -1071,6 +1264,45 @@ export default function App() {
     }
   };
 
+  const handleUploadSubscriptionProofMobile = async () => {
+    if (!token || !comercioPropio) return;
+    try {
+      const docRes = await DocumentPicker.getDocumentAsync({
+        type: ["image/*", "application/pdf"],
+        copyToCacheDirectory: true,
+      });
+      if (docRes.canceled || !docRes.assets || docRes.assets.length === 0) return;
+      const fileAsset = docRes.assets[0];
+
+      setIsUploadingSubProof(true);
+      const res = await uploadMultipartAsync(
+        `${apiUrl}/api/comercios/${comercioPropio.id}/suscripcion/comprobante`,
+        "POST",
+        token,
+        "comprobante",
+        {
+          uri: fileAsset.uri,
+          fileName: fileAsset.name,
+          mimeType: fileAsset.mimeType || "application/octet-stream",
+        }
+      );
+
+      if (res.ok) {
+        Alert.alert(
+          "¡Comprobante Enviado!",
+          "Tu comprobante de pago ha sido enviado exitosamente y se encuentra en revisión por el equipo administrativo de FASTGO."
+        );
+        await fetchComercioPropio(token, comercioPropio.id);
+      } else {
+        Alert.alert("Error", res.data?.message || res.data?.mensaje || "No se pudo subir el comprobante.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Error al subir comprobante de suscripción.");
+    } finally {
+      setIsUploadingSubProof(false);
+    }
+  };
+
   const handleOpenProductModal = (prod?: Producto) => {
     if (prod) {
       setEditingProduct(prod);
@@ -1233,7 +1465,7 @@ export default function App() {
               body: JSON.stringify({
                 eventType: "LOGIN",
                 platform: "ANDROID",
-                appVersion: "2.2.3",
+                appVersion: APP_VERSION,
                 anonymousId: anonId || undefined,
                 pathOrScreen: "login",
               }),
@@ -1420,7 +1652,7 @@ export default function App() {
                 body: JSON.stringify({
                   eventType: "REGISTER",
                   platform: "ANDROID",
-                  appVersion: "2.2.3",
+                  appVersion: APP_VERSION,
                   anonymousId: anonId || undefined,
                   pathOrScreen: "register",
                 }),
@@ -1493,7 +1725,8 @@ export default function App() {
 
     setEncSubmitting(true);
     try {
-      const tarifa = calcTarifa(encDistanciaKm);
+      const tarifaCalculada = calcTarifa(encDistanciaKm);
+      const tarifaFinal = encValorInicialPropuesto ? Number(encValorInicialPropuesto) : tarifaCalculada;
       const res = await fetch(`${apiUrl}/api/encomiendas`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -1507,7 +1740,7 @@ export default function App() {
           descripcion: encDescripcion.trim(),
           tamanoPeso: encTamano,
           distanciaKm: encDistanciaKm,
-          costoEnvio: tarifa,
+          costoEnvio: tarifaFinal,
           tarifaAceptada: true,
         }),
       });
@@ -1516,6 +1749,7 @@ export default function App() {
         const nueva = await res.json();
         Alert.alert("¡Encomienda Solicitada!", `Tu servicio #ENC-${nueva.id} fue creado con éxito. Un domiciliario cercano será asignado pronto.`);
         setEncDescripcion("");
+        setEncValorInicialPropuesto("");
         setEncTarifaAceptada(false);
         setEncomiendaTab("mis_envios");
         fetchEncomiendasCliente();
@@ -1527,6 +1761,110 @@ export default function App() {
       Alert.alert("Error de Red", e.message || "Fallo al enviar solicitud.");
     } finally {
       setEncSubmitting(false);
+    }
+  };
+
+  const fetchOfertasEncomienda = async (encId: number) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${encId}/ofertas`, {
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setOfertasPorEncomienda((prev) => ({ ...prev, [encId]: data }));
+      }
+    } catch {}
+  };
+
+  const handleToggleOfertasCliente = async (encId: number) => {
+    if (expandedEncClienteId === encId) {
+      setExpandedEncClienteId(null);
+      return;
+    }
+    setExpandedEncClienteId(encId);
+    setLoadingOfertasCliente(true);
+    await fetchOfertasEncomienda(encId);
+    setLoadingOfertasCliente(false);
+  };
+
+  const handleAceptarOferta = async (encId: number, ofertaId: number) => {
+    setProcessingOfertaId(ofertaId);
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${encId}/ofertas/${ofertaId}/aceptar`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        Alert.alert("¡Oferta Aceptada!", "El domiciliario ha sido asignado al envío.");
+        fetchEncomiendasCliente();
+        fetchOfertasEncomienda(encId);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo aceptar la oferta.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Fallo al procesar la aceptación.");
+    } finally {
+      setProcessingOfertaId(null);
+    }
+  };
+
+  const handleRechazarOferta = async (encId: number, ofertaId: number) => {
+    setProcessingOfertaId(ofertaId);
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${encId}/ofertas/${ofertaId}/rechazar`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        Alert.alert("Oferta Rechazada", "La contraoferta ha sido declinada.");
+        fetchOfertasEncomienda(encId);
+        fetchEncomiendasCliente();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No se pudo rechazar la oferta.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error", e.message || "Fallo al rechazar oferta.");
+    } finally {
+      setProcessingOfertaId(null);
+    }
+  };
+
+  const handleCrearOfertaDomi = async () => {
+    if (!domiOfertaModalEnc) return;
+    const monto = Number(domiOfertaValor);
+    if (!monto || monto <= 0) {
+      Alert.alert("Monto Inválido", "Por favor ingresa un monto válido en pesos COP para tu contraoferta.");
+      return;
+    }
+
+    setIsSubmittingDomiOferta(true);
+    try {
+      const res = await fetch(`${apiUrl}/api/encomiendas/${domiOfertaModalEnc.id}/ofertas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          valor: monto,
+          mensaje: domiOfertaMensaje.trim() || undefined,
+        }),
+      });
+
+      if (res.ok) {
+        Alert.alert("¡Contraoferta Enviada!", `Has propuesto $${monto.toLocaleString()} COP para la encomienda #ENC-${domiOfertaModalEnc.id}.`);
+        setDomiOfertaModalEnc(null);
+        setDomiOfertaValor("");
+        setDomiOfertaMensaje("");
+        fetchEncomiendasDomi();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        Alert.alert("Error", err.message || "No fue posible enviar la contraoferta.");
+      }
+    } catch (e: any) {
+      Alert.alert("Error de Red", e.message || "Fallo de conexión al enviar oferta.");
+    } finally {
+      setIsSubmittingDomiOferta(false);
     }
   };
 
@@ -1590,6 +1928,30 @@ export default function App() {
       Alert.alert("Producto Agotado", "Este producto no se encuentra disponible temporalmente.");
       return;
     }
+
+    // Si el carrito ya tiene productos de otra sucursal o comercio, requerir confirmación
+    if (cart.length > 0) {
+      const sucursalActual = cart[0].producto.sucursalId;
+      if (producto.sucursalId && sucursalActual && producto.sucursalId !== sucursalActual) {
+        Alert.alert(
+          "Cambio de Comercio",
+          "Ya tienes productos de otra tienda en el carrito. Solo puedes pedir productos de una misma tienda a la vez.\n\n¿Deseas vaciar el carrito actual para agregar este producto?",
+          [
+            { text: "Cancelar", style: "cancel" },
+            {
+              text: "Vaciar y Agregar",
+              style: "destructive",
+              onPress: () => {
+                setCart([{ producto, cantidad: 1 }]);
+                Alert.alert("Añadido", `${producto.nombre} agregado al carrito.`);
+              },
+            },
+          ]
+        );
+        return;
+      }
+    }
+
     setCart((prev) => {
       const existing = prev.find((item) => item.producto.id === producto.id);
       if (existing) {
@@ -1680,109 +2042,131 @@ export default function App() {
         }
       } catch {}
 
-      // 2. Obtener o crear carrito en el backend
-      const sucursalId = selectedComercio?.id || 1;
+      // 2. Obtener la sucursal real de los productos del carrito
+      const itemSucursalId = cart[0]?.producto?.sucursalId;
+      let sucursalId = itemSucursalId;
+      if (!sucursalId && selectedComercio?.id) {
+        try {
+          const sucRes = await fetch(`${apiUrl}/api/sucursales/comercio/${selectedComercio.id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (sucRes.ok) {
+            const sucs = await sucRes.json();
+            if (sucs && sucs.length > 0) {
+              sucursalId = sucs[0].id;
+            }
+          }
+        } catch {}
+      }
+      if (!sucursalId) {
+        sucursalId = 1;
+      }
+
+      // Obtener o crear carrito para esa sucursal en el backend
       const cartRes = await fetch(`${apiUrl}/api/carritos?sucursalId=${sucursalId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      let backendCartId = null;
-      if (cartRes.ok) {
-        const cData = await cartRes.json();
-        backendCartId = cData.id;
-        for (const item of cart) {
-          await fetch(`${apiUrl}/api/carritos/productos`, {
+      if (!cartRes.ok) {
+        const errData = await cartRes.json().catch(() => ({}));
+        throw new Error(errData.message || "No se pudo sincronizar el carrito con la tienda.");
+      }
+      const cData = await cartRes.json();
+      const backendCartId = cData.id;
+
+      // Limpiar ítems previos del carrito en el backend para evitar mezclas o datos huérfanos
+      await fetch(`${apiUrl}/api/carritos/${backendCartId}/productos`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
+
+      // Sincronizar ítems actuales asegurando que cada uno se agregue correctamente
+      for (const item of cart) {
+        const addRes = await fetch(`${apiUrl}/api/carritos/productos`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            carritoId: backendCartId,
+            productoId: item.producto.id,
+            cantidad: item.cantidad,
+          }),
+        });
+        if (!addRes.ok) {
+          const addErr = await addRes.json().catch(() => ({}));
+          throw new Error(addErr.message || `No se pudo agregar "${item.producto.nombre}" al pedido.`);
+        }
+      }
+
+      const qParams = new URLSearchParams({
+        carritoId: String(backendCartId),
+        direccionId: String(dirId),
+        costoEnvio: String(deliveryFee),
+        metodoPago: metodoPagoSeleccionado,
+      });
+      let pedRes: Response;
+      if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteAsset) {
+        pedRes = (await uploadMultipartAsync(
+          `${apiUrl}/api/pedidos?${qParams.toString()}`,
+          "POST",
+          token,
+          "comprobante",
+          {
+            uri: checkoutComprobanteAsset.uri,
+            fileName: checkoutComprobanteAsset.fileName,
+            mimeType: checkoutComprobanteAsset.mimeType,
+          }
+        )) as any;
+      } else {
+        if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteUrl) {
+          qParams.append("comprobantePagoUrl", checkoutComprobanteUrl);
+        }
+        pedRes = await fetch(`${apiUrl}/api/pedidos?${qParams.toString()}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      }
+
+      if (pedRes.ok) {
+        const nuevoPedido = await pedRes.json();
+        // Track ORDER_CREATED analytics
+        try {
+          const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
+          fetch(`${apiUrl}/api/analytics/track`, {
             method: "POST",
-            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({
-              carritoId: backendCartId,
-              productoId: item.producto.id,
-              cantidad: item.cantidad,
+              eventType: "ORDER_CREATED",
+              platform: "ANDROID",
+              appVersion: APP_VERSION,
+              anonymousId: anonId || undefined,
+              pathOrScreen: "carrito",
+              metadata: JSON.stringify({
+                pedidoId: nuevoPedido.id,
+                total: nuevoPedido.total || totalCart,
+                metodoPago: metodoPagoSeleccionado,
+              }),
             }),
           }).catch(() => {});
-        }
-      }
+        } catch {}
 
-      if (backendCartId) {
-        const qParams = new URLSearchParams({
-          carritoId: String(backendCartId),
-          direccionId: String(dirId),
-          costoEnvio: String(deliveryFee),
-          metodoPago: metodoPagoSeleccionado,
-        });
-        let pedRes: Response;
-        if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteAsset) {
-          pedRes = (await uploadMultipartAsync(
-            `${apiUrl}/api/pedidos?${qParams.toString()}`,
-            "POST",
-            token,
-            "comprobante",
-            {
-              uri: checkoutComprobanteAsset.uri,
-              fileName: checkoutComprobanteAsset.fileName,
-              mimeType: checkoutComprobanteAsset.mimeType,
-            }
-          )) as any;
-        } else {
-          if (metodoPagoSeleccionado === "BANCOLOMBIA" && checkoutComprobanteUrl) {
-            qParams.append("comprobantePagoUrl", checkoutComprobanteUrl);
-          }
-          pedRes = await fetch(`${apiUrl}/api/pedidos?${qParams.toString()}`, {
-            method: "POST",
-            headers: { Authorization: `Bearer ${token}` },
-          });
-        }
-
-        if (pedRes.ok) {
-          const nuevoPedido = await pedRes.json();
-          // Track ORDER_CREATED analytics
-          try {
-            const anonId = await AsyncStorage.getItem("fastgo_anonymous_device_id");
-            fetch(`${apiUrl}/api/analytics/track`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({
-                eventType: "ORDER_CREATED",
-                platform: "ANDROID",
-                appVersion: "2.2.3",
-                anonymousId: anonId || undefined,
-                pathOrScreen: "carrito",
-                metadata: JSON.stringify({
-                  pedidoId: nuevoPedido.id,
-                  total: nuevoPedido.total || totalCart,
-                  metodoPago: metodoPagoSeleccionado,
-                }),
-              }),
-            }).catch(() => {});
-          } catch {}
-
-          Alert.alert(
-            "¡Pedido Confirmado!",
-            `Tu pedido #${nuevoPedido.id} ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${Number(nuevoPedido.total || totalCart).toLocaleString()} COP.\n${metodoPagoSeleccionado === "BANCOLOMBIA" ? "Comprobante en verificación por el comercio." : "En breve el restaurante iniciará su preparación."}`
-          );
-          setCart([]);
-          setCheckoutComprobanteUrl(null);
-          setCheckoutComprobanteAsset(null);
-          await fetchPedidosCliente();
-          navigateTo("mis_pedidos");
-          return;
-        } else {
-          const err = await pedRes.json().catch(() => ({}));
-          Alert.alert("No se pudo crear el pedido", err.message || "Error al procesar el pedido.");
-          return;
-        }
+        Alert.alert(
+          "¡Pedido Confirmado!",
+          `Tu pedido #${nuevoPedido.id} ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${Number(nuevoPedido.total || totalCart).toLocaleString()} COP.\n${metodoPagoSeleccionado === "BANCOLOMBIA" ? "Comprobante en verificación por el comercio." : "En breve el restaurante iniciará su preparación."}`
+        );
+        setCart([]);
+        setCheckoutComprobanteUrl(null);
+        setCheckoutComprobanteAsset(null);
+        await fetchPedidosCliente();
+        navigateTo("mis_pedidos");
+        return;
+      } else {
+        const err = await pedRes.json().catch(() => ({}));
+        Alert.alert("No se pudo crear el pedido", err.message || "Error al procesar el pedido.");
+        return;
       }
     } catch (e: any) {
-      // Fallback
+      Alert.alert("Error al procesar el pedido", e.message || "Ocurrió un error inesperado al procesar el pedido.");
+      return;
     }
-
-    Alert.alert(
-      "¡Pedido Confirmado!",
-      `Tu pedido ha sido registrado con éxito.\nMétodo de pago: ${metodoPagoSeleccionado}\nTotal: $${totalCart.toLocaleString()} COP.\nEn breve el restaurante iniciará su preparación.`
-    );
-    setCart([]);
-    setCheckoutComprobanteUrl(null);
-    await fetchPedidosCliente();
-    navigateTo("mis_pedidos");
   };
 
   // ==========================================
@@ -1851,7 +2235,23 @@ export default function App() {
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
       });
-      if (res.ok) setPedidosComercio(await res.json());
+      if (res.ok) {
+        const data: PedidoItem[] = await res.json();
+        setPedidosComercio(data);
+
+        // Notificación de nuevo pedido entrante en Cocina (Fase I)
+        if (!isFirstMerchantLoadRef.current) {
+          const incoming = data.filter(
+            (p) => (p.estado === "PENDIENTE" || p.estado === "CONFIRMADO") && !knownMerchantOrdersRef.current.has(p.id)
+          );
+          if (incoming.length > 0) {
+            setNewMobileOrderAlert(incoming[0]);
+          }
+        } else {
+          isFirstMerchantLoadRef.current = false;
+        }
+        data.forEach((p) => knownMerchantOrdersRef.current.add(p.id));
+      }
     } catch {}
   };
 
@@ -1950,7 +2350,21 @@ export default function App() {
       const r1 = await fetch(`${apiUrl}/api/pedidos/domiciliario/disponibles`, {
         headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
       });
-      if (r1.ok) setPedidosDisponibles(await r1.json());
+      if (r1.ok) {
+        const disponibles: PedidoItem[] = await r1.json();
+        setPedidosDisponibles(disponibles);
+
+        // Notificación de nuevo pedido disponible para repartidor (Fase I)
+        if (!isFirstDomiLoadRef.current) {
+          const fresh = disponibles.filter((p) => !knownDomiOrdersRef.current.has(p.id));
+          if (fresh.length > 0) {
+            setNewMobileDeliveryAlert(fresh[0]);
+          }
+        } else {
+          isFirstDomiLoadRef.current = false;
+        }
+        disponibles.forEach((p) => knownDomiOrdersRef.current.add(p.id));
+      }
 
       const r2 = await fetch(`${apiUrl}/api/pedidos/domiciliario/mios`, {
         headers: { Authorization: `Bearer ${jwt}`, Accept: "application/json" },
@@ -1958,6 +2372,29 @@ export default function App() {
       if (r2.ok) setMisEntregas(await r2.json());
     } catch {}
   };
+
+  // Polling automático de pedidos para Comercio y Domiciliario (Fase I)
+  useEffect(() => {
+    if (!token || !user) return;
+    const userRole = user.activeRole || user.rol;
+    if (activeTab === "comercio_cocina" || userRole === "COMERCIO") {
+      const timer = setInterval(() => {
+        fetchPedidosComercio();
+      }, 12000);
+      return () => clearInterval(timer);
+    }
+  }, [token, user, activeTab, comercioPropio]);
+
+  useEffect(() => {
+    if (!token || !user) return;
+    const userRole = user.activeRole || user.rol;
+    if (activeTab === "domi_disponibles" || userRole === "DOMICILIARIO") {
+      const timer = setInterval(() => {
+        fetchPedidosDomiciliario();
+      }, 12000);
+      return () => clearInterval(timer);
+    }
+  }, [token, user, activeTab]);
 
   // Telemetría GPS en tiempo real para Domiciliario en ruta
   useEffect(() => {
@@ -2036,7 +2473,7 @@ export default function App() {
             body: JSON.stringify({
               eventType: "ORDER_DELIVERED",
               platform: "ANDROID",
-              appVersion: "2.2.3",
+              appVersion: APP_VERSION,
               anonymousId: anonId || undefined,
               pathOrScreen: "domi_disponibles",
               metadata: JSON.stringify({ pedidoId }),
@@ -2658,16 +3095,32 @@ export default function App() {
           </View>
         </View>
 
-        {/* Barra de Búsqueda Integrada (solo en explorar) */}
+        {/* Barra de Búsqueda Integrada con Lupa Clickeable (solo en explorar) */}
         {activeTab === "explorar" && !selectedComercio && (
           <View style={styles.searchBar}>
-            <Text style={styles.searchIcon}>🔍</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (searchQuery.trim().length > 0) {
+                  // Lupa clickeable que activa/valida búsqueda
+                }
+              }}
+              style={{ paddingRight: 4, paddingVertical: 4 }}
+              activeOpacity={0.7}
+              accessibilityLabel="Buscar restaurantes, tiendas o productos"
+              accessibilityRole="button"
+            >
+              <Text style={styles.searchIcon}>🔍</Text>
+            </TouchableOpacity>
             <TextInput
               style={styles.searchInput}
-              placeholder="Buscar restaurantes o platos deliciosos..."
+              placeholder="🔍 Buscar restaurantes, tiendas o platos..."
               placeholderTextColor="#94A3B8"
               value={searchQuery}
               onChangeText={setSearchQuery}
+              returnKeyType="search"
+              onSubmitEditing={() => {
+                // Submit mediante teclado/Enter
+              }}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery("")}>
@@ -2838,10 +3291,79 @@ export default function App() {
               </View>
             )}
 
+            {/* Banner de Tiendas Destacadas (Configuradas exclusivamente por ADMIN) */}
+            {!selectedComercio && comercios.some((c) => c.destacado) && (
+              <View style={styles.sectionBlock}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>⭐ Comercios Destacados</Text>
+                  <View style={[styles.statusPill, { backgroundColor: "#FEF3C7" }]}>
+                    <Text style={{ color: "#92400E", fontSize: 9, fontWeight: "bold" }}>SELECCIÓN FASTGO</Text>
+                  </View>
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12, paddingBottom: 6 }}>
+                  {comercios
+                    .filter((c) => c.destacado)
+                    .map((c) => (
+                      <TouchableOpacity
+                        key={`destacado-${c.id}`}
+                        style={{
+                          width: 240,
+                          backgroundColor: "#FFFFFF",
+                          borderRadius: 20,
+                          borderWidth: 1,
+                          borderColor: "#FDE68A",
+                          overflow: "hidden",
+                          shadowColor: "#F59E0B",
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: 0.1,
+                          shadowRadius: 6,
+                          elevation: 3,
+                        }}
+                        onPress={() => setSelectedComercio(c)}
+                        activeOpacity={0.85}
+                      >
+                        <View style={{ height: 100, backgroundColor: "#FEF3C7", position: "relative" }}>
+                          {c.banner || c.bannerUrl ? (
+                            <Image
+                              source={{ uri: resolveMediaUrl(c.banner || c.bannerUrl) || "" }}
+                              style={{ width: "100%", height: "100%" }}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={{ width: "100%", height: "100%", backgroundColor: "#FEF3C7", alignItems: "center", justifyContent: "center" }}>
+                              <Text style={{ fontSize: 32 }}>🏪</Text>
+                            </View>
+                          )}
+                          <View style={{ position: "absolute", top: 8, right: 8, backgroundColor: "#F59E0B", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 }}>
+                            <Text style={{ color: "#FFF", fontSize: 9, fontWeight: "900" }}>⭐ DESTACADO</Text>
+                          </View>
+                        </View>
+                        <View style={{ padding: 12 }}>
+                          <Text style={{ fontSize: 14, fontWeight: "bold", color: Theme.text }} numberOfLines={1}>
+                            {c.nombre}
+                          </Text>
+                          <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }} numberOfLines={1}>
+                            {c.descripcion || c.categoria || "Comercio Aliado FastGo"}
+                          </Text>
+                          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "#F1F5F9" }}>
+                            <Text style={{ fontSize: 11, fontWeight: "700", color: Theme.primary }}>
+                              🛵 ${(c.tarifaDomicilio || 2000).toLocaleString()} COP
+                            </Text>
+                            <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                              ~{c.tiempoPreparacionMin || 25} min
+                            </Text>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                </ScrollView>
+              </View>
+            )}
+
             {/* Sección de Comercios Aliados (si no hay uno seleccionado) */}
             {!selectedComercio && (
               <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Comercios Aliados ({comercios.length})</Text>
+                <Text style={styles.sectionTitle}>Comercios Aliados</Text>
                 {comercios.length === 0 ? (
                   <View style={styles.emptyCard}>
                     <Text style={styles.emptyCardTitle}>
@@ -2890,54 +3412,62 @@ export default function App() {
               </View>
             )}
 
-            {/* Menú de Productos */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>
-                {selectedComercio ? `Menú de ${selectedComercio.nombre}` : "Platos y Productos Disponibles"}
-              </Text>
-              {filteredProducts.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyCardTitle}>No se encontraron productos</Text>
-                  <Text style={styles.emptyCardText}>Prueba con otro término de búsqueda o comercio.</Text>
-                </View>
-              ) : (
-                filteredProducts.map((p) => (
-                  <View key={p.id} style={styles.productCard}>
-                    {(p.imagenPrincipal || p.imagenUrl) ? (
-                      <Image
-                        source={{ uri: resolveMediaUrl(p.imagenPrincipal || p.imagenUrl) || "" }}
-                        style={{ width: 64, height: 64, borderRadius: 12, marginRight: 12, backgroundColor: "#F1F5F9" }}
-                        resizeMode="cover"
-                      />
-                    ) : null}
-                    <View style={styles.productInfo}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                        <Text style={styles.productName}>{p.nombre}</Text>
-                        {p.disponible === false && (
-                          <View style={[styles.statusPill, { backgroundColor: "#FEE2E2" }]}>
-                            <Text style={{ color: "#991B1B", fontSize: 9, fontWeight: "bold" }}>AGOTADO</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.productDesc}>{p.descripcion || "Preparación fresca con los mejores ingredientes"}</Text>
-                      <Text style={styles.productPrice}>${p.precio.toLocaleString()} COP{p.stock != null ? ` • Stock: ${p.stock}` : ""}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={[
-                        styles.addBtn,
-                        (p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual) && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" }
-                      ]}
-                      onPress={() => addToCart(p)}
-                      disabled={p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual}
-                    >
-                      <Text style={[styles.addBtnText, (p.disponible === false || selectedComercio?.abierto === false || selectedComercio?.pausaManual) && { color: "#94A3B8" }]}>
-                        {selectedComercio?.abierto === false || selectedComercio?.pausaManual ? "Cerrado" : p.disponible === false ? "Agotado" : "+ Agregar"}
-                      </Text>
-                    </TouchableOpacity>
+            {/* Menú de Productos: Solo se muestra si hay una tienda seleccionada O si el usuario está buscando */}
+            {(selectedComercio || searchQuery.trim().length > 0) && (
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>
+                  {selectedComercio
+                    ? `Menú de ${selectedComercio.nombre}`
+                    : `Resultados de búsqueda: "${searchQuery}"`}
+                </Text>
+                {filteredProducts.length === 0 ? (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyCardTitle}>No se encontraron productos</Text>
+                    <Text style={styles.emptyCardText}>Prueba con otro término de búsqueda o comercio.</Text>
                   </View>
-                ))
-              )}
-            </View>
+                ) : (
+                  filteredProducts.map((p) => {
+                    const isOutOfStock = p.disponible === false || (p.stock != null && p.stock <= 0);
+                    const isStoreClosed = selectedComercio?.abierto === false || selectedComercio?.pausaManual;
+                    return (
+                      <View key={p.id} style={styles.productCard}>
+                        {(p.imagenPrincipal || p.imagenUrl) ? (
+                          <Image
+                            source={{ uri: resolveMediaUrl(p.imagenPrincipal || p.imagenUrl) || "" }}
+                            style={{ width: 64, height: 64, borderRadius: 12, marginRight: 12, backgroundColor: "#F1F5F9" }}
+                            resizeMode="cover"
+                          />
+                        ) : null}
+                        <View style={styles.productInfo}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            <Text style={styles.productName}>{p.nombre}</Text>
+                            {isOutOfStock && (
+                              <View style={[styles.statusPill, { backgroundColor: "#FEE2E2" }]}>
+                                <Text style={{ color: "#991B1B", fontSize: 9, fontWeight: "bold" }}>AGOTADO</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text style={styles.productDesc}>{p.descripcion || "Preparación fresca con los mejores ingredientes"}</Text>
+                          <Text style={styles.productPrice}>${p.precio.toLocaleString()} COP</Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[
+                            styles.addBtn,
+                            (isOutOfStock || isStoreClosed) && { backgroundColor: "#F1F5F9", borderColor: "#CBD5E1" }
+                          ]}
+                          onPress={() => addToCart(p)}
+                          disabled={isOutOfStock || isStoreClosed}
+                        >
+                          <Text style={[styles.addBtnText, (isOutOfStock || isStoreClosed) && { color: "#94A3B8" }]}>
+                            {isStoreClosed ? "Cerrado" : isOutOfStock ? "Agotado" : "+ Agregar"}
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -3096,10 +3626,16 @@ export default function App() {
                           borderColor: "#A7F3D0",
                           gap: 10,
                         }}>
-                          <Image
-                            source={{ uri: checkoutComprobanteAsset?.uri || resolveMediaUrl(checkoutComprobanteUrl) || "" }}
-                            style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: "#E2E8F0" }}
-                          />
+                          {checkoutComprobanteAsset?.mimeType === "application/pdf" || checkoutComprobanteAsset?.fileName?.toLowerCase().endsWith(".pdf") ? (
+                            <View style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: "#FEE2E2", alignItems: "center", justifyContent: "center" }}>
+                              <Text style={{ fontSize: 24 }}>📄</Text>
+                            </View>
+                          ) : (
+                            <Image
+                              source={{ uri: checkoutComprobanteAsset?.uri || resolveMediaUrl(checkoutComprobanteUrl) || "" }}
+                              style={{ width: 48, height: 48, borderRadius: 8, backgroundColor: "#E2E8F0" }}
+                            />
+                          )}
                           <View style={{ flex: 1 }}>
                             <Text style={{ fontSize: 11, fontWeight: "bold", color: "#065F46" }}>
                               ✓ Comprobante listo
@@ -3250,8 +3786,8 @@ export default function App() {
                   </View>
                 </View>
 
-                {/* Banner de estado de pago Bancolombia */}
-                {selectedPedido.metodoPago === "BANCOLOMBIA" && (
+                {/* Banner de estado de pago Bancolombia / Transferencia */}
+                {(selectedPedido.metodoPago === "BANCOLOMBIA" || selectedPedido.metodoPago === "TRANSFERENCIA") && (
                   <View style={{
                     marginTop: 10,
                     padding: 10,
@@ -3261,7 +3797,7 @@ export default function App() {
                     borderColor: selectedPedido.estadoPago === "APROBADO" ? "#6EE7B7" : selectedPedido.estadoPago === "RECHAZADO" ? "#FCA5A5" : "#FDE68A",
                   }}>
                     <Text style={{ fontSize: 11, fontWeight: "bold", color: selectedPedido.estadoPago === "APROBADO" ? "#065F46" : selectedPedido.estadoPago === "RECHAZADO" ? "#991B1B" : "#92400E" }}>
-                      Estado del Pago: {selectedPedido.estadoPago === "APROBADO" ? "✓ APROBADO POR EL COMERCIO" : selectedPedido.estadoPago === "RECHAZADO" ? "✕ RECHAZADO POR EL COMERCIO" : "⏳ EN VERIFICACIÓN POR EL COMERCIO"}
+                      Estado del Pago: {selectedPedido.estadoPago === "APROBADO" ? "✓ APROBADO POR EL COMERCIO" : selectedPedido.estadoPago === "RECHAZADO" ? `✕ RECHAZADO: ${selectedPedido.motivoRechazoPago || "Comprobante no válido"}` : "⏳ EN VERIFICACIÓN POR EL COMERCIO"}
                     </Text>
                     {selectedPedido.comprobantePagoUrl && (
                       <TouchableOpacity
@@ -3270,6 +3806,28 @@ export default function App() {
                       >
                         <Text style={{ fontSize: 11, color: Theme.primary, fontWeight: "bold" }}>
                           👁️ Ver Comprobante Adjunto
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Botón para subir o reenviar comprobante si no está aprobado */}
+                    {selectedPedido.estadoPago !== "APROBADO" && selectedPedido.estado !== "CANCELADO" && selectedPedido.estado !== "ENTREGADO" && (
+                      <TouchableOpacity
+                        style={{
+                          marginTop: 8,
+                          backgroundColor: Theme.primary,
+                          paddingVertical: 7,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          alignItems: "center",
+                          flexDirection: "row",
+                          justifyContent: "center",
+                          gap: 6,
+                        }}
+                        onPress={() => uploadOrderComprobante(selectedPedido.id)}
+                      >
+                        <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "bold" }}>
+                          📤 {selectedPedido.comprobantePagoUrl ? "Reenviar Comprobante" : "Subir Comprobante de Pago"}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -3480,9 +4038,27 @@ export default function App() {
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={{ color: "#94A3B8", fontSize: 10 }}>Total a Cobrar</Text>
                       <Text style={{ color: "#34D399", fontSize: 20, fontWeight: "900" }}>
-                        ${calcTarifa(encDistanciaKm).toLocaleString()} COP
+                        ${(encValorInicialPropuesto ? Number(encValorInicialPropuesto) : calcTarifa(encDistanciaKm)).toLocaleString()} COP
                       </Text>
                     </View>
+                  </View>
+
+                  {/* Tarifa Inicial Propuesta (Opcional - Negociable) */}
+                  <View style={{ marginTop: 10, padding: 10, backgroundColor: "#1E293B", borderRadius: 10, borderWidth: 1, borderColor: "#334155" }}>
+                    <Text style={{ color: "#93C5FD", fontSize: 11, fontWeight: "bold" }}>
+                      💵 Tarifa Inicial Propuesta (Negociable):
+                    </Text>
+                    <TextInput
+                      style={[styles.textInput, { backgroundColor: "#0F172A", color: "#FFFFFF", borderColor: "#475569", marginTop: 4 }]}
+                      placeholder={`Sugerido: $${calcTarifa(encDistanciaKm).toLocaleString()} COP`}
+                      placeholderTextColor="#64748B"
+                      value={encValorInicialPropuesto}
+                      onChangeText={setEncValorInicialPropuesto}
+                      keyboardType="numeric"
+                    />
+                    <Text style={{ color: "#94A3B8", fontSize: 10, marginTop: 4 }}>
+                      Los repartidores podrán aceptar este valor o proponerte contraofertas.
+                    </Text>
                   </View>
 
                   {/* Casilla de Aceptación Expresa Obligatoria */}
@@ -3494,9 +4070,9 @@ export default function App() {
                       {encTarifaAceptada && <Text style={styles.checkboxCheck}>✓</Text>}
                     </View>
                     <Text style={[styles.checkboxLabel, { flex: 1 }]}>
-                      Acepto expresamente la tarifa calculada de{" "}
+                      Acepto expresamente la tarifa inicial de{" "}
                       <Text style={{ color: "#34D399", fontWeight: "bold" }}>
-                        ${calcTarifa(encDistanciaKm).toLocaleString()} COP
+                        ${(encValorInicialPropuesto ? Number(encValorInicialPropuesto) : calcTarifa(encDistanciaKm)).toLocaleString()} COP
                       </Text>{" "}
                       para el transporte y entrega de esta encomienda.
                     </Text>
@@ -3528,29 +4104,129 @@ export default function App() {
                     <Text style={styles.emptyCardText}>Crea una nueva solicitud para pedir un mensajero urbano.</Text>
                   </View>
                 ) : (
-                  encomiendasCliente.map((enc) => (
-                    <View key={enc.id} style={[styles.kitchenCard, { borderColor: Theme.border }]}>
-                      <View style={styles.orderHeaderRow}>
-                        <Text style={styles.orderNumberTitle}>#ENC-{enc.id}</Text>
-                        <View style={[styles.statusPill, { backgroundColor: enc.estado === "ENTREGADA" ? "#DCFCE7" : "#FEF3C7" }]}>
-                          <Text style={{ color: enc.estado === "ENTREGADA" ? "#166534" : "#92400E", fontSize: 10, fontWeight: "bold" }}>
-                            {enc.estado}
-                          </Text>
+                  encomiendasCliente.map((enc) => {
+                    const isExpanded = expandedEncClienteId === enc.id;
+                    const ofertas = ofertasPorEncomienda[enc.id] || [];
+                    const numOfertas = enc.numeroOfertas || 0;
+
+                    return (
+                      <View key={enc.id} style={[styles.kitchenCard, { borderColor: Theme.border }]}>
+                        <View style={styles.orderHeaderRow}>
+                          <Text style={styles.orderNumberTitle}>#ENC-{enc.id}</Text>
+                          <View style={[styles.statusPill, { 
+                            backgroundColor: enc.estado === "ENTREGADA" ? "#DCFCE7" : enc.estado === "OFERTA" ? "#FEF3C7" : "#EFF6FF" 
+                          }]}>
+                            <Text style={{ 
+                              color: enc.estado === "ENTREGADA" ? "#166534" : enc.estado === "OFERTA" ? "#92400E" : "#1E40AF", 
+                              fontSize: 10, 
+                              fontWeight: "bold" 
+                            }}>
+                              {enc.estado === "OFERTA" ? "CON OFERTAS" : enc.estado}
+                            </Text>
+                          </View>
                         </View>
+
+                        {enc.valorInicial && enc.costoEnvio && enc.valorInicial !== enc.costoEnvio ? (
+                          <View style={{ marginVertical: 2 }}>
+                            <Text style={{ fontSize: 11, color: Theme.textMuted, textDecorationLine: "line-through" }}>
+                              Inicial: ${enc.valorInicial?.toLocaleString()} COP
+                            </Text>
+                            <Text style={[styles.kitchenPrice, { color: Theme.primaryDark }]}>
+                              Pactado: ${enc.costoEnvio?.toLocaleString()} COP
+                            </Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.kitchenPrice}>Costo de envío: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                        )}
+
+                        <Text style={styles.kitchenNotes}>Paquete: {enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
+                        <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
+                          <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>De:</Text> {enc.direccionOrigen}</Text>
+                          <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>A:</Text> {enc.direccionDestino}</Text>
+                        </View>
+                        {enc.domiciliarioNombre && (
+                          <Text style={{ fontSize: 11, color: Theme.primaryDark, fontWeight: "bold", marginTop: 6 }}>
+                            🛵 Domiciliario: {enc.domiciliarioNombre}
+                          </Text>
+                        )}
+
+                        {/* Acordeón de Contraofertas Recibidas */}
+                        {(enc.estado === "PENDIENTE" || enc.estado === "OFERTA" || numOfertas > 0) && (
+                          <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: "#F1F5F9", paddingTop: 8 }}>
+                            <TouchableOpacity
+                              style={[styles.smallActionBtn, { backgroundColor: "#FEF3C7", paddingVertical: 6 }]}
+                              onPress={() => handleToggleOfertasCliente(enc.id)}
+                            >
+                              <Text style={[styles.smallActionText, { color: "#92400E", fontWeight: "bold" }]}>
+                                💬 Contraofertas ({numOfertas}) {isExpanded ? "▲ Ocultar" : "▼ Ver Ofertas"}
+                              </Text>
+                            </TouchableOpacity>
+
+                            {isExpanded && (
+                              <View style={{ marginTop: 8, gap: 6 }}>
+                                {loadingOfertasCliente ? (
+                                  <ActivityIndicator size="small" color={Theme.primary} />
+                                ) : ofertas.length === 0 ? (
+                                  <Text style={[styles.helperText, { textAlign: "center" }]}>
+                                    No hay contraofertas registradas aún.
+                                  </Text>
+                                ) : (
+                                  ofertas.map((of: any) => (
+                                    <View
+                                      key={of.id}
+                                      style={{
+                                        padding: 8,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: of.estado === "ACEPTADA" ? "#86EFAC" : of.estado === "RECHAZADA" ? "#FECDD3" : "#FDE68A",
+                                        backgroundColor: of.estado === "ACEPTADA" ? "#F0FDF4" : of.estado === "RECHAZADA" ? "#FFF1F2" : "#FFFBEB",
+                                      }}
+                                    >
+                                      <View style={styles.rowBetween}>
+                                        <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.text }}>
+                                          {of.domiciliarioNombre || "Domiciliario"}
+                                        </Text>
+                                        <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.primaryDark }}>
+                                          ${of.valor?.toLocaleString()} COP
+                                        </Text>
+                                      </View>
+                                      {of.mensaje ? (
+                                        <Text style={{ fontSize: 11, fontStyle: "italic", color: Theme.textMuted, marginTop: 2 }}>
+                                          "{of.mensaje}"
+                                        </Text>
+                                      ) : null}
+                                      <Text style={{ fontSize: 10, color: Theme.textMuted, marginTop: 2 }}>
+                                        Estado: <Text style={{ fontWeight: "bold" }}>{of.estado}</Text>
+                                      </Text>
+
+                                      {of.estado === "PENDIENTE" && enc.estado !== "ACEPTADA" && (
+                                        <View style={{ flexDirection: "row", gap: 6, marginTop: 6 }}>
+                                          <TouchableOpacity
+                                            style={[styles.smallActionBtn, { flex: 1, backgroundColor: Theme.primary }]}
+                                            onPress={() => handleAceptarOferta(enc.id, of.id)}
+                                            disabled={processingOfertaId === of.id}
+                                          >
+                                            <Text style={styles.smallActionText}>✓ Aceptar</Text>
+                                          </TouchableOpacity>
+                                          <TouchableOpacity
+                                            style={[styles.smallActionBtn, { flex: 1, backgroundColor: Theme.danger }]}
+                                            onPress={() => handleRechazarOferta(enc.id, of.id)}
+                                            disabled={processingOfertaId === of.id}
+                                          >
+                                            <Text style={styles.smallActionText}>✕ Rechazar</Text>
+                                          </TouchableOpacity>
+                                        </View>
+                                      )}
+                                    </View>
+                                  ))
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        )}
                       </View>
-                      <Text style={styles.kitchenPrice}>Costo de envío: ${enc.costoEnvio?.toLocaleString()} COP</Text>
-                      <Text style={styles.kitchenNotes}>Paquete: {enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
-                      <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
-                        <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>De:</Text> {enc.direccionOrigen}</Text>
-                        <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>A:</Text> {enc.direccionDestino}</Text>
-                      </View>
-                      {enc.domiciliarioNombre && (
-                        <Text style={{ fontSize: 11, color: Theme.primaryDark, fontWeight: "bold", marginTop: 6 }}>
-                          🛵 Domiciliario: {enc.domiciliarioNombre}
-                        </Text>
-                      )}
-                    </View>
-                  ))
+                    );
+                  })
                 )}
               </View>
             )}
@@ -3573,6 +4249,46 @@ export default function App() {
                 <Text style={styles.linkAction}>↻ Refrescar</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Alerta de Nuevo Pedido Entrante en Cocina (Fase I) */}
+            {newMobileOrderAlert && (
+              <View
+                style={{
+                  backgroundColor: "#FEF3C7",
+                  borderColor: "#F59E0B",
+                  borderWidth: 1.5,
+                  borderRadius: 14,
+                  padding: 14,
+                  marginTop: 12,
+                  marginBottom: 4,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontWeight: "900", color: "#92400E", fontSize: 15, marginBottom: 2 }}>
+                      🔔 ¡Nuevo Pedido Recibido! #{newMobileOrderAlert.id}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: "#78350F", marginBottom: 2 }}>
+                      Cliente: {newMobileOrderAlert.clienteNombre || "Cliente"} • Total: ${newMobileOrderAlert.total?.toLocaleString("es-CO")}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "#B45309" }}>
+                      Método: {newMobileOrderAlert.metodoPago} • Estado: {newMobileOrderAlert.estado}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setNewMobileOrderAlert(null)}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      backgroundColor: "#FDE68A",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: "#92400E", fontSize: 12 }}>✕ Cerrar</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
 
             {/* Multi-Tiendas y Planes FASTGO */}
             <View
@@ -3985,6 +4701,74 @@ export default function App() {
               </TouchableOpacity>
             </View>
 
+            {/* Alerta de Nueva Entrega Disponible (Fase I) */}
+            {newMobileDeliveryAlert && (
+              <View
+                style={{
+                  backgroundColor: "#ECFDF5",
+                  borderColor: "#10B981",
+                  borderWidth: 1.5,
+                  borderRadius: 14,
+                  padding: 14,
+                  marginTop: 12,
+                  marginBottom: 4,
+                }}
+              >
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontWeight: "900", color: "#065F46", fontSize: 15, marginBottom: 2 }}>
+                      🛵 ¡Nueva Entrega Disponible! #{newMobileDeliveryAlert.id}
+                    </Text>
+                    <Text style={{ fontSize: 13, color: "#047857", marginBottom: 2 }}>
+                      Comercio: {newMobileDeliveryAlert.comercioNombre || "Comercio FastGo"}
+                    </Text>
+                    <Text style={{ fontSize: 12, color: "#059669", marginBottom: 6 }}>
+                      Entrega en: {newMobileDeliveryAlert.destinoDireccion || newMobileDeliveryAlert.direccionTexto || "Dirección de cliente"} • Total: ${newMobileDeliveryAlert.total?.toLocaleString("es-CO")}
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          const id = newMobileDeliveryAlert.id;
+                          setNewMobileDeliveryAlert(null);
+                          tomarPedidoDomiciliario(id);
+                        }}
+                        style={{
+                          backgroundColor: Theme.primary,
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Text style={{ color: "#FFFFFF", fontWeight: "800", fontSize: 12 }}>Tomar Pedido</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setNewMobileDeliveryAlert(null)}
+                        style={{
+                          backgroundColor: "#D1FAE5",
+                          paddingHorizontal: 10,
+                          paddingVertical: 6,
+                          borderRadius: 8,
+                        }}
+                      >
+                        <Text style={{ color: "#065F46", fontWeight: "700", fontSize: 12 }}>Descartar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setNewMobileDeliveryAlert(null)}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      backgroundColor: "#D1FAE5",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Text style={{ fontWeight: "700", color: "#065F46", fontSize: 12 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
             {/* Selector de Tipo de Servicio para Domiciliario */}
             <View style={[styles.authToggleRow, { marginTop: 12 }]}>
               <TouchableOpacity
@@ -4229,27 +5013,98 @@ export default function App() {
                     <View key={enc.id} style={styles.kitchenCard}>
                       <View style={styles.orderHeaderRow}>
                         <Text style={styles.orderNumberTitle}>#ENC-{enc.id}</Text>
-                        <View style={[styles.statusPill, { backgroundColor: "#FEF3C7" }]}>
-                          <Text style={{ color: "#92400E", fontSize: 10, fontWeight: "bold" }}>DISPONIBLE</Text>
+                        <View style={[styles.statusPill, { backgroundColor: enc.estado === "OFERTA" ? "#FEF3C7" : "#DCFCE7" }]}>
+                          <Text style={{ color: enc.estado === "OFERTA" ? "#92400E" : "#166534", fontSize: 10, fontWeight: "bold" }}>
+                            {enc.estado === "OFERTA" ? "EN NEGOCIACIÓN" : "DISPONIBLE"}
+                          </Text>
                         </View>
                       </View>
-                      <Text style={styles.kitchenPrice}>Ganancia del servicio: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                      <Text style={styles.kitchenPrice}>Tarifa Propuesta: ${enc.costoEnvio?.toLocaleString()} COP</Text>
+                      {enc.numeroOfertas > 0 && (
+                        <Text style={{ fontSize: 11, color: "#D97706", fontWeight: "bold", marginTop: 2 }}>
+                          💬 {enc.numeroOfertas} contraoferta(s) activa(s)
+                        </Text>
+                      )}
                       <Text style={styles.kitchenNotes}>{enc.descripcion} ({enc.tamanoPeso || "Estándar"})</Text>
                       <View style={{ marginTop: 6, padding: 8, backgroundColor: "#FFFFFF", borderRadius: 8, borderWidth: 1, borderColor: Theme.border }}>
                         <Text style={{ fontSize: 11, color: Theme.text }}><Text style={{ fontWeight: "bold" }}>Origen:</Text> {enc.direccionOrigen}</Text>
                         <Text style={{ fontSize: 11, color: Theme.text, marginTop: 2 }}><Text style={{ fontWeight: "bold" }}>Destino:</Text> {enc.direccionDestino}</Text>
                       </View>
-                      <TouchableOpacity
-                        style={[styles.solidBtn, { marginTop: 10 }]}
-                        onPress={() => handleTomarEncomienda(enc.id)}
-                      >
-                        <Text style={styles.solidBtnText}>Tomar Encomienda (Atómico)</Text>
-                      </TouchableOpacity>
+                      
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                        <TouchableOpacity
+                          style={[styles.solidBtn, { flex: 1, backgroundColor: "#D97706" }]}
+                          onPress={() => {
+                            setDomiOfertaModalEnc(enc);
+                            setDomiOfertaValor(String(enc.costoEnvio || 2000));
+                            setDomiOfertaMensaje("");
+                          }}
+                        >
+                          <Text style={[styles.solidBtnText, { fontSize: 12 }]}>Contraofertar</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.solidBtn, { flex: 1 }]}
+                          onPress={() => handleTomarEncomienda(enc.id)}
+                        >
+                          <Text style={[styles.solidBtnText, { fontSize: 12 }]}>Aceptar Tarifa</Text>
+                        </TouchableOpacity>
+                      </View>
                     </View>
                   ))
                 )}
               </View>
             )}
+
+            {/* Modal de Contraoferta Domiciliario */}
+            <Modal visible={!!domiOfertaModalEnc} transparent animationType="fade">
+              <View style={styles.modalBackdrop}>
+                <View style={[styles.modalCardContainer, { maxWidth: 400 }]}>
+                  <Text style={styles.modalHeaderTitle}>Enviar Contraoferta</Text>
+                  {domiOfertaModalEnc && (
+                    <Text style={[styles.subtext, { marginBottom: 10 }]}>
+                      #ENC-{domiOfertaModalEnc.id} | Tarifa propuesta: ${domiOfertaModalEnc.costoEnvio?.toLocaleString()} COP
+                    </Text>
+                  )}
+                  <Text style={styles.inputLabel}>Tu Tarifa Propuesta (COP):</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ej. 10000"
+                    placeholderTextColor="#94A3B8"
+                    value={domiOfertaValor}
+                    onChangeText={setDomiOfertaValor}
+                    keyboardType="numeric"
+                  />
+                  <Text style={[styles.inputLabel, { marginTop: 10 }]}>Mensaje para el Cliente (Opcional):</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Ej. Llego en moto en 3 min con cajón seguro"
+                    placeholderTextColor="#94A3B8"
+                    value={domiOfertaMensaje}
+                    onChangeText={setDomiOfertaMensaje}
+                    maxLength={255}
+                  />
+                  <View style={{ flexDirection: "row", gap: 10, marginTop: 16 }}>
+                    <TouchableOpacity
+                      style={[styles.outlineBtn, { flex: 1 }]}
+                      onPress={() => setDomiOfertaModalEnc(null)}
+                    >
+                      <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cancelar</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.solidBtn, { flex: 1, backgroundColor: "#D97706" }]}
+                      onPress={handleCrearOfertaDomi}
+                      disabled={isSubmittingDomiOferta}
+                    >
+                      {isSubmittingDomiOferta ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                      ) : (
+                        <Text style={styles.solidBtnText}>Enviar Oferta</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
         )}
 
@@ -4391,6 +5246,8 @@ export default function App() {
                             backgroundColor:
                               comercioPropio.estado === "ACTIVA"
                                 ? "#D1FAE5"
+                                : comercioPropio.estado === "PENDIENTE_VERIFICACION"
+                                ? "#DBEAFE"
                                 : comercioPropio.estado === "PENDIENTE_ACTIVACION"
                                 ? "#FEF3C7"
                                 : "#FEE2E2",
@@ -4406,12 +5263,18 @@ export default function App() {
                               color:
                                 comercioPropio.estado === "ACTIVA"
                                   ? "#065F46"
+                                  : comercioPropio.estado === "PENDIENTE_VERIFICACION"
+                                  ? "#1E40AF"
                                   : comercioPropio.estado === "PENDIENTE_ACTIVACION"
                                   ? "#92400E"
                                   : "#991B1B",
                             }}
                           >
-                            {comercioPropio.estado || "ACTIVA"}
+                            {comercioPropio.estado === "PENDIENTE_VERIFICACION"
+                              ? "EN REVISIÓN"
+                              : comercioPropio.estado === "SUSPENDIDA_POR_MORA"
+                              ? "MORA"
+                              : comercioPropio.estado || "ACTIVA"}
                           </Text>
                         </View>
                       </View>
@@ -4421,6 +5284,109 @@ export default function App() {
                           ? "Periodo de prueba: 6 meses sin costo ($0 COP), luego $20.000 COP/mes."
                           : "Tarifa de activación: $50.000 COP y suscripción mensual: $30.000 COP."}
                       </Text>
+
+                      {/* Alerta de Vencimiento Próximo (3 días o menos) */}
+                      {Boolean(comercioPropio.alertaVencimiento) && (
+                        <View style={{
+                          backgroundColor: "#FEF3C7",
+                          padding: 10,
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: "#F59E0B",
+                          marginTop: 6,
+                          gap: 3,
+                        }}>
+                          <Text style={{ fontSize: 11, fontWeight: "900", color: "#92400E" }}>
+                            ⚠️ Tu tienda vence en {comercioPropio.diasRestantes ?? 0} {comercioPropio.diasRestantes === 1 ? "día" : "días"}
+                          </Text>
+                          <Text style={{ fontSize: 10, color: "#78350F", lineHeight: 14 }}>
+                            Transfiere a la cuenta oficial de FASTGO y adjunta tu comprobante para evitar la suspensión del servicio.
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Tarjeta de Activación / Pago / Subida de Comprobante cuando no está ACTIVA */}
+                      {comercioPropio.estado !== "ACTIVA" && (
+                        <View style={{
+                          marginTop: 8,
+                          padding: 10,
+                          borderRadius: 10,
+                          backgroundColor: comercioPropio.estado === "RECHAZADA" ? "#FEF2F2" : comercioPropio.estado === "PENDIENTE_VERIFICACION" ? "#EFF6FF" : "#FFFBEB",
+                          borderWidth: 1,
+                          borderColor: comercioPropio.estado === "RECHAZADA" ? "#FECACA" : comercioPropio.estado === "PENDIENTE_VERIFICACION" ? "#BFDBFE" : "#FDE68A",
+                          gap: 6,
+                        }}>
+                          <Text style={{
+                            fontSize: 11,
+                            fontWeight: "900",
+                            color: comercioPropio.estado === "RECHAZADA" ? "#991B1B" : comercioPropio.estado === "PENDIENTE_VERIFICACION" ? "#1E40AF" : "#92400E",
+                          }}>
+                            {comercioPropio.estado === "PENDIENTE_ACTIVACION" && "⏳ Pendiente de Activación"}
+                            {comercioPropio.estado === "PENDIENTE_VERIFICACION" && "🔍 Comprobante en Revisión por FASTGO"}
+                            {comercioPropio.estado === "RECHAZADA" && "❌ Comprobante Rechazado"}
+                            {comercioPropio.estado === "SUSPENDIDA_POR_MORA" && "⛔ Tienda Suspendida por Mora"}
+                            {comercioPropio.estado === "SUSPENDIDA" && "⚠️ Tienda Suspendida"}
+                          </Text>
+
+                          {comercioPropio.estado === "RECHAZADA" && (
+                            <Text style={{ fontSize: 10, color: "#7F1D1D" }}>
+                              Motivo: <Text style={{ fontWeight: "bold" }}>{comercioPropio.motivoRechazoSuscripcion || "Comprobante rechazado por administración"}</Text>.
+                            </Text>
+                          )}
+
+                          {/* Cuenta Bancaria FASTGO */}
+                          {(comercioPropio.bancoNumeroCuenta || subConfig?.bancoNumeroCuenta) && (
+                            <View style={{ backgroundColor: "#FFFFFF", padding: 8, borderRadius: 8, borderWidth: 1, borderColor: "#E2E8F0", gap: 2 }}>
+                              <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.text }}>
+                                🏦 Cuenta Oficial FASTGO para Pago:
+                              </Text>
+                              <Text style={{ fontSize: 9, color: Theme.textMuted }}>
+                                Banco: <Text style={{ fontWeight: "bold", color: Theme.text }}>{comercioPropio.bancoNombre || subConfig?.bancoNombre || "Bancolombia"}</Text> ({comercioPropio.bancoTipoCuenta || subConfig?.bancoTipoCuenta || "Ahorros"})
+                              </Text>
+                              <Text style={{ fontSize: 9, color: Theme.textMuted }}>
+                                Cuenta: <Text style={{ fontWeight: "bold", color: Theme.primaryDark }}>{comercioPropio.bancoNumeroCuenta || subConfig?.bancoNumeroCuenta}</Text>
+                              </Text>
+                              <Text style={{ fontSize: 9, color: Theme.textMuted }}>
+                                Titular: <Text style={{ fontWeight: "bold", color: Theme.text }}>{comercioPropio.bancoTitular || subConfig?.bancoTitular || "FastGo S.A.S."}</Text>
+                              </Text>
+                              <Text style={{ fontSize: 9, color: Theme.textMuted }}>
+                                NIT: <Text style={{ fontWeight: "bold", color: Theme.text }}>{comercioPropio.bancoDocumento || subConfig?.bancoDocumento || "NIT 901.888.777-1"}</Text>
+                              </Text>
+                              {(comercioPropio.instruccionesPago || subConfig?.instruccionesPago) && (
+                                <Text style={{ fontSize: 8, color: "#64748B", fontStyle: "italic", marginTop: 2 }}>
+                                  💡 {comercioPropio.instruccionesPago || subConfig?.instruccionesPago}
+                                </Text>
+                              )}
+                            </View>
+                          )}
+
+                          {/* Botón Subir Comprobante */}
+                          {comercioPropio.estado !== "PENDIENTE_VERIFICACION" && (
+                            <TouchableOpacity
+                              style={[styles.solidBtn, { backgroundColor: Theme.primary, paddingVertical: 8, marginTop: 4 }]}
+                              onPress={handleUploadSubscriptionProofMobile}
+                              disabled={isUploadingSubProof}
+                            >
+                              {isUploadingSubProof ? (
+                                <ActivityIndicator color="#FFF" size="small" />
+                              ) : (
+                                <Text style={[styles.solidBtnText, { fontSize: 11 }]}>📎 Subir Comprobante de Pago</Text>
+                              )}
+                            </TouchableOpacity>
+                          )}
+
+                          {comercioPropio.comprobanteSuscripcionUrl && (
+                            <TouchableOpacity
+                              onPress={() => setViewingReceiptUrl(comercioPropio.comprobanteSuscripcionUrl)}
+                              style={{ alignSelf: "flex-start", paddingVertical: 2 }}
+                            >
+                              <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.info, textDecorationLine: "underline" }}>
+                                👁️ Ver Comprobante Enviado
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -5112,38 +6078,76 @@ export default function App() {
       )}
 
       {/* MODAL VISOR DE COMPROBANTE DE PAGO */}
-      {viewingReceiptUrl && (
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCardContainer, { padding: 16, maxHeight: "90%" }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
-                🧾 Comprobante de Transferencia
-              </Text>
-              <TouchableOpacity onPress={() => setViewingReceiptUrl(null)} style={{ padding: 4 }}>
-                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+      {viewingReceiptUrl && (() => {
+        let fullReceiptUrl = resolveMediaUrl(viewingReceiptUrl) || "";
+        if (token && !fullReceiptUrl.includes("token=")) {
+          fullReceiptUrl += (fullReceiptUrl.includes("?") ? "&" : "?") + `token=${encodeURIComponent(token)}`;
+        }
+        const isPdf = viewingReceiptUrl.toLowerCase().includes(".pdf");
+
+        return (
+          <View style={styles.modalBackdrop}>
+            <View style={[styles.modalCardContainer, { padding: 16, maxHeight: "90%" }]}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <Text style={{ fontSize: 15, fontWeight: "900", color: Theme.text }}>
+                  🧾 Comprobante de Pago
+                </Text>
+                <TouchableOpacity onPress={() => setViewingReceiptUrl(null)} style={{ padding: 4 }}>
+                  <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {isPdf ? (
+                <View style={{ padding: 24, alignItems: "center", justifyContent: "center", backgroundColor: "#F8FAFC", borderRadius: 12, borderWidth: 1, borderColor: Theme.border, gap: 10 }}>
+                  <Text style={{ fontSize: 44 }}>📄</Text>
+                  <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text, textAlign: "center" }}>
+                    Comprobante en formato PDF
+                  </Text>
+                  <Text style={{ fontSize: 11, color: Theme.textMuted, textAlign: "center" }}>
+                    Puedes abrir el documento PDF con el visor de tu dispositivo.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.solidBtn, { paddingHorizontal: 16, paddingVertical: 10, marginTop: 4 }]}
+                    onPress={() => Linking.openURL(fullReceiptUrl).catch(() => Alert.alert("Error", "No se pudo abrir el archivo PDF."))}
+                  >
+                    <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 12 }}>
+                      Abrir PDF en Visor Externo
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View>
+                  <View style={{ borderRadius: 12, overflow: "hidden", backgroundColor: "#000000", alignItems: "center", justifyContent: "center" }}>
+                    <Image
+                      source={{
+                        uri: fullReceiptUrl,
+                        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                      }}
+                      style={{ width: "100%", height: 350 }}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={{ marginTop: 8, alignItems: "center" }}
+                    onPress={() => Linking.openURL(fullReceiptUrl).catch(() => Alert.alert("Error", "No se pudo abrir la imagen."))}
+                  >
+                    <Text style={{ color: Theme.primary, fontSize: 11, fontWeight: "bold" }}>
+                      🔍 Abrir imagen en visor del sistema
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.outlineBtn, { marginTop: 14 }]}
+                onPress={() => setViewingReceiptUrl(null)}
+              >
+                <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cerrar Visor</Text>
               </TouchableOpacity>
             </View>
-
-            <View style={{ borderRadius: 12, overflow: "hidden", backgroundColor: "#000000", alignItems: "center", justifyContent: "center" }}>
-              <Image
-                source={{
-                  uri: resolveMediaUrl(viewingReceiptUrl) || "",
-                  headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                }}
-                style={{ width: "100%", height: 350 }}
-                resizeMode="contain"
-              />
-            </View>
-
-            <TouchableOpacity
-              style={[styles.outlineBtn, { marginTop: 14 }]}
-              onPress={() => setViewingReceiptUrl(null)}
-            >
-              <Text style={{ color: Theme.text, fontWeight: "bold" }}>Cerrar Visor</Text>
-            </TouchableOpacity>
           </View>
-        </View>
-      )}
+        );
+      })()}
 
       {/* MODAL SELECTOR DE TIENDAS (MIS TIENDAS) */}
       {showStoreSwitcherModal && (

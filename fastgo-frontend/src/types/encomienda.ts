@@ -1,10 +1,35 @@
 export type EstadoEncomienda = 
   | 'PENDIENTE' 
+  | 'OFERTA'
   | 'ACEPTADA' 
   | 'EN_RECOGIDA' 
   | 'EN_CAMINO' 
   | 'ENTREGADA' 
   | 'CANCELADA';
+
+export type EstadoOfertaEncomienda =
+  | 'PENDIENTE'
+  | 'ACEPTADA'
+  | 'RECHAZADA'
+  | 'CANCELADA';
+
+export interface OfertaEncomienda {
+  id: number;
+  encomiendaId: number;
+  domiciliarioId: number;
+  domiciliarioNombre?: string;
+  domiciliarioTelefono?: string;
+  valor: number;
+  mensaje?: string;
+  estado: EstadoOfertaEncomienda;
+  creadoEn: string;
+  actualizadoEn?: string;
+}
+
+export interface CrearOfertaRequest {
+  valor: number;
+  mensaje?: string;
+}
 
 export interface Encomienda {
   id: number;
@@ -23,6 +48,9 @@ export interface Encomienda {
   tamanoPeso?: string;
   distanciaKm?: number;
   costoEnvio?: number;
+  valorInicial?: number;
+  numeroOfertas?: number;
+  ofertas?: OfertaEncomienda[];
   tarifaAceptada?: boolean;
   domiciliarioId?: number;
   domiciliarioNombre?: string;

@@ -159,12 +159,25 @@ public class AnalyticsService {
         response.setFechaFin(now.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
         response.setZonaHoraria(COLOMBIA_ZONE.getId());
 
-        // Embudo de conversión seguro (sin NaN ni Infinity)
+        AnalyticsMetricsResponseDTO.ResumenDTO resumen = new AnalyticsMetricsResponseDTO.ResumenDTO(
+                totalVisitas,
+                downloadPageViews,
+                descargas,
+                appFirstOpen,
+                registros,
+                pedidos,
+                entregas
+        );
+        response.setResumen(resumen);
+
+        // Embudo de conversión seguro de 6 pasos según Sección 31 del Prompt Maestro
         List<AnalyticsMetricsResponseDTO.EmbudoPasoDTO> embudo = new ArrayList<>();
         long paso1 = totalVisitas;
-        long paso2 = registros;
-        long paso3 = pedidos;
-        long paso4 = entregas;
+        long paso2 = descargas;
+        long paso3 = appFirstOpen;
+        long paso4 = registros;
+        long paso5 = pedidos;
+        long paso6 = entregas;
 
         embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
                 "Visitas",
@@ -173,22 +186,34 @@ public class AnalyticsService {
                 100.0
         ));
         embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
-                "Registros",
+                "Descargas APK",
                 paso2,
                 calcularPorcentaje(paso2, paso1),
                 calcularPorcentaje(paso2, paso1)
         ));
         embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
-                "Pedidos Creados",
+                "Primer Inicio App",
                 paso3,
                 calcularPorcentaje(paso3, paso2),
                 calcularPorcentaje(paso3, paso1)
         ));
         embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
-                "Pedidos Entregados",
+                "Registros",
                 paso4,
-                calcularPorcentaje(paso4, paso3),
+                calcularPorcentaje(paso4, paso3 > 0 ? paso3 : paso1),
                 calcularPorcentaje(paso4, paso1)
+        ));
+        embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
+                "Pedidos Creados",
+                paso5,
+                calcularPorcentaje(paso5, paso4),
+                calcularPorcentaje(paso5, paso1)
+        ));
+        embudo.add(new AnalyticsMetricsResponseDTO.EmbudoPasoDTO(
+                "Pedidos Entregados",
+                paso6,
+                calcularPorcentaje(paso6, paso5),
+                calcularPorcentaje(paso6, paso1)
         ));
         response.setEmbudo(embudo);
 
@@ -198,9 +223,10 @@ public class AnalyticsService {
             Map<String, Long> m = entry.getValue();
             long v = m.getOrDefault("PAGE_VIEW", 0L) + m.getOrDefault("DOWNLOAD_PAGE_VIEW", 0L);
             long d = m.getOrDefault("APK_DOWNLOAD", 0L);
+            long a = m.getOrDefault("APP_FIRST_OPEN", 0L);
             long r = m.getOrDefault("REGISTER", 0L);
             long p = m.getOrDefault("ORDER_CREATED", 0L);
-            tendencias.add(new AnalyticsMetricsResponseDTO.TendenciaDiariaDTO(entry.getKey(), v, d, r, p));
+            tendencias.add(new AnalyticsMetricsResponseDTO.TendenciaDiariaDTO(entry.getKey(), v, d, a, r, p));
         }
         response.setTendencias(tendencias);
 

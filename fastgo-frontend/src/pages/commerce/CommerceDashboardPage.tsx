@@ -13,6 +13,7 @@ import {
   Eye,
   EyeOff,
   Power,
+  Bell,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { sucursalService } from '../../services/sucursalService';
@@ -64,6 +65,18 @@ export const CommerceDashboardPage: React.FC = () => {
       setIsLoading(false);
     }
   }, [selectedStore, isStoresLoading, stores.length]);
+
+  // Polling automático en segundo plano cada 12 segundos para mantener contadores actualizados
+  useEffect(() => {
+    if (!activeBranch) return;
+    const interval = setInterval(() => {
+      pedidoService
+        .listBySucursal(activeBranch.id)
+        .then((ords) => setOrders(ords))
+        .catch(() => {});
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [activeBranch]);
 
   const handleTogglePause = async () => {
     if (!activeCommerce) return;
@@ -130,6 +143,30 @@ export const CommerceDashboardPage: React.FC = () => {
 
       {/* Multi-Store Switcher */}
       <StoreSwitcher />
+
+      {/* Alerta de pedidos pendientes en cocina */}
+      {activeCommerce && pendingCount > 0 && (
+        <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="bg-emerald-600 text-white p-2.5 rounded-xl shrink-0">
+              <Bell className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-black text-emerald-950">
+                Tienes {pendingCount} pedido{pendingCount > 1 ? 's' : ''} pendiente{pendingCount > 1 ? 's' : ''} esperando en cocina
+              </p>
+              <p className="text-xs text-emerald-700">
+                Revisa clientes, empaca productos y despacha a domiciliarios para evitar demoras.
+              </p>
+            </div>
+          </div>
+          <Link to={APP_ROUTES.COMMERCE_ORDERS} className="shrink-0">
+            <Button size="sm" variant="primary">
+              Atender Cocina ({pendingCount})
+            </Button>
+          </Link>
+        </div>
+      )}
 
       {/* When commerce is not yet configured: Onboarding Wizard Banner */}
       {!activeCommerce ? (

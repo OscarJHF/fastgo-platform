@@ -99,6 +99,9 @@ public class Comercio {
     @Column(name = "municipio_id")
     private Integer municipioId;
 
+    @Column(name = "destacado")
+    private Boolean destacado;
+
     public Comercio() {
     }
 
@@ -111,6 +114,10 @@ public class Comercio {
 
         if (activo == null) {
             activo = true;
+        }
+
+        if (destacado == null) {
+            destacado = false;
         }
 
         if (esPrincipal == null) {
@@ -473,5 +480,13 @@ public class Comercio {
 
     public void setMunicipioId(Integer municipioId) {
         this.municipioId = municipioId;
+    }
+
+    public Boolean getDestacado() {
+        return destacado != null ? destacado : false;
+    }
+
+    public void setDestacado(Boolean destacado) {
+        this.destacado = destacado;
     }
 }

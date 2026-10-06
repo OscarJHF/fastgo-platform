@@ -3,12 +3,16 @@ package com.fastgo.controller;
 import com.fastgo.dto.AdminTiendaResponseDTO;
 import com.fastgo.dto.AuditoriaAdminResponseDTO;
 import com.fastgo.dto.ConfiguracionSuscripcionDTO;
+import com.fastgo.dto.SuscripcionResponseDTO;
 import com.fastgo.entity.AuditoriaAdmin;
 import com.fastgo.repository.AuditoriaAdminRepository;
 import com.fastgo.service.ComercioService;
 import com.fastgo.service.SuscripcionService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -49,6 +53,15 @@ public class AdminController {
             @RequestBody(required = false) Map<String, String> body) {
         String razon = body != null ? body.get("razon") : null;
         return ResponseEntity.ok(comercioService.activarTiendaAdmin(id, razon));
+    }
+
+    @PutMapping("/tiendas/{id}/destacado")
+    public ResponseEntity<AdminTiendaResponseDTO> cambiarDestacadoTienda(
+            @PathVariable @Positive Integer id,
+            @RequestBody Map<String, Object> body) {
+        Boolean destacado = body != null && body.containsKey("destacado") ? (Boolean) body.get("destacado") : null;
+        String razon = body != null && body.containsKey("razon") ? (String) body.get("razon") : null;
+        return ResponseEntity.ok(comercioService.cambiarDestacadoAdmin(id, destacado, razon));
     }
 
     @PutMapping("/tiendas/{id}/desactivar")
@@ -145,6 +158,42 @@ public class AdminController {
             Authentication authentication) {
         String adminCorreo = authentication != null ? authentication.getName() : "ADMIN";
         return ResponseEntity.ok(suscripcionService.actualizarConfiguracion(datos, adminCorreo));
+    }
+
+    @GetMapping("/suscripciones/pendientes")
+    public ResponseEntity<List<SuscripcionResponseDTO>> listarSuscripcionesPendientes() {
+        return ResponseEntity.ok(suscripcionService.listarPendientesVerificacion());
+    }
+
+    @PostMapping("/suscripciones/{id}/aprobar")
+    public ResponseEntity<SuscripcionResponseDTO> aprobarSuscripcion(
+            @PathVariable @Positive Integer id,
+            Authentication authentication) {
+        String adminCorreo = authentication != null ? authentication.getName() : "ADMIN";
+        return ResponseEntity.ok(suscripcionService.aprobarSuscripcionAdmin(id, adminCorreo));
+    }
+
+    @PostMapping("/suscripciones/{id}/rechazar")
+    public ResponseEntity<SuscripcionResponseDTO> rechazarSuscripcion(
+            @PathVariable @Positive Integer id,
+            @RequestBody(required = false) Map<String, String> body,
+            Authentication authentication) {
+        String adminCorreo = authentication != null ? authentication.getName() : "ADMIN";
+        String motivo = body != null ? body.get("motivo") : null;
+        return ResponseEntity.ok(suscripcionService.rechazarSuscripcionAdmin(id, motivo, adminCorreo));
+    }
+
+    @GetMapping("/suscripciones/{id}/comprobante")
+    public ResponseEntity<Resource> verComprobanteSuscripcionAdmin(
+            @PathVariable @Positive Integer id) {
+        Resource resource = suscripcionService.cargarComprobantePorSuscripcion(id);
+        MediaType mediaType = suscripcionService.obtenerMediaTypeComprobantePorSuscripcion(id);
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"comprobante_suscripcion_admin_" + id + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                .body(resource);
     }
 
     @GetMapping("/auditoria")

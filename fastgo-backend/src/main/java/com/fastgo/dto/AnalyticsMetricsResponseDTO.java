@@ -17,11 +17,50 @@ public class AnalyticsMetricsResponseDTO {
     private String fechaFin;
     private String zonaHoraria;
 
+    private ResumenDTO resumen;
     private List<EmbudoPasoDTO> embudo;
     private List<TendenciaDiariaDTO> tendencias;
     private List<FuenteTraficoDTO> fuentes;
 
     public AnalyticsMetricsResponseDTO() {
+    }
+
+    public static class ResumenDTO {
+        private long totalVisitas;
+        private long visitasDescarga;
+        private long descargasApk;
+        private long primerasAperturasApp;
+        private long registros;
+        private long pedidosCreados;
+        private long pedidosEntregados;
+
+        public ResumenDTO() {}
+
+        public ResumenDTO(long totalVisitas, long visitasDescarga, long descargasApk,
+                          long primerasAperturasApp, long registros, long pedidosCreados, long pedidosEntregados) {
+            this.totalVisitas = totalVisitas;
+            this.visitasDescarga = visitasDescarga;
+            this.descargasApk = descargasApk;
+            this.primerasAperturasApp = primerasAperturasApp;
+            this.registros = registros;
+            this.pedidosCreados = pedidosCreados;
+            this.pedidosEntregados = pedidosEntregados;
+        }
+
+        public long getTotalVisitas() { return totalVisitas; }
+        public void setTotalVisitas(long totalVisitas) { this.totalVisitas = totalVisitas; }
+        public long getVisitasDescarga() { return visitasDescarga; }
+        public void setVisitasDescarga(long visitasDescarga) { this.visitasDescarga = visitasDescarga; }
+        public long getDescargasApk() { return descargasApk; }
+        public void setDescargasApk(long descargasApk) { this.descargasApk = descargasApk; }
+        public long getPrimerasAperturasApp() { return primerasAperturasApp; }
+        public void setPrimerasAperturasApp(long primerasAperturasApp) { this.primerasAperturasApp = primerasAperturasApp; }
+        public long getRegistros() { return registros; }
+        public void setRegistros(long registros) { this.registros = registros; }
+        public long getPedidosCreados() { return pedidosCreados; }
+        public void setPedidosCreados(long pedidosCreados) { this.pedidosCreados = pedidosCreados; }
+        public long getPedidosEntregados() { return pedidosEntregados; }
+        public void setPedidosEntregados(long pedidosEntregados) { this.pedidosEntregados = pedidosEntregados; }
     }
 
     public static class EmbudoPasoDTO {
@@ -37,37 +76,57 @@ public class AnalyticsMetricsResponseDTO {
             this.tasaPasoAnterior = tasaPasoAnterior;
             this.tasaGlobal = tasaGlobal;
         }
+
         public String getEtapa() { return etapa; }
         public void setEtapa(String etapa) { this.etapa = etapa; }
+
         public long getConteo() { return conteo; }
         public void setConteo(long conteo) { this.conteo = conteo; }
+
+        public long getCantidad() { return conteo; }
+        public void setCantidad(long cantidad) { this.conteo = cantidad; }
+
         public double getTasaPasoAnterior() { return tasaPasoAnterior; }
         public void setTasaPasoAnterior(double tasaPasoAnterior) { this.tasaPasoAnterior = tasaPasoAnterior; }
+
         public double getTasaGlobal() { return tasaGlobal; }
         public void setTasaGlobal(double tasaGlobal) { this.tasaGlobal = tasaGlobal; }
+
+        public double getTasaConversion() { return tasaGlobal; }
+        public void setTasaConversion(double tasaConversion) { this.tasaGlobal = tasaConversion; }
     }
 
     public static class TendenciaDiariaDTO {
         private String fecha;
         private long visitas;
         private long descargas;
+        private long primerasAperturas;
         private long registros;
         private long pedidos;
 
         public TendenciaDiariaDTO() {}
-        public TendenciaDiariaDTO(String fecha, long visitas, long descargas, long registros, long pedidos) {
+
+        public TendenciaDiariaDTO(String fecha, long visitas, long descargas, long primerasAperturas, long registros, long pedidos) {
             this.fecha = fecha;
             this.visitas = visitas;
             this.descargas = descargas;
+            this.primerasAperturas = primerasAperturas;
             this.registros = registros;
             this.pedidos = pedidos;
         }
+
+        public TendenciaDiariaDTO(String fecha, long visitas, long descargas, long registros, long pedidos) {
+            this(fecha, visitas, descargas, 0L, registros, pedidos);
+        }
+
         public String getFecha() { return fecha; }
         public void setFecha(String fecha) { this.fecha = fecha; }
         public long getVisitas() { return visitas; }
         public void setVisitas(long visitas) { this.visitas = visitas; }
         public long getDescargas() { return descargas; }
         public void setDescargas(long descargas) { this.descargas = descargas; }
+        public long getPrimerasAperturas() { return primerasAperturas; }
+        public void setPrimerasAperturas(long primerasAperturas) { this.primerasAperturas = primerasAperturas; }
         public long getRegistros() { return registros; }
         public void setRegistros(long registros) { this.registros = registros; }
         public long getPedidos() { return pedidos; }
@@ -87,8 +146,16 @@ public class AnalyticsMetricsResponseDTO {
         }
         public String getFuente() { return fuente; }
         public void setFuente(String fuente) { this.fuente = fuente; }
+
+        public String getOrigen() { return fuente; }
+        public void setOrigen(String origen) { this.fuente = origen; }
+
         public long getConteo() { return conteo; }
         public void setConteo(long conteo) { this.conteo = conteo; }
+
+        public long getCantidad() { return conteo; }
+        public void setCantidad(long cantidad) { this.conteo = cantidad; }
+
         public double getPorcentaje() { return porcentaje; }
         public void setPorcentaje(double porcentaje) { this.porcentaje = porcentaje; }
     }
@@ -117,10 +184,18 @@ public class AnalyticsMetricsResponseDTO {
     public String getZonaHoraria() { return zonaHoraria; }
     public void setZonaHoraria(String zonaHoraria) { this.zonaHoraria = zonaHoraria; }
 
+    public ResumenDTO getResumen() { return resumen; }
+    public void setResumen(ResumenDTO resumen) { this.resumen = resumen; }
+
     public List<EmbudoPasoDTO> getEmbudo() { return embudo; }
     public void setEmbudo(List<EmbudoPasoDTO> embudo) { this.embudo = embudo; }
+
     public List<TendenciaDiariaDTO> getTendencias() { return tendencias; }
     public void setTendencias(List<TendenciaDiariaDTO> tendencias) { this.tendencias = tendencias; }
+
     public List<FuenteTraficoDTO> getFuentes() { return fuentes; }
     public void setFuentes(List<FuenteTraficoDTO> fuentes) { this.fuentes = fuentes; }
+
+    public List<FuenteTraficoDTO> getFuentesTrafico() { return fuentes; }
+    public void setFuentesTrafico(List<FuenteTraficoDTO> fuentesTrafico) { this.fuentes = fuentesTrafico; }
 }

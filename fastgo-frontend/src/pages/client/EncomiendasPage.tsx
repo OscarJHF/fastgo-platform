@@ -13,7 +13,12 @@ import {
   Plus, 
   Send, 
   X,
-  FileText
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
+  Check,
+  MessageSquare
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -25,7 +30,7 @@ import { Spinner } from '../../components/common/Spinner';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { encomiendaService } from '../../services/encomiendaService';
 import { tarifaService } from '../../services/tarifaService';
-import { Encomienda, EstadoEncomienda, TarifaResponse } from '../../types';
+import { Encomienda, EstadoEncomienda, TarifaResponse, OfertaEncomienda } from '../../types';
 import { parseApiError } from '../../utils/errorHandler';
 
 export const EncomiendasPage: React.FC = () => {
@@ -36,6 +41,13 @@ export const EncomiendasPage: React.FC = () => {
   const [encomiendas, setEncomiendas] = useState<Encomienda[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Negotiation & Offers state
+  const [ofertasMap, setOfertasMap] = useState<Record<number, OfertaEncomienda[]>>({});
+  const [loadingOfertas, setLoadingOfertas] = useState<Record<number, boolean>>({});
+  const [expandedEncId, setExpandedEncId] = useState<number | null>(null);
+  const [processingOfertaId, setProcessingOfertaId] = useState<number | null>(null);
+  const [costoEnvioPropuesto, setCostoEnvioPropuesto] = useState<number | ''>('');
 
   // Form State
   const [remitenteNombre, setRemitenteNombre] = useState('');
@@ -82,6 +94,13 @@ export const EncomiendasPage: React.FC = () => {
     calcular();
   }, [distanciaKm]);
 
+  // Sincronizar costo propuesto con la tarifa calculada por defecto
+  useEffect(() => {
+    if (tarifaInfo?.costoEnvio) {
+      setCostoEnvioPropuesto(tarifaInfo.costoEnvio);
+    }
+  }, [tarifaInfo]);
+
   // Cargar lista de encomiendas
   const loadEncomiendas = async () => {
     if (!isAuthenticated) return;
@@ -109,6 +128,10 @@ export const EncomiendasPage: React.FC = () => {
       return;
     }
 
+    const valorFinal = typeof costoEnvioPropuesto === 'number' && costoEnvioPropuesto > 0 
+      ? costoEnvioPropuesto 
+      : (tarifaInfo?.costoEnvio || 2000);
+
     setSubmitting(true);
     try {
       const nueva = await encomiendaService.crear({
@@ -121,7 +144,7 @@ export const EncomiendasPage: React.FC = () => {
         descripcion,
         tamanoPeso,
         distanciaKm,
-        costoEnvio: tarifaInfo?.costoEnvio || 2000,
+        costoEnvio: valorFinal,
         tarifaAceptada: true,
         observaciones,
       });
@@ -151,10 +174,62 @@ export const EncomiendasPage: React.FC = () => {
     }
   };
 
+  const toggleVerOfertas = async (encId: number) => {
+    if (expandedEncId === encId) {
+      setExpandedEncId(null);
+      return;
+    }
+    setExpandedEncId(encId);
+    setLoadingOfertas(prev => ({ ...prev, [encId]: true }));
+    try {
+      const ofertas = await encomiendaService.listarOfertas(encId);
+      setOfertasMap(prev => ({ ...prev, [encId]: ofertas }));
+    } catch (err) {
+      console.error(err);
+      showError('No se pudieron cargar las ofertas recibidas');
+    } finally {
+      setLoadingOfertas(prev => ({ ...prev, [encId]: false }));
+    }
+  };
+
+  const handleAceptarOferta = async (encId: number, ofertaId: number) => {
+    setProcessingOfertaId(ofertaId);
+    try {
+      await encomiendaService.aceptarOferta(encId, ofertaId);
+      success('¡Oferta aceptada! El repartidor ha sido asignado a tu envío.');
+      await loadEncomiendas();
+      const ofertas = await encomiendaService.listarOfertas(encId);
+      setOfertasMap(prev => ({ ...prev, [encId]: ofertas }));
+    } catch (err) {
+      const parsed = parseApiError(err);
+      showError(parsed.message || 'Error al aceptar la oferta');
+    } finally {
+      setProcessingOfertaId(null);
+    }
+  };
+
+  const handleRechazarOferta = async (encId: number, ofertaId: number) => {
+    setProcessingOfertaId(ofertaId);
+    try {
+      await encomiendaService.rechazarOferta(encId, ofertaId);
+      success('Oferta rechazada.');
+      const ofertas = await encomiendaService.listarOfertas(encId);
+      setOfertasMap(prev => ({ ...prev, [encId]: ofertas }));
+      await loadEncomiendas();
+    } catch (err) {
+      const parsed = parseApiError(err);
+      showError(parsed.message || 'Error al rechazar la oferta');
+    } finally {
+      setProcessingOfertaId(null);
+    }
+  };
+
   const getStatusBadge = (estado: EstadoEncomienda) => {
     switch (estado) {
       case 'PENDIENTE':
-        return <Badge variant="warning">Pendiente de Domiciliario</Badge>;
+        return <Badge variant="warning">Esperando Domiciliario</Badge>;
+      case 'OFERTA':
+        return <Badge variant="warning">Con Contraofertas</Badge>;
       case 'ACEPTADA':
         return <Badge variant="info">Domiciliario Asignado</Badge>;
       case 'EN_RECOGIDA':
@@ -378,7 +453,7 @@ export const EncomiendasPage: React.FC = () => {
               <div className="text-right">
                 <span className="text-xs text-slate-400 block">Total a Pagar</span>
                 <span className="text-3xl font-black text-emerald-400 tracking-tight">
-                  {formatCurrency(tarifaInfo?.costoEnvio || 2000)}
+                  {formatCurrency(costoEnvioPropuesto || tarifaInfo?.costoEnvio || 2000)}
                 </span>
               </div>
             </div>
@@ -390,6 +465,31 @@ export const EncomiendasPage: React.FC = () => {
               <span className="text-emerald-300 font-bold">100% Para el Domiciliario</span>
             </div>
 
+            {/* Campo para negociar / ajustar tarifa inicial propuesta */}
+            <div className="bg-slate-800/90 p-4 rounded-2xl border border-slate-700 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                  Tarifa Inicial Propuesta (Negociable)
+                </label>
+                <span className="text-[11px] text-slate-400">
+                  Mínimo sugerido: {formatCurrency(tarifaInfo?.costoEnvio || 2000)}
+                </span>
+              </div>
+              <input
+                type="number"
+                min={tarifaInfo?.costoEnvio || 2000}
+                step={500}
+                value={costoEnvioPropuesto}
+                onChange={(e) => setCostoEnvioPropuesto(e.target.value === '' ? '' : Number(e.target.value))}
+                placeholder={String(tarifaInfo?.costoEnvio || 2000)}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+              />
+              <p className="text-[11px] text-slate-400">
+                Los repartidores podrán aceptar este valor directamente o enviarte contraofertas que podrás revisar antes de aceptar.
+              </p>
+            </div>
+
             {/* Checkbox de Aceptación Expresa Requerida */}
             <label className="flex items-start gap-3 p-3.5 rounded-2xl bg-emerald-950/40 border border-emerald-800/50 cursor-pointer hover:bg-emerald-950/60 transition-colors">
               <input
@@ -399,9 +499,9 @@ export const EncomiendasPage: React.FC = () => {
                 className="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-gray-300"
               />
               <span className="text-xs text-emerald-100 font-medium leading-relaxed">
-                Acepto expresamente la tarifa calculada de{' '}
+                Acepto expresamente la tarifa inicial propuesta de{' '}
                 <strong className="text-emerald-400 font-black">
-                  {formatCurrency(tarifaInfo?.costoEnvio || 2000)}
+                  {formatCurrency(costoEnvioPropuesto || tarifaInfo?.costoEnvio || 2000)}
                 </strong>{' '}
                 para el transporte y entrega de esta encomienda.
               </span>
@@ -439,90 +539,236 @@ export const EncomiendasPage: React.FC = () => {
               </Button>
             </div>
           ) : (
-            encomiendas.map((enc) => (
-              <Card key={enc.id} className="space-y-4 border-gray-200">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-black text-emerald-700 text-sm">
-                        #ENC-{enc.id}
+            encomiendas.map((enc) => {
+              const ofertas = ofertasMap[enc.id] || [];
+              const isExpanded = expandedEncId === enc.id;
+              const isLoadingOf = loadingOfertas[enc.id];
+              const numOfertas = enc.numeroOfertas || 0;
+
+              return (
+                <Card key={enc.id} className="space-y-4 border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-black text-emerald-700 text-sm">
+                          #ENC-{enc.id}
+                        </span>
+                        {getStatusBadge(enc.estado)}
+                        {numOfertas > 0 && enc.estado !== 'ENTREGADA' && enc.estado !== 'CANCELADA' && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                            {numOfertas} {numOfertas === 1 ? 'oferta' : 'ofertas'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-gray-400 mt-0.5 block">
+                        Creado el {formatDate(enc.creadoEn)}
                       </span>
-                      {getStatusBadge(enc.estado)}
                     </div>
-                    <span className="text-[11px] text-gray-400 mt-0.5 block">
-                      Creado el {formatDate(enc.creadoEn)}
-                    </span>
+
+                    <div className="text-right">
+                      {enc.valorInicial && enc.costoEnvio && enc.valorInicial !== enc.costoEnvio ? (
+                        <div>
+                          <span className="text-[10px] text-gray-400 line-through block">
+                            Inicial: {formatCurrency(enc.valorInicial)}
+                          </span>
+                          <span className="text-xs text-emerald-600 font-bold block">Pactado Final:</span>
+                          <span className="text-lg font-black text-emerald-700">
+                            {formatCurrency(enc.costoEnvio)}
+                          </span>
+                        </div>
+                      ) : (
+                        <div>
+                          <span className="text-xs text-gray-400 block">Costo de Envío</span>
+                          <span className="text-lg font-black text-gray-900">
+                            {formatCurrency(enc.costoEnvio || 2000)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-xs text-gray-400 block">Costo de Envío</span>
-                    <span className="text-lg font-black text-gray-900">
-                      {formatCurrency(enc.costoEnvio || 2000)}
-                    </span>
+                  {/* Ruta */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-gray-50/70 p-3.5 rounded-2xl">
+                    <div>
+                      <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                        Recogida:
+                      </span>
+                      <p className="font-bold text-gray-900 mt-0.5">{enc.direccionOrigen}</p>
+                      <p className="text-gray-600 text-[11px]">
+                        {enc.remitenteNombre} ({enc.remitenteTelefono})
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 block font-semibold text-[10px] uppercase">
+                        Entrega:
+                      </span>
+                      <p className="font-bold text-gray-900 mt-0.5">{enc.direccionDestino}</p>
+                      <p className="text-gray-600 text-[11px]">
+                        {enc.destinatarioNombre} ({enc.destinatarioTelefono})
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Ruta */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs bg-gray-50/70 p-3.5 rounded-2xl">
-                  <div>
-                    <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                      Recogida:
-                    </span>
-                    <p className="font-bold text-gray-900 mt-0.5">{enc.direccionOrigen}</p>
-                    <p className="text-gray-600 text-[11px]">
-                      {enc.remitenteNombre} ({enc.remitenteTelefono})
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block font-semibold text-[10px] uppercase">
-                      Entrega:
-                    </span>
-                    <p className="font-bold text-gray-900 mt-0.5">{enc.direccionDestino}</p>
-                    <p className="text-gray-600 text-[11px]">
-                      {enc.destinatarioNombre} ({enc.destinatarioTelefono})
-                    </p>
-                  </div>
-                </div>
+                  {/* Paquete & Domiciliario */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
+                    <div>
+                      <span className="text-gray-400">Contenido: </span>
+                      <strong className="text-gray-800">{enc.descripcion}</strong>
+                      {enc.tamanoPeso && (
+                        <span className="text-gray-500 ml-2">({enc.tamanoPeso})</span>
+                      )}
+                    </div>
 
-                {/* Paquete & Domiciliario */}
-                <div className="flex flex-wrap items-center justify-between gap-3 text-xs pt-1">
-                  <div>
-                    <span className="text-gray-400">Contenido: </span>
-                    <strong className="text-gray-800">{enc.descripcion}</strong>
-                    {enc.tamanoPeso && (
-                      <span className="text-gray-500 ml-2">({enc.tamanoPeso})</span>
+                    {enc.domiciliarioNombre ? (
+                      <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl font-medium">
+                        <Bike className="w-3.5 h-3.5" />
+                        <span>Domiciliario: {enc.domiciliarioNombre}</span>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400 italic">Buscando domiciliario cercano...</span>
                     )}
                   </div>
 
-                  {enc.domiciliarioNombre ? (
-                    <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-xl font-medium">
-                      <Bike className="w-3.5 h-3.5" />
-                      <span>Domiciliario: {enc.domiciliarioNombre}</span>
-                    </div>
-                  ) : (
-                    <span className="text-gray-400 italic">Buscando domiciliario cercano...</span>
-                  )}
-                </div>
+                  {/* Sección de Contraofertas Recibidas (Acordeón) */}
+                  {(enc.estado === 'PENDIENTE' || enc.estado === 'OFERTA' || numOfertas > 0) && (
+                    <div className="border-t border-gray-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => toggleVerOfertas(enc.id)}
+                        className="w-full flex items-center justify-between p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100/60 transition-colors text-amber-900 text-xs font-bold"
+                      >
+                        <span className="flex items-center gap-2">
+                          <MessageSquare className="w-4 h-4 text-amber-600" />
+                          Contraofertas Recibidas ({numOfertas})
+                        </span>
+                        {isExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-amber-700" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-amber-700" />
+                        )}
+                      </button>
 
-                {/* Acciones */}
-                {enc.estado === 'PENDIENTE' && (
-                  <div className="pt-2 border-t border-gray-100 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs"
-                      onClick={() => handleCancelar(enc.id)}
-                    >
-                      <X className="w-3.5 h-3.5 mr-1" />
-                      Cancelar Solicitud
-                    </Button>
-                  </div>
-                )}
-              </Card>
-            ))
+                      {isExpanded && (
+                        <div className="mt-3 space-y-2.5">
+                          {isLoadingOf ? (
+                            <div className="py-4 flex justify-center">
+                              <Spinner size="sm" />
+                            </div>
+                          ) : ofertas.length === 0 ? (
+                            <p className="text-center py-3 text-xs text-gray-400">
+                              Aún no has recibido contraofertas de domiciliarios para este envío.
+                            </p>
+                          ) : (
+                            ofertas.map((of) => (
+                              <div
+                                key={of.id}
+                                className={`p-3 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
+                                  of.estado === 'ACEPTADA'
+                                    ? 'bg-emerald-50/80 border-emerald-200'
+                                    : of.estado === 'RECHAZADA'
+                                    ? 'bg-rose-50/50 border-rose-100 opacity-60'
+                                    : of.estado === 'CANCELADA'
+                                    ? 'bg-gray-50 border-gray-200 opacity-50'
+                                    : 'bg-white border-amber-200 shadow-sm'
+                                }`}
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-gray-900">
+                                      {of.domiciliarioNombre || 'Domiciliario'}
+                                    </span>
+                                    {of.domiciliarioTelefono && (
+                                      <span className="text-[11px] text-gray-500">
+                                        ({of.domiciliarioTelefono})
+                                      </span>
+                                    )}
+                                    <Badge
+                                      variant={
+                                        of.estado === 'ACEPTADA'
+                                          ? 'success'
+                                          : of.estado === 'RECHAZADA'
+                                          ? 'danger'
+                                          : of.estado === 'CANCELADA'
+                                          ? 'secondary'
+                                          : 'warning'
+                                      }
+                                    >
+                                      {of.estado}
+                                    </Badge>
+                                  </div>
+                                  {of.mensaje && (
+                                    <p className="text-[11px] text-gray-600 mt-1 italic">
+                                      "{of.mensaje}"
+                                    </p>
+                                  )}
+                                  <span className="text-[10px] text-gray-400 mt-0.5 block">
+                                    {formatDate(of.creadoEn)}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <div className="text-right">
+                                    <span className="text-[10px] text-gray-400 block uppercase">
+                                      Tarifa propuesta
+                                    </span>
+                                    <span className="text-base font-black text-gray-900">
+                                      {formatCurrency(of.valor)}
+                                    </span>
+                                  </div>
+
+                                  {of.estado === 'PENDIENTE' && enc.estado !== 'ACEPTADA' && (
+                                    <div className="flex items-center gap-1.5">
+                                      <Button
+                                        variant="primary"
+                                        size="sm"
+                                        className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5"
+                                        isLoading={processingOfertaId === of.id}
+                                        onClick={() => handleAceptarOferta(enc.id, of.id)}
+                                      >
+                                        <Check className="w-3.5 h-3.5 mr-1" />
+                                        Aceptar
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs px-2.5 py-1.5"
+                                        disabled={processingOfertaId === of.id}
+                                        onClick={() => handleRechazarOferta(enc.id, of.id)}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Acciones */}
+                  {(enc.estado === 'PENDIENTE' || enc.estado === 'OFERTA') && (
+                    <div className="pt-2 border-t border-gray-100 flex justify-end">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-rose-600 hover:text-rose-700 hover:bg-rose-50 text-xs"
+                        onClick={() => handleCancelar(enc.id)}
+                      >
+                        <X className="w-3.5 h-3.5 mr-1" />
+                        Cancelar Solicitud
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })
           )}
         </div>
       )}
     </div>
   );
 };
+

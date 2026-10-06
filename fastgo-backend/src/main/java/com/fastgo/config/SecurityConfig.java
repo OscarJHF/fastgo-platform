@@ -61,7 +61,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/usuarios/datos-reutilizables").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/domicilios/calcular-tarifa").permitAll()
                         .requestMatchers("/api/geografia/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/analytics/track").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/analytics/track", "/api/analytics/eventos").permitAll()
                         .requestMatchers("/api/analytics/**").hasRole("ADMIN")
                         .requestMatchers("/api/test/publico").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

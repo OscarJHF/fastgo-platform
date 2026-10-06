@@ -25,9 +25,6 @@ export const pedidoService = {
 
       const response = await apiClient.post<Pedido>('/api/pedidos', formData, {
         params: queryParams,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
       });
       return response.data;
     }
@@ -141,8 +138,7 @@ export const pedidoService = {
     formData.append('file', file);
     const response = await apiClient.post<{ url: string; filename: string; mensaje: string }>(
       `/api/pedidos/${id}/comprobante`,
-      formData,
-      { headers: { 'Content-Type': 'multipart/form-data' } }
+      formData
     );
     return response.data;
   },

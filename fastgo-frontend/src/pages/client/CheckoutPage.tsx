@@ -10,6 +10,7 @@ import { sucursalService } from '../../services/sucursalService';
 import { commerceService } from '../../services/commerceService';
 import { wompiService } from '../../services/wompiService';
 import { uploadService } from '../../services/uploadService';
+import { cartService } from '../../services/cartService';
 import { Direccion, WompiBank } from '../../types';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
@@ -142,6 +143,10 @@ export const CheckoutPage: React.FC = () => {
       showError('No se encontró carrito activo.');
       return;
     }
+    if (!items || items.length === 0) {
+      showError('El carrito está vacío. Agrega productos antes de confirmar el pedido.');
+      return;
+    }
     if (!selectedAddressId) {
       showError('Por favor selecciona o añade una dirección de entrega.');
       return;
@@ -174,6 +179,18 @@ export const CheckoutPage: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Verificar y sincronizar ítems en backend si fuera necesario
+      const backendItems = await cartService.getCartProducts(cart.id);
+      if (!backendItems || backendItems.length === 0) {
+        for (const item of items) {
+          await cartService.addProduct({
+            carritoId: cart.id,
+            productoId: item.productoId,
+            cantidad: item.cantidad,
+          });
+        }
+      }
+
       // 1. Crear el pedido autoritativo en el backend con tarifa configurada del comercio y comprobante privado
       const pedido = await pedidoService.createOrder({
         carritoId: cart.id,

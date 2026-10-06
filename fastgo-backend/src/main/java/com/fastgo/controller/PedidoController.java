@@ -149,7 +149,7 @@ public class PedidoController {
         return ResponseEntity.ok(pedidoService.enCamino(id));
     }
 
-    @PutMapping("/{id}/entregar")
+    @PutMapping({"/{id}/entregar", "/{id}/entregado"})
     @PreAuthorize("hasRole('DOMICILIARIO')")
     public ResponseEntity<Pedido> entregar(@PathVariable @Positive Integer id) {
         return ResponseEntity.ok(pedidoService.entregar(id));

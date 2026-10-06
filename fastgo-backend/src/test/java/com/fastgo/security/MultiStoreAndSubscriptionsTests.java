@@ -15,6 +15,9 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
+import org.springframework.mock.web.MockMultipartFile;
+import com.fastgo.service.SuscripcionService;
+
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
@@ -78,6 +81,9 @@ public class MultiStoreAndSubscriptionsTests {
 
     @Autowired
     private com.fastgo.jwt.JwtService jwtService;
+
+    @Autowired
+    private SuscripcionService suscripcionService;
 
     private Integer categoriaComercioId;
     private Integer categoriaProductoId;
@@ -582,5 +588,184 @@ public class MultiStoreAndSubscriptionsTests {
         mockMvc.perform(get("/api/admin/auditoria")
                 .header("Authorization", "Bearer " + comercio.token))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("15. Un comerciante puede crear múltiples tiendas con el mismo NIT, pero no con el mismo nombre")
+    void test15_MismoNitDistintoNombreYRechazoMismoNombre() throws Exception {
+        AuthResult comercio = registrarYLogin("COMERCIO", "Comerciante Multisede");
+        String mismoNit = "900999888-7";
+
+        // 1. Crear Tienda 1 con NIT
+        ComercioRequestDTO req1 = new ComercioRequestDTO();
+        req1.setNombre("Sabor Paisa Principal");
+        req1.setCategoriaId(categoriaComercioId);
+        req1.setTelefono("3112223344");
+        req1.setNit(mismoNit);
+        req1.setDireccion("Calle 10 # 20 - 30");
+
+        mockMvc.perform(post("/api/comercios")
+                .header("Authorization", "Bearer " + comercio.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req1)))
+                .andExpect(status().isOk());
+
+        // 2. Crear Tienda 2 con EL MISMO NIT y distinto nombre (DEBE PERMITIRSE)
+        ComercioRequestDTO req2 = new ComercioRequestDTO();
+        req2.setNombre("Sabor Paisa Express");
+        req2.setCategoriaId(categoriaComercioId);
+        req2.setTelefono("3112223344");
+        req2.setNit(mismoNit);
+        req2.setDireccion("Carrera 15 # 45 - 60");
+
+        mockMvc.perform(post("/api/comercios")
+                .header("Authorization", "Bearer " + comercio.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req2)))
+                .andExpect(status().isOk());
+
+        // 3. Intentar crear Tienda con EL MISMO NOMBRE para el mismo usuario (DEBE RECHAZARSE)
+        ComercioRequestDTO reqRepetido = new ComercioRequestDTO();
+        reqRepetido.setNombre("Sabor Paisa Principal");
+        reqRepetido.setCategoriaId(categoriaComercioId);
+        reqRepetido.setTelefono("3112223344");
+        reqRepetido.setNit(mismoNit);
+
+        mockMvc.perform(post("/api/comercios")
+                .header("Authorization", "Bearer " + comercio.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(reqRepetido)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message", org.hamcrest.Matchers.containsString("Ya tienes una tienda con ese nombre")));
+    }
+
+    @Test
+    @DisplayName("16. Flujo completo de Suscripciones: Tarifas, Banco FASTGO, Comprobante, Aprobación/Rechazo Admin y Vencimiento")
+    void test16_FlujoCompletoSuscripcionesActivacionComprobanteYVencimiento() throws Exception {
+        AuthResult admin = crearAdmin("Admin Finanzas");
+        AuthResult comerciante = registrarYLogin("COMERCIO", "Don Tiendero");
+
+        // 1. Comercio consulta configuración global de suscripciones y datos bancarios oficiales de FASTGO
+        mockMvc.perform(get("/api/comercios/suscripciones/configuracion")
+                .header("Authorization", "Bearer " + comerciante.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bancoNombre").exists())
+                .andExpect(jsonPath("$.bancoNumeroCuenta").exists())
+                .andExpect(jsonPath("$.primaryFreePeriodMonths").value(6));
+
+        // 2. Admin actualiza cuenta bancaria de FASTGO
+        ConfiguracionSuscripcionDTO updateCfg = suscripcionService.obtenerConfiguracionDTO();
+        updateCfg.setBancoNombre("Bancolombia Corporativo");
+        updateCfg.setBancoNumeroCuenta("999-888777-11");
+        updateCfg.setAdditionalStoreActivationPrice(new BigDecimal("50000.00"));
+        updateCfg.setActualizadoEn(null);
+
+        mockMvc.perform(put("/api/admin/suscripciones/configuracion")
+                .header("Authorization", "Bearer " + admin.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(updateCfg)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.bancoNumeroCuenta").value("999-888777-11"));
+
+        // 3. Crear primera tienda (gratuita por 6 meses) y segunda tienda (requiere pago de activación)
+        ComercioResponseDTO c1 = crearComercio(comerciante.token, "Sede Central Don Tiendero", "Calle 10 # 5-20");
+        assertThat(c1.getEsPrincipal()).isTrue();
+        assertThat(c1.getEstado()).isEqualTo("ACTIVA");
+
+        ComercioResponseDTO c2 = crearComercio(comerciante.token, "Sede Norte Don Tiendero", "Carrera 7 # 120-15");
+        assertThat(c2.getEsPrincipal()).isFalse();
+        assertThat(c2.getEstado()).isEqualTo("PENDIENTE_ACTIVACION");
+        assertThat(c2.getActivo()).isFalse();
+
+        // 4. Comercio consulta suscripción de tienda adicional
+        mockMvc.perform(get("/api/comercios/" + c2.getId() + "/suscripcion")
+                .header("Authorization", "Bearer " + comerciante.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_ACTIVACION"))
+                .andExpect(jsonPath("$.bancoNumeroCuenta").value("999-888777-11"));
+
+        Integer subId = suscripcionRepository.findFirstByComercioIdOrderByCreadoEnDesc(c2.getId()).orElseThrow().getId();
+
+        // 5. Comercio sube comprobante de pago de activación válido (PNG con magic bytes)
+        byte[] pngBytes = new byte[]{(byte)0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52};
+        MockMultipartFile comprobante = new MockMultipartFile("comprobante", "recibo_activacion.png", "image/png", pngBytes);
+
+        mockMvc.perform(multipart("/api/comercios/" + c2.getId() + "/suscripcion/comprobante")
+                .file(comprobante)
+                .param("referencia", "TRANSF-98765")
+                .header("Authorization", "Bearer " + comerciante.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_VERIFICACION"))
+                .andExpect(jsonPath("$.comprobanteUrl").exists());
+
+        // Comprobar que la tienda pasó a PENDIENTE_VERIFICACION
+        Comercio c2Db = comercioRepository.findById(c2.getId()).orElseThrow();
+        assertThat(c2Db.getEstado()).isEqualTo("PENDIENTE_VERIFICACION");
+
+        // 6. Comercio visualiza su comprobante subido
+        mockMvc.perform(get("/api/comercios/" + c2.getId() + "/suscripcion/comprobante")
+                .header("Authorization", "Bearer " + comerciante.token))
+                .andExpect(status().isOk());
+
+        // 7. Admin consulta lista de suscripciones pendientes de verificación
+        mockMvc.perform(get("/api/admin/suscripciones/pendientes")
+                .header("Authorization", "Bearer " + admin.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == " + subId + ")].estado").value("PENDIENTE_VERIFICACION"));
+
+        // 8. Admin rechaza el comprobante con motivo
+        mockMvc.perform(post("/api/admin/suscripciones/" + subId + "/rechazar")
+                .header("Authorization", "Bearer " + admin.token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(Map.of("motivo", "Valor transferido insuficiente"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("RECHAZADA"))
+                .andExpect(jsonPath("$.motivoRechazo").value("Valor transferido insuficiente"));
+
+        // La tienda permanece inactiva
+        Comercio c2Rech = comercioRepository.findById(c2.getId()).orElseThrow();
+        assertThat(c2Rech.getEstado()).isEqualTo("RECHAZADA");
+        assertThat(c2Rech.getActivo()).isFalse();
+
+        // 9. Comercio vuelve a subir el comprobante corregido
+        mockMvc.perform(multipart("/api/comercios/" + c2.getId() + "/suscripcion/comprobante")
+                .file(comprobante)
+                .param("referencia", "TRANSF-COMPLETA-98765")
+                .header("Authorization", "Bearer " + comerciante.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_VERIFICACION"));
+
+        // 10. Admin visualiza el comprobante y lo aprueba
+        mockMvc.perform(get("/api/admin/suscripciones/" + subId + "/comprobante")
+                .header("Authorization", "Bearer " + admin.token))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/admin/suscripciones/" + subId + "/aprobar")
+                .header("Authorization", "Bearer " + admin.token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("ACTIVA"))
+                .andExpect(jsonPath("$.fechaFin").exists());
+
+        // Tienda activada con éxito
+        Comercio c2Activa = comercioRepository.findById(c2.getId()).orElseThrow();
+        assertThat(c2Activa.getEstado()).isEqualTo("ACTIVA");
+        assertThat(c2Activa.getActivo()).isTrue();
+
+        // 11. Simulación de vencimiento: se forza fechaFin en el pasado
+        Suscripcion subActiva = suscripcionRepository.findById(subId).orElseThrow();
+        subActiva.setFechaFin(java.time.LocalDateTime.now(SuscripcionService.BOGOTA_ZONE).minusDays(1));
+        suscripcionRepository.save(subActiva);
+
+        // Ejecutar verificación programada de vencimientos
+        int suspendidas = suscripcionService.verificarVencimientosSuscripciones();
+        assertThat(suspendidas).isGreaterThanOrEqualTo(1);
+
+        // La tienda y la suscripción deben estar ahora SUSPENDIDA_POR_MORA
+        Suscripcion subMora = suscripcionRepository.findById(subId).orElseThrow();
+        assertThat(subMora.getEstado()).isEqualTo("SUSPENDIDA_POR_MORA");
+
+        Comercio c2Mora = comercioRepository.findById(c2.getId()).orElseThrow();
+        assertThat(c2Mora.getEstado()).isEqualTo("SUSPENDIDA_POR_MORA");
+        assertThat(c2Mora.getActivo()).isFalse();
     }
 }
