@@ -168,6 +168,12 @@ public class Pedido {
     @Transient
     private String origenTelefono;
 
+    @Transient
+    private String domiciliarioNombre;
+
+    @Transient
+    private String domiciliarioTelefono;
+
     public String getClienteNombre() { return clienteNombre; }
     public void setClienteNombre(String clienteNombre) { this.clienteNombre = clienteNombre; }
 
@@ -216,4 +222,10 @@ public class Pedido {
 
     public String getOrigenTelefono() { return origenTelefono; }
     public void setOrigenTelefono(String origenTelefono) { this.origenTelefono = origenTelefono; }
+
+    public String getDomiciliarioNombre() { return domiciliarioNombre; }
+    public void setDomiciliarioNombre(String domiciliarioNombre) { this.domiciliarioNombre = domiciliarioNombre; }
+
+    public String getDomiciliarioTelefono() { return domiciliarioTelefono; }
+    public void setDomiciliarioTelefono(String domiciliarioTelefono) { this.domiciliarioTelefono = domiciliarioTelefono; }
 }

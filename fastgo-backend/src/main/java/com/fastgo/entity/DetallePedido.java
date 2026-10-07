@@ -46,7 +46,7 @@ public class DetallePedido {
     public BigDecimal getSubtotal() { return subtotal; }
     public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
 
-    @Transient
+    @Column(name = "producto_nombre", length = 150)
     private String productoNombre;
 
     public String getProductoNombre() { return productoNombre; }

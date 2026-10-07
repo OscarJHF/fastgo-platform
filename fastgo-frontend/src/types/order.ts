@@ -41,6 +41,8 @@ export interface Pedido {
   origenLatitud?: number | null;
   origenLongitud?: number | null;
   origenTelefono?: string;
+  domiciliarioNombre?: string;
+  domiciliarioTelefono?: string;
 }
 
 export interface DetallePedido {

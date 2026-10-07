@@ -238,6 +238,7 @@ public class PedidoService {
             DetallePedido detallePedido = new DetallePedido();
             detallePedido.setPedidoId(pedido.getId());
             detallePedido.setProductoId(detalleCarrito.getProductoId());
+            detallePedido.setProductoNombre(producto.getNombre());
             detallePedido.setCantidad(detalleCarrito.getCantidad());
             detallePedido.setPrecio(producto.getPrecio());
             detallePedido.setSubtotal(producto.getPrecio().multiply(BigDecimal.valueOf(detalleCarrito.getCantidad())));
@@ -358,6 +359,7 @@ public class PedidoService {
         boolean permitido =
                 pedido.getUsuarioId().equals(usuario.getId())
                         || esComercioPropietario(pedido, usuario)
+                        || "ADMIN".equalsIgnoreCase(rol(usuario))
                         || (pedido.getDomiciliarioId() != null
                         && pedido.getDomiciliarioId().equals(usuario.getId()));
 
@@ -368,8 +370,13 @@ public class PedidoService {
 
         List<DetallePedido> lista = detallePedidoRepository.findByPedidoId(pedidoId);
         for (DetallePedido d : lista) {
-            if (d.getProductoId() != null) {
-                productoRepository.findById(d.getProductoId()).ifPresent(p -> d.setProductoNombre(p.getNombre()));
+            if (d.getProductoNombre() == null || d.getProductoNombre().isBlank()) {
+                if (d.getProductoId() != null) {
+                    productoRepository.findById(d.getProductoId()).ifPresent(p -> d.setProductoNombre(p.getNombre()));
+                }
+            }
+            if (d.getProductoNombre() == null || d.getProductoNombre().isBlank()) {
+                d.setProductoNombre("Producto #" + d.getProductoId());
             }
         }
         return lista;
@@ -413,6 +420,13 @@ public class PedidoService {
                         p.setComercioNombre(c.getNombre());
                     });
                 }
+            });
+        }
+        if (p.getDomiciliarioId() != null) {
+            usuarioRepository.findById(p.getDomiciliarioId()).ifPresent(d -> {
+                String nombreCompleto = d.getNombre() + (d.getApellido() != null && !d.getApellido().isBlank() ? " " + d.getApellido() : "");
+                p.setDomiciliarioNombre(nombreCompleto.trim());
+                p.setDomiciliarioTelefono(d.getTelefono());
             });
         }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download, Navigation, Upload, X } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle2, XCircle, MapPin, ShieldAlert, Bike, CreditCard, FileText, Eye, Download, Navigation, Upload, X, Store, Phone } from 'lucide-react';
 import { pedidoService } from '../../services/pedidoService';
 import { pagoService } from '../../services/pagoService';
 import { uploadService } from '../../services/uploadService';
@@ -24,6 +24,7 @@ export const OrderDetailPage: React.FC = () => {
   const [payments, setPayments] = useState<Pago[]>([]);
   const [tracking, setTracking] = useState<TrackingResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
   // Visor de comprobante privado
@@ -40,6 +41,8 @@ export const OrderDetailPage: React.FC = () => {
   const { success, error: showError } = useToast();
 
   const loadOrder = async () => {
+    setIsLoading(true);
+    setLoadError(null);
     try {
       const [orderData, detailsData, paymentsData] = await Promise.all([
         pedidoService.getOrder(orderId),
@@ -51,6 +54,7 @@ export const OrderDetailPage: React.FC = () => {
       setPayments(paymentsData);
     } catch (err) {
       console.error('Error cargando pedido:', err);
+      setLoadError('No pudimos cargar los detalles del pedido.');
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +170,26 @@ export const OrderDetailPage: React.FC = () => {
     );
   }
 
+  if (loadError) {
+    return (
+      <div className="max-w-md mx-auto py-16 text-center space-y-4">
+        <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto">
+          <XCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900">{loadError}</h2>
+        <p className="text-sm text-gray-500">Ocurrió un problema de conexión al consultar la información del pedido #{orderId}.</p>
+        <div className="flex justify-center gap-3 pt-2">
+          <Button variant="primary" onClick={loadOrder}>
+            Reintentar
+          </Button>
+          <Link to={APP_ROUTES.MY_ORDERS}>
+            <Button variant="outline">Volver a mis pedidos</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!order) {
     return (
       <div className="text-center py-16">
@@ -271,6 +295,47 @@ export const OrderDetailPage: React.FC = () => {
         </p>
       </Card>
 
+      {/* Establecimiento Comercial */}
+      <Card className="p-5 space-y-3">
+        <h3 className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+          <Store className="w-4 h-4 text-emerald-600" /> Establecimiento Comercial
+        </h3>
+        <div className="bg-gray-50/80 p-3.5 rounded-xl border border-gray-100 space-y-1">
+          <p className="font-extrabold text-gray-900 text-sm">{order.comercioNombre || 'Comercio Aliado FastGo'}</p>
+          {order.sucursalNombre && (
+            <p className="text-xs text-gray-600 font-medium">Sucursal: {order.sucursalNombre}</p>
+          )}
+          {order.comercioDireccion && (
+            <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-1">
+              <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" /> {order.comercioDireccion}
+            </p>
+          )}
+        </div>
+      </Card>
+
+      {/* Domiciliario Asignado */}
+      {order.domiciliarioNombre && (
+        <Card className="p-5 space-y-3">
+          <h3 className="font-extrabold text-sm text-gray-900 flex items-center gap-2">
+            <Bike className="w-4 h-4 text-emerald-600" /> Domiciliario Asignado
+          </h3>
+          <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-100 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <p className="font-extrabold text-emerald-950 text-sm">{order.domiciliarioNombre}</p>
+              <p className="text-xs text-emerald-700 font-medium">Repartidor oficial FastGo</p>
+            </div>
+            {order.domiciliarioTelefono && (
+              <a
+                href={`tel:${order.domiciliarioTelefono}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-colors"
+              >
+                <Phone className="w-3.5 h-3.5" /> Llamar
+              </a>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Productos del Pedido */}
       <Card className="p-6 space-y-4">
         <h3 className="font-extrabold text-sm text-gray-900">Productos Ordenados ({details.length})</h3>
@@ -282,7 +347,7 @@ export const OrderDetailPage: React.FC = () => {
                   {item.cantidad}x
                 </span>
                 <div>
-                  <p className="font-bold text-gray-900">Producto #{item.productoId}</p>
+                  <p className="font-bold text-gray-900">{item.productoNombre || `Producto #${item.productoId}`}</p>
                   <p className="text-xs text-gray-400">{formatCurrency(item.precio)} c/u</p>
                 </div>
               </div>

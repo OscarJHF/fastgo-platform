@@ -609,4 +609,76 @@ class BusinessAndIdorSecurityTests {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message", containsString("productos asociados")));
     }
+
+    @Test
+    @DisplayName("Detalle del Pedido: Enriquecimiento completo, IDOR y preservación de productoNombre")
+    void testOrderDetailEnrichmentAndHistoricalPreservation() throws Exception {
+        Direccion dirA = direccionRepository.findByUsuarioId(clienteA.getId()).stream().findFirst().orElseGet(() -> {
+            Direccion d = new Direccion();
+            d.setUsuarioId(clienteA.getId());
+            d.setDireccion("Calle Test 123");
+            d.setCiudad("Bogotá");
+            d.setAlias("Casa QA");
+            d.setPrincipal(true);
+            return direccionRepository.save(d);
+        });
+
+        // Crear pedido con domiciliario asignado
+        Pedido pedido = new Pedido();
+        pedido.setUsuarioId(clienteA.getId());
+        pedido.setSucursalId(sucursalA.getId());
+        pedido.setDireccionId(dirA.getId());
+        pedido.setDomiciliarioId(domiciliarioUserA.getId());
+        pedido.setEstado("EN_CAMINO");
+        pedido.setSubtotal(BigDecimal.valueOf(15000));
+        pedido.setCostoEnvio(BigDecimal.valueOf(2500));
+        pedido.setTotal(BigDecimal.valueOf(17500));
+        pedido.setMetodoPago("EFECTIVO");
+        pedido.setEstadoPago("APROBADO");
+        pedido = pedidoRepository.save(pedido);
+
+        DetallePedido detalle = new DetallePedido();
+        detalle.setPedidoId(pedido.getId());
+        detalle.setProductoId(productoA.getId());
+        detalle.setProductoNombre("Producto Histórico Especial");
+        detalle.setCantidad(2);
+        detalle.setPrecio(BigDecimal.valueOf(7500));
+        detalle.setSubtotal(BigDecimal.valueOf(15000));
+        detalle = detallePedidoRepository.save(detalle);
+
+        // 1. Propietario (Cliente A) puede consultar su pedido completo con datos enriquecidos
+        mockMvc.perform(get("/api/pedidos/" + pedido.getId())
+                        .header("Authorization", "Bearer " + tokenClienteA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(pedido.getId())))
+                .andExpect(jsonPath("$.domiciliarioNombre", containsString("Domi")))
+                .andExpect(jsonPath("$.comercioNombre", is(comercioA.getNombre())))
+                .andExpect(jsonPath("$.destinoDireccion", is(dirA.getDireccion())));
+
+        // 2. Propietario (Cliente A) puede consultar los detalles con productoNombre preservado
+        mockMvc.perform(get("/api/pedidos/" + pedido.getId() + "/detalles")
+                        .header("Authorization", "Bearer " + tokenClienteA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].productoNombre", is("Producto Histórico Especial")))
+                .andExpect(jsonPath("$[0].precio", is(7500.0)))
+                .andExpect(jsonPath("$[0].subtotal", is(15000.0)));
+
+        // 3. ADMIN puede consultar los detalles del pedido
+        mockMvc.perform(get("/api/pedidos/" + pedido.getId() + "/detalles")
+                        .header("Authorization", "Bearer " + tokenAdmin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].productoNombre", is("Producto Histórico Especial")));
+
+        // 4. IDOR: Cliente B NO puede consultar el pedido de Cliente A (HTTP 403)
+        mockMvc.perform(get("/api/pedidos/" + pedido.getId())
+                        .header("Authorization", "Bearer " + tokenClienteB))
+                .andExpect(status().isForbidden());
+
+        // 5. IDOR: Cliente B NO puede consultar los detalles del pedido de Cliente A (HTTP 403)
+        mockMvc.perform(get("/api/pedidos/" + pedido.getId() + "/detalles")
+                        .header("Authorization", "Bearer " + tokenClienteB))
+                .andExpect(status().isForbidden());
+    }
 }

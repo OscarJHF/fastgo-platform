@@ -161,6 +161,21 @@ interface PedidoItem {
   origenLatitud?: number | null;
   origenLongitud?: number | null;
   origenTelefono?: string;
+  domiciliarioNombre?: string;
+  domiciliarioTelefono?: string;
+  sucursalNombre?: string;
+}
+
+interface TrackingData {
+  id: number;
+  pedidoId: number;
+  domiciliarioId: number;
+  latitud: number;
+  longitud: number;
+  precision?: number | null;
+  rumbo?: number | null;
+  velocidad?: number | null;
+  fechaHora: string;
 }
 
 interface DetallePedidoItem {
@@ -384,6 +399,8 @@ export default function App() {
   const [selectedPedido, setSelectedPedido] = useState<PedidoItem | null>(null);
   const [pedidoDetalles, setPedidoDetalles] = useState<DetallePedidoItem[]>([]);
   const [loadingDetalles, setLoadingDetalles] = useState<boolean>(false);
+  const [loadingDetallesError, setLoadingDetallesError] = useState<string | null>(null);
+  const [trackingCliente, setTrackingCliente] = useState<TrackingData | null>(null);
 
   // Comercio
   const [pedidosComercio, setPedidosComercio] = useState<PedidoItem[]>([]);
@@ -2188,18 +2205,57 @@ export default function App() {
   const openPedidoDetalle = async (pedido: PedidoItem) => {
     setSelectedPedido(pedido);
     setLoadingDetalles(true);
+    setLoadingDetallesError(null);
+    setTrackingCliente(null);
     try {
-      const res = await fetch(`${apiUrl}/api/pedidos/${pedido.id}/detalles`, {
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      });
-      if (res.ok) {
-        setPedidoDetalles(await res.json());
+      const [orderRes, detailsRes] = await Promise.all([
+        fetch(`${apiUrl}/api/pedidos/${pedido.id}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
+        fetch(`${apiUrl}/api/pedidos/${pedido.id}/detalles`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        }),
+      ]);
+
+      if (orderRes.ok && detailsRes.ok) {
+        const orderData = await orderRes.json();
+        const detailsData = await detailsRes.json();
+        setSelectedPedido(orderData);
+        setPedidoDetalles(detailsData);
+      } else {
+        setLoadingDetallesError("No pudimos cargar los detalles del pedido.");
       }
-    } catch {}
-    finally {
+    } catch {
+      setLoadingDetallesError("No pudimos cargar los detalles del pedido.");
+    } finally {
       setLoadingDetalles(false);
     }
   };
+
+  // Polling de telemetría GPS en tiempo real para el cliente cuando su pedido está EN_CAMINO
+  useEffect(() => {
+    if (!selectedPedido || selectedPedido.estado !== "EN_CAMINO" || !token) return;
+
+    let isMounted = true;
+    const fetchTracking = async () => {
+      try {
+        const res = await fetch(`${apiUrl}/api/tracking/pedido/${selectedPedido.id}`, {
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        });
+        if (res.ok && isMounted) {
+          const data = await res.json();
+          setTrackingCliente(data);
+        }
+      } catch {}
+    };
+
+    fetchTracking();
+    const interval = setInterval(fetchTracking, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedPedido?.id, selectedPedido?.estado, token, apiUrl]);
 
   const cancelarPedidoCliente = async (pedidoId: number) => {
     try {
@@ -3726,11 +3782,46 @@ export default function App() {
                 </TouchableOpacity>
 
                 <View style={styles.orderHeaderRow}>
-                  <Text style={styles.orderHeaderId}>Pedido #{selectedPedido.id}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.orderHeaderId}>Pedido #{selectedPedido.id}</Text>
+                    {selectedPedido.creadoEn ? (
+                      <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                        📅 {new Date(selectedPedido.creadoEn).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}
+                      </Text>
+                    ) : null}
+                  </View>
                   <View style={[styles.statusPill, getStatusPillStyle(selectedPedido.estado)]}>
                     <Text style={styles.statusPillText}>{selectedPedido.estado}</Text>
                   </View>
                 </View>
+
+                {/* Banner de error y botón de reintento */}
+                {loadingDetallesError ? (
+                  <View style={{
+                    backgroundColor: "#FEF2F2",
+                    padding: 14,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: "#FCA5A5",
+                    alignItems: "center",
+                    marginVertical: 12,
+                  }}>
+                    <Text style={{ fontSize: 13, fontWeight: "bold", color: "#991B1B", textAlign: "center", marginBottom: 8 }}>
+                      ⚠️ {loadingDetallesError}
+                    </Text>
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: Theme.primary,
+                        paddingVertical: 7,
+                        paddingHorizontal: 16,
+                        borderRadius: 8,
+                      }}
+                      onPress={() => openPedidoDetalle(selectedPedido)}
+                    >
+                      <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 12 }}>Reintentar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
 
                 {/* Línea de tiempo oficial FastGo de 6 estados */}
                 <Text style={styles.subHeading}>Estado de tu Entrega</Text>
@@ -3748,20 +3839,166 @@ export default function App() {
                   })}
                 </View>
 
+                {/* Tarjeta del Establecimiento Comercial */}
+                <View style={{
+                  backgroundColor: "#FFFFFF",
+                  padding: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: Theme.border,
+                  marginTop: 14,
+                  marginBottom: 6,
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    🏪 Establecimiento Comercial
+                  </Text>
+                  <Text style={{ fontSize: 15, fontWeight: "bold", color: Theme.text, marginTop: 4 }}>
+                    {selectedPedido.comercioNombre || "Comercio Aliado FastGo"}
+                  </Text>
+                  {selectedPedido.sucursalNombre ? (
+                    <Text style={{ fontSize: 12, color: Theme.textMuted, marginTop: 1 }}>
+                      Sucursal: {selectedPedido.sucursalNombre}
+                    </Text>
+                  ) : null}
+                  {selectedPedido.comercioDireccion ? (
+                    <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 3 }}>
+                      📍 {selectedPedido.comercioDireccion}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Tarjeta de Dirección de Entrega */}
+                <View style={{
+                  backgroundColor: "#FFFFFF",
+                  padding: 14,
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: Theme.border,
+                  marginTop: 6,
+                  marginBottom: 6,
+                }}>
+                  <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.textMuted, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    📍 Dirección de Entrega
+                  </Text>
+                  <Text style={{ fontSize: 14, fontWeight: "bold", color: Theme.text, marginTop: 4 }}>
+                    {selectedPedido.destinoDireccion || selectedPedido.direccionTexto || "Dirección registrada"}
+                    {selectedPedido.destinoCiudad ? ` (${selectedPedido.destinoCiudad})` : ""}
+                  </Text>
+                  {selectedPedido.destinoReferencia ? (
+                    <Text style={{ fontSize: 11, color: Theme.textMuted, fontStyle: "italic", marginTop: 2 }}>
+                      Punto de referencia: {selectedPedido.destinoReferencia}
+                    </Text>
+                  ) : null}
+                </View>
+
+                {/* Tarjeta de Domiciliario Asignado */}
+                {selectedPedido.domiciliarioNombre ? (
+                  <View style={{
+                    backgroundColor: "#ECFDF5",
+                    padding: 14,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: "#6EE7B7",
+                    marginTop: 6,
+                    marginBottom: 6,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "bold", color: "#065F46", textTransform: "uppercase" }}>
+                        🛵 Domiciliario Asignado
+                      </Text>
+                      <Text style={{ fontSize: 14, fontWeight: "bold", color: "#065F46", marginTop: 2 }}>
+                        {selectedPedido.domiciliarioNombre}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: "#047857" }}>
+                        Repartidor oficial FastGo
+                      </Text>
+                    </View>
+                    {selectedPedido.domiciliarioTelefono ? (
+                      <TouchableOpacity
+                        style={{
+                          backgroundColor: Theme.primary,
+                          paddingVertical: 7,
+                          paddingHorizontal: 12,
+                          borderRadius: 8,
+                          flexDirection: "row",
+                          alignItems: "center",
+                        }}
+                        onPress={() => Linking.openURL(`tel:${selectedPedido.domiciliarioTelefono}`)}
+                      >
+                        <Text style={{ color: "#FFFFFF", fontWeight: "bold", fontSize: 11 }}>📞 Llamar</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {/* Telemetría GPS en Vivo cuando EN_CAMINO */}
+                {selectedPedido.estado === "EN_CAMINO" ? (
+                  <View style={{
+                    backgroundColor: "#EFF6FF",
+                    padding: 14,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: "#93C5FD",
+                    marginTop: 6,
+                    marginBottom: 6,
+                  }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                      <Text style={{ fontSize: 12, fontWeight: "bold", color: "#1E40AF" }}>
+                        🧭 Seguimiento GPS en Vivo
+                      </Text>
+                      <Text style={{ fontSize: 10, color: "#2563EB", fontWeight: "bold" }}>EN RUTA</Text>
+                    </View>
+                    {trackingCliente ? (
+                      <View style={{ marginTop: 6 }}>
+                        <Text style={{ fontSize: 11, color: "#1E3A8A" }}>
+                          Posición actual: {trackingCliente.latitud.toFixed(4)}, {trackingCliente.longitud.toFixed(4)}
+                          {trackingCliente.velocidad != null ? ` • ${(trackingCliente.velocidad * 3.6).toFixed(0)} km/h` : ""}
+                          {trackingCliente.precision != null ? ` • ±${Math.round(trackingCliente.precision)}m` : ""}
+                        </Text>
+                        <TouchableOpacity
+                          style={{
+                            marginTop: 8,
+                            backgroundColor: "#2563EB",
+                            paddingVertical: 6,
+                            paddingHorizontal: 10,
+                            borderRadius: 6,
+                            alignSelf: "flex-start",
+                          }}
+                          onPress={() => Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${trackingCliente.latitud},${trackingCliente.longitud}`)}
+                        >
+                          <Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "bold" }}>Ver Repartidor en Mapa ↗</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={{ fontSize: 11, color: "#3B82F6", marginTop: 4 }}>
+                        Esperando primera señal GPS del repartidor...
+                      </Text>
+                    )}
+                  </View>
+                ) : null}
+
                 {/* Lista de productos incluidos */}
-                <Text style={[styles.subHeading, { marginTop: 18 }]}>Productos del Pedido</Text>
+                <Text style={[styles.subHeading, { marginTop: 14 }]}>Productos del Pedido</Text>
                 {loadingDetalles ? (
-                  <ActivityIndicator color={Theme.primary} />
+                  <ActivityIndicator color={Theme.primary} style={{ marginVertical: 12 }} />
                 ) : pedidoDetalles.length === 0 ? (
                   <Text style={styles.helperText}>Platos preparados por el comercio aliado</Text>
                 ) : (
                   pedidoDetalles.map((d) => (
                     <View key={d.id} style={styles.detailRow}>
                       <Text style={styles.detailQty}>{d.cantidad}x</Text>
-                      <Text style={styles.detailName}>
-                        {d.productoId === 1 ? "Pizza Pepperoni Familiar" : `Producto #${d.productoId}`}
-                      </Text>
-                      <Text style={styles.detailSubtotal}>${d.subtotal.toLocaleString()} COP</Text>
+                      <View style={{ flex: 1, marginHorizontal: 8 }}>
+                        <Text style={styles.detailName}>
+                          {d.productoNombre || `Producto #${d.productoId}`}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                          ${(d.precio || 0).toLocaleString()} COP c/u
+                        </Text>
+                      </View>
+                      <Text style={styles.detailSubtotal}>${(d.subtotal || 0).toLocaleString()} COP</Text>
                     </View>
                   ))
                 )}
@@ -3770,19 +4007,31 @@ export default function App() {
                 <View style={styles.billingCard}>
                   <View style={styles.billingRow}>
                     <Text style={styles.billingLabel}>Subtotal:</Text>
-                    <Text style={styles.billingVal}>${selectedPedido.subtotal.toLocaleString()} COP</Text>
+                    <Text style={styles.billingVal}>${(selectedPedido.subtotal || 0).toLocaleString()} COP</Text>
                   </View>
                   <View style={styles.billingRow}>
                     <Text style={styles.billingLabel}>Domicilio:</Text>
-                    <Text style={styles.billingVal}>${selectedPedido.costoEnvio.toLocaleString()} COP</Text>
+                    <Text style={styles.billingVal}>${(selectedPedido.costoEnvio || 0).toLocaleString()} COP</Text>
                   </View>
                   <View style={styles.billingRow}>
                     <Text style={styles.billingLabel}>Método de Pago:</Text>
                     <Text style={[styles.billingVal, { fontWeight: "bold" }]}>{selectedPedido.metodoPago || "EFECTIVO"}</Text>
                   </View>
+                  <View style={styles.billingRow}>
+                    <Text style={styles.billingLabel}>Estado del Pago:</Text>
+                    <Text style={[
+                      styles.billingVal,
+                      {
+                        fontWeight: "bold",
+                        color: selectedPedido.estadoPago === "APROBADO" ? "#059669" : selectedPedido.estadoPago === "RECHAZADO" ? "#EF4444" : "#F59E0B"
+                      }
+                    ]}>
+                      {selectedPedido.estadoPago || "PENDIENTE"}
+                    </Text>
+                  </View>
                   <View style={[styles.billingRow, styles.billingTotalRow]}>
                     <Text style={styles.billingTotalLabel}>Total:</Text>
-                    <Text style={styles.billingTotalVal}>${selectedPedido.total.toLocaleString()} COP</Text>
+                    <Text style={styles.billingTotalVal}>${(selectedPedido.total || 0).toLocaleString()} COP</Text>
                   </View>
                 </View>
 
