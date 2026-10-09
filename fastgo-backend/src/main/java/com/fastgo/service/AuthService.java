@@ -13,6 +13,8 @@ import java.util.List;
 @Service
 public class AuthService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthService.class);
+
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
@@ -215,7 +217,17 @@ public class AuthService {
                 new com.fastgo.entity.PasswordResetToken(usuario, token, expiraEn);
         passwordResetTokenRepository.save(resetToken);
 
-        emailService.enviarCorreoRecuperacion(usuario.getCorreo(), usuario.getNombre(), token);
+        // Despacho asíncrono no bloqueante para garantizar respuesta inmediata y evitar timeouts HTTP
+        final String destCorreo = usuario.getCorreo();
+        final String destNombre = usuario.getNombre();
+        final String resetTokenStr = token;
+        java.util.concurrent.CompletableFuture.runAsync(() -> {
+            try {
+                emailService.enviarCorreoRecuperacion(destCorreo, destNombre, resetTokenStr);
+            } catch (Exception e) {
+                log.error("[FASTGO MAIL] Error inesperado en despacho de recuperacion para {}: {}", destCorreo, e.getMessage());
+            }
+        });
 
         return mensajeGenerico;
     }

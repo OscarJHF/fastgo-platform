@@ -20,6 +20,14 @@ export function parseApiError(error: unknown): ApiError {
     };
   }
 
+  if (axios.isAxiosError(error) && error.code === 'ECONNABORTED') {
+    return {
+      status: 0,
+      error: 'TIMEOUT_ERROR',
+      message: 'El servidor tardó en responder. Por favor verifica tu conexión o intenta nuevamente.',
+    };
+  }
+
   if (axios.isAxiosError(error) && error.request) {
     return {
       status: 0,

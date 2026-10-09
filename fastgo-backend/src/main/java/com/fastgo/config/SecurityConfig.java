@@ -100,6 +100,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(origins);
         configuration.setAllowedOriginPatterns(List.of(
                 "https://*.pages.dev",
+                "https://*.workers.dev",
                 "https://*.onrender.com",
                 "http://localhost:*",
                 "http://127.0.0.1:*"

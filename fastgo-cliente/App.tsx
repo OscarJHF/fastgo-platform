@@ -6852,9 +6852,9 @@ export default function App() {
       {/* MODAL DE SELECCIÓN DE GEOGRAFÍA (DANE) */}
       {showGeoModal && (
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCardContainer, { maxHeight: "88%", padding: 18 }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <View>
+          <View style={[styles.modalCardContainer, { maxHeight: "88%", padding: 18, alignItems: "stretch", width: "100%", maxWidth: 380 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12, width: "100%" }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
                   📍 Ubicación de Comercios
                 </Text>
@@ -6862,8 +6862,8 @@ export default function App() {
                   Filtra por Departamento y Municipio de Colombia (DANE)
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowGeoModal(false)} style={{ padding: 4 }}>
-                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              <TouchableOpacity onPress={() => setShowGeoModal(false)} style={{ padding: 6, borderRadius: 8 }}>
+                <Text style={{ fontSize: 18, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
               </TouchableOpacity>
             </View>
 
@@ -6987,7 +6987,7 @@ export default function App() {
             </ScrollView>
 
             <TouchableOpacity
-              style={[styles.outlineBtn, { marginTop: 12 }]}
+              style={[styles.outlineBtn, { marginTop: 12, width: "100%" }]}
               onPress={() => setShowGeoModal(false)}
             >
               <Text style={{ color: Theme.text, fontWeight: "bold" }}>Listo / Cerrar</Text>
@@ -6999,9 +6999,9 @@ export default function App() {
       {/* MODAL DE SELECCIÓN DE CATEGORÍA DE COMERCIO */}
       {showCategoryModal && (
         <View style={styles.modalBackdrop}>
-          <View style={[styles.modalCardContainer, { maxHeight: "80%", padding: 18 }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <View>
+          <View style={[styles.modalCardContainer, { maxHeight: "85%", padding: 18, alignItems: "stretch", width: "100%", maxWidth: 380 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12, width: "100%" }}>
+              <View style={{ flex: 1, marginRight: 8 }}>
                 <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
                   📂 Categorías de Comercio
                 </Text>
@@ -7009,16 +7009,17 @@ export default function App() {
                   Filtra los comercios aliados por su especialidad
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={{ padding: 4 }}>
-                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={{ padding: 6, borderRadius: 8 }}>
+                <Text style={{ fontSize: 18, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420, width: "100%" }} contentContainerStyle={{ width: "100%" }}>
               {/* Opción Todos los comercios */}
               <TouchableOpacity
                 style={[
                   styles.geoOptionCard,
+                  { width: "100%", alignSelf: "stretch" },
                   selectedCategory === null && { borderColor: Theme.primary, backgroundColor: "#ECFDF5" },
                 ]}
                 onPress={() => {
@@ -7026,17 +7027,17 @@ export default function App() {
                   setShowCategoryModal(false);
                 }}
               >
-                <Text style={{ fontSize: 18, marginRight: 8 }}>🏪</Text>
+                <Text style={{ fontSize: 20, marginRight: 10 }}>🏪</Text>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>
+                  <Text style={{ fontSize: 14, fontWeight: "bold", color: Theme.text }}>
                     Todos los comercios
                   </Text>
-                  <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                  <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
                     Mostrar todas las categorías disponibles en FASTGO
                   </Text>
                 </View>
                 {selectedCategory === null && (
-                  <Text style={{ fontSize: 14, color: Theme.primary, fontWeight: "900" }}>✓</Text>
+                  <Text style={{ fontSize: 16, color: Theme.primary, fontWeight: "900" }}>✓</Text>
                 )}
               </TouchableOpacity>
 
@@ -7048,6 +7049,7 @@ export default function App() {
                     key={`cat-${cat.id}`}
                     style={[
                       styles.geoOptionCard,
+                      { width: "100%", alignSelf: "stretch" },
                       isSelected && { borderColor: Theme.primary, backgroundColor: "#ECFDF5" },
                     ]}
                     onPress={() => {
@@ -7055,41 +7057,41 @@ export default function App() {
                       setShowCategoryModal(false);
                     }}
                   >
-                    <Text style={{ fontSize: 18, marginRight: 8 }}>{cat.icono || "🏷️"}</Text>
+                    <Text style={{ fontSize: 20, marginRight: 10 }}>{cat.icono || "🏷️"}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>
+                      <Text style={{ fontSize: 14, fontWeight: "bold", color: Theme.text }}>
                         {cat.nombre}
                       </Text>
                       {cat.descripcion && (
-                        <Text style={{ fontSize: 10, color: Theme.textMuted }} numberOfLines={1}>
+                        <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }} numberOfLines={1}>
                           {cat.descripcion}
                         </Text>
                       )}
                     </View>
                     {isSelected && (
-                      <Text style={{ fontSize: 14, color: Theme.primary, fontWeight: "900" }}>✓</Text>
+                      <Text style={{ fontSize: 16, color: Theme.primary, fontWeight: "900" }}>✓</Text>
                     )}
                   </TouchableOpacity>
                 );
               })}
 
               {categoriasComercio.length === 0 && !loadingCategorias && (
-                <View style={{ padding: 16, alignItems: "center" }}>
+                <View style={{ padding: 16, alignItems: "center", width: "100%" }}>
                   <Text style={{ fontSize: 12, color: Theme.textMuted }}>
                     No se encontraron categorías activas.
                   </Text>
                   <TouchableOpacity
                     onPress={() => loadCategoriasComercio()}
-                    style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: Theme.primary, borderRadius: 8 }}
+                    style={{ marginTop: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: Theme.primary, borderRadius: 8 }}
                   >
-                    <Text style={{ fontSize: 11, fontWeight: "bold", color: "#FFF" }}>Recargar</Text>
+                    <Text style={{ fontSize: 12, fontWeight: "bold", color: "#FFF" }}>Recargar</Text>
                   </TouchableOpacity>
                 </View>
               )}
             </ScrollView>
 
             <TouchableOpacity
-              style={[styles.outlineBtn, { marginTop: 12 }]}
+              style={[styles.outlineBtn, { marginTop: 12, width: "100%" }]}
               onPress={() => setShowCategoryModal(false)}
             >
               <Text style={{ color: Theme.text, fontWeight: "bold" }}>Listo / Cerrar</Text>
@@ -8335,6 +8337,8 @@ const styles = StyleSheet.create({
   geoOptionCard: {
     flexDirection: "row",
     alignItems: "center",
+    width: "100%",
+    alignSelf: "stretch",
     padding: 12,
     borderRadius: 12,
     borderWidth: 1.5,
