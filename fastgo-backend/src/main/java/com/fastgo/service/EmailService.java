@@ -34,7 +34,7 @@ public class EmailService {
     @Value("${fastgo.mail.password:}")
     private String mailPassword;
 
-    public void enviarCorreoRecuperacion(String destinatario, String nombre, String token) {
+    public boolean enviarCorreoRecuperacion(String destinatario, String nombre, String token) {
         String cleanFrontendUrl = frontendUrl != null ? frontendUrl.replaceAll("/+$", "") : "https://fastgo-app.fastgo-frontend.workers.dev";
         String resetUrl = cleanFrontendUrl + "/reset-password?token=" + token;
 
@@ -42,12 +42,22 @@ public class EmailService {
 
         if (mailHost != null && !mailHost.isBlank()) {
             boolean enviado = intentarEnvio(destinatario, nombre, resetUrl, mailPort);
-            if (!enviado && mailPort == 587) {
-                log.warn("[FASTGO MAIL] Reintentando envio en puerto alternativo 2525...");
-                intentarEnvio(destinatario, nombre, resetUrl, 2525);
+            if (!enviado && mailPort != 465) {
+                log.warn("[FASTGO MAIL] Reintentando envio en puerto alternativo 465 (SSL)...");
+                enviado = intentarEnvio(destinatario, nombre, resetUrl, 465);
             }
+            if (!enviado && mailPort != 2525) {
+                log.warn("[FASTGO MAIL] Reintentando envio en puerto alternativo 2525...");
+                enviado = intentarEnvio(destinatario, nombre, resetUrl, 2525);
+            }
+            if (!enviado && mailPort != 587) {
+                log.warn("[FASTGO MAIL] Reintentando envio en puerto alternativo 587 (TLS)...");
+                enviado = intentarEnvio(destinatario, nombre, resetUrl, 587);
+            }
+            return enviado;
         } else {
             log.info("[FASTGO MAIL] Modo seguro sin SMTP externo: Enlace de recuperacion emitido para {}", destinatario);
+            return true;
         }
     }
 
@@ -107,14 +117,26 @@ public class EmailService {
             sender.setPassword(mailPassword);
         }
         Properties props = sender.getJavaMailProperties();
-        props.put("mail.transport.protocol", "smtp");
         props.put("mail.smtp.auth", "true");
-        props.put("mail.smtp.starttls.enable", "true");
-        props.put("mail.smtp.starttls.required", "true");
         props.put("mail.smtp.ssl.trust", mailHost);
-        props.put("mail.smtp.connectiontimeout", "6000");
-        props.put("mail.smtp.timeout", "6000");
-        props.put("mail.smtp.writetimeout", "6000");
+        props.put("mail.smtp.connectiontimeout", "8000");
+        props.put("mail.smtp.timeout", "8000");
+        props.put("mail.smtp.writetimeout", "8000");
+
+        if (port == 465) {
+            props.put("mail.transport.protocol", "smtps");
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.starttls.enable", "false");
+            props.put("mail.smtp.starttls.required", "false");
+            props.put("mail.smtp.socketFactory.port", "465");
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+            props.put("mail.smtp.socketFactory.fallback", "false");
+        } else {
+            props.put("mail.transport.protocol", "smtp");
+            props.put("mail.smtp.ssl.enable", "false");
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.starttls.required", "true");
+        }
         return sender;
     }
 }

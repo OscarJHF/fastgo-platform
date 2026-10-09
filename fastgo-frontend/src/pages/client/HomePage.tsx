@@ -12,6 +12,9 @@ import {
   LogIn,
   UserPlus,
   Star,
+  Filter,
+  ChevronDown,
+  X,
 } from 'lucide-react';
 import { commerceService } from '../../services/commerceService';
 import { categoriaService } from '../../services/categoriaService';
@@ -30,6 +33,7 @@ export const HomePage: React.FC = () => {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [commerces, setCommerces] = useState<Comercio[]>([]);
   const [categories, setCategories] = useState<CategoriaComercio[]>([]);
+  const [categoriesError, setCategoriesError] = useState(false);
   const [featuredCommerces, setFeaturedCommerces] = useState<Comercio[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,6 +70,17 @@ export const HomePage: React.FC = () => {
     setSelectedMunicipio('');
   }, [selectedDepartamento]);
 
+  const fetchCategories = async () => {
+    try {
+      setCategoriesError(false);
+      const data = await categoriaService.listActiveCommerceCategories();
+      setCategories(data);
+    } catch (err) {
+      console.error('Error cargando categorías:', err);
+      setCategoriesError(true);
+    }
+  };
+
   useEffect(() => {
     if (isAuthenticated && (!user?.rol || user.rol === 'CLIENTE')) {
       const loadInitialData = async () => {
@@ -76,7 +91,7 @@ export const HomePage: React.FC = () => {
           if (selectedMunicipio) params.municipioId = selectedMunicipio;
           if (selectedCategory) params.categoriaId = selectedCategory;
 
-          const [commercesData, categoriesData, featuredData] = await Promise.all([
+          const [commercesRes, categoriesRes, featuredRes] = await Promise.allSettled([
             commerceService.listCommerces(params),
             categoriaService.listActiveCommerceCategories(),
             commerceService.listFeaturedCommerces({
@@ -84,9 +99,20 @@ export const HomePage: React.FC = () => {
               municipioId: selectedMunicipio || undefined,
             }),
           ]);
-          setCommerces(commercesData);
-          setCategories(categoriesData);
-          setFeaturedCommerces(featuredData);
+
+          if (commercesRes.status === 'fulfilled') {
+            setCommerces(commercesRes.value);
+          }
+          if (categoriesRes.status === 'fulfilled') {
+            setCategories(categoriesRes.value);
+            setCategoriesError(false);
+          } else {
+            console.error('Error cargando categorías:', categoriesRes.reason);
+            setCategoriesError(true);
+          }
+          if (featuredRes.status === 'fulfilled') {
+            setFeaturedCommerces(featuredRes.value);
+          }
         } catch (err) {
           console.error('Error cargando catálogo:', err);
         } finally {
@@ -357,11 +383,18 @@ export const HomePage: React.FC = () => {
   // =========================================================================
   // VISTA CLIENTE AUTENTICADO: CATÁLOGO COMERCIAL COMPLETO
   // =========================================================================
+  const selectedCategoryObj = categories.find((c) => c.id === selectedCategory);
+
   const filteredCommerces = commerces.filter((c) => {
     const matchesSearch =
       c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.descripcion && c.descripcion.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesCat = selectedCategory ? c.categoriaId === selectedCategory : true;
+    let matchesCat = true;
+    if (selectedCategory !== null) {
+      matchesCat =
+        c.categoriaId === selectedCategory ||
+        Boolean(selectedCategoryObj && c.categoria && c.categoria.toLowerCase() === selectedCategoryObj.nombre.toLowerCase());
+    }
     return matchesSearch && matchesCat && c.activo;
   });
 
@@ -510,34 +543,83 @@ export const HomePage: React.FC = () => {
         </Link>
       </section>
 
-      {/* Category Pills */}
-      <section className="space-y-3 max-w-full overflow-hidden">
-        <h2 className="text-lg font-black text-gray-900">Categorías de Comercio</h2>
-        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none max-w-full">
-          <button
-            onClick={() => setSelectedCategory(null)}
-            className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
-              selectedCategory === null
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-            }`}
-          >
-            Todas las Categorías
-          </button>
-          {categories.map((cat) => (
+      {/* Dropdown de Categorías de Comercio */}
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-gray-100 shadow-sm max-w-full">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-gray-900 flex items-center gap-2">
+              <Filter className="w-5 h-5 text-emerald-600" /> Categorías de Comercio
+            </h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Filtra los comercios aliados según su especialidad gastronómica o comercial
+            </p>
+          </div>
+
+          {selectedCategory !== null && (
             <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-4 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all ${
-                selectedCategory === cat.id
-                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-              }`}
+              onClick={() => setSelectedCategory(null)}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-colors self-start sm:self-auto cursor-pointer"
             >
-              {cat.nombre}
+              <span>Ver todos los comercios</span>
+              <X className="w-3.5 h-3.5" />
             </button>
-          ))}
+          )}
         </div>
+
+        {categoriesError ? (
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            <span>No se pudieron cargar las categorías en este momento.</span>
+            <button
+              onClick={fetchCategories}
+              className="px-3 py-1 font-bold bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors cursor-pointer"
+            >
+              Reintentar
+            </button>
+          </div>
+        ) : (
+          <div className="relative">
+            <select
+              id="filtro-categoria-comercio"
+              aria-label="Filtrar comercios por categoría"
+              value={selectedCategory !== null ? String(selectedCategory) : ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedCategory(val ? Number(val) : null);
+              }}
+              className="w-full appearance-none px-4 py-3 pr-10 rounded-2xl bg-gray-50 hover:bg-gray-100/80 border border-gray-200 text-gray-900 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all cursor-pointer shadow-sm"
+            >
+              <option value="">🏪 Todos los comercios (Todas las categorías)</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.icono ? `${cat.icono} ` : ''}{cat.nombre}
+                </option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-gray-400">
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </div>
+        )}
+
+        {selectedCategoryObj && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+            <span className="font-semibold text-gray-500">Filtrando por:</span>
+            <span className="inline-flex items-center gap-1.5 font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+              {selectedCategoryObj.icono && <span>{selectedCategoryObj.icono}</span>}
+              <span>{selectedCategoryObj.nombre}</span>
+              <button
+                onClick={() => setSelectedCategory(null)}
+                aria-label="Quitar filtro de categoría"
+                className="hover:opacity-75 ml-1 cursor-pointer font-black"
+              >
+                ✕
+              </button>
+            </span>
+            <span className="text-gray-400">
+              ({filteredCommerces.length} {filteredCommerces.length === 1 ? 'comercio encontrado' : 'comercios encontrados'})
+            </span>
+          </div>
+        )}
       </section>
 
       {/* Featured Stores (Tiendas Destacadas del Banner Principal autorizadas por ADMIN) */}
@@ -623,10 +705,33 @@ export const HomePage: React.FC = () => {
         </div>
 
         {filteredCommerces.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 p-8">
-            <Store className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-base font-bold text-gray-700">No encontramos comercios que coincidan</p>
-            <p className="text-xs text-gray-400 mt-1">Prueba seleccionando otra categoría o término de búsqueda</p>
+          <div className="text-center py-12 bg-white rounded-3xl border border-gray-100 p-8 space-y-3">
+            <Store className="w-12 h-12 text-gray-300 mx-auto" />
+            <h3 className="text-base font-bold text-gray-800">
+              {selectedCategory !== null
+                ? `No encontramos comercios en la categoría «${selectedCategoryObj?.nombre || 'seleccionada'}»`
+                : 'No encontramos comercios que coincidan'}
+            </h3>
+            <p className="text-xs text-gray-400 max-w-sm mx-auto">
+              {selectedCategory !== null || searchQuery.trim()
+                ? 'Prueba restableciendo los filtros o explorando otras categorías disponibles.'
+                : 'Pronto se sumarán nuevos aliados a tu zona.'}
+            </p>
+            {(selectedCategory !== null || searchQuery.trim() || selectedDepartamento) && (
+              <div className="pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedCategory(null);
+                    setSearchQuery('');
+                  }}
+                  className="text-xs font-bold text-emerald-700 border-emerald-300 hover:bg-emerald-50 cursor-pointer"
+                >
+                  Restablecer filtros y ver todos los comercios
+                </Button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

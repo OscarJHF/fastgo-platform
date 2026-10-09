@@ -57,6 +57,7 @@ interface Comercio {
   telefono?: string;
   direccion?: string;
   categoria?: string;
+  categoriaId?: number;
   horaApertura?: string;
   horaCierre?: string;
   diasAtencion?: string;
@@ -374,7 +375,11 @@ export default function App() {
   const [comercios, setComercios] = useState<Comercio[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [selectedComercio, setSelectedComercio] = useState<Comercio | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>("Todos");
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
+  const [categoriasComercio, setCategoriasComercio] = useState<any[]>([]);
+  const [loadingCategorias, setLoadingCategorias] = useState<boolean>(false);
+  const [errorCategorias, setErrorCategorias] = useState<boolean>(false);
+  const [showCategoryModal, setShowCategoryModal] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Geografía Colombiana (DANE)
@@ -809,11 +814,32 @@ export default function App() {
       if (healthRes.ok) {
         setNetworkStatus("connected");
         loadComercios(targetUrl);
+        loadCategoriasComercio(targetUrl);
       } else {
         setNetworkStatus("error");
       }
     } catch {
       setNetworkStatus("error");
+    }
+  };
+
+  const loadCategoriasComercio = async (baseUrl = apiUrl) => {
+    try {
+      setLoadingCategorias(true);
+      setErrorCategorias(false);
+      const res = await fetch(`${baseUrl}/api/categorias-comercio/activas`, {
+        headers: { Accept: "application/json" },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCategoriasComercio(data);
+      } else {
+        setErrorCategorias(true);
+      }
+    } catch {
+      setErrorCategorias(true);
+    } finally {
+      setLoadingCategorias(false);
     }
   };
 
@@ -942,13 +968,15 @@ export default function App() {
         }
       } catch {}
 
-      // 2. Cargar Departamentos de Colombia (DANE)
+      // 2. Cargar Departamentos de Colombia (DANE) y Categorías de Comercio
       fetch(`${apiUrl}/api/geografia/departamentos`, {
         headers: { Accept: "application/json" },
       })
         .then((r) => (r.ok ? r.json() : []))
         .then((data) => setDepartamentos(data))
         .catch(() => {});
+
+      loadCategoriasComercio(apiUrl);
 
       const saved = await getStoredSession();
       if (saved && saved.token) {
@@ -990,6 +1018,7 @@ export default function App() {
     setRefreshing(true);
     await checkConnection(apiUrl);
     await fetchDepartamentos(apiUrl);
+    await loadCategoriasComercio(apiUrl);
     if (token && user) {
       if (user.rol === "CLIENTE") {
         await fetchPedidosCliente();
@@ -2571,7 +2600,26 @@ export default function App() {
     return matchesCommerce && matchesSearch;
   });
 
-  const categories = ["Todos", "Restaurantes", "Comidas Rápidas", "Supermercado", "Café", "Bebidas"];
+  // Filtrado dinámico de comercios aliados por categoría y búsqueda
+  const selectedCategoryObj = categoriasComercio.find((c) => c.id === selectedCategory);
+
+  const filteredComercios = comercios.filter((c) => {
+    let matchesCat = true;
+    if (selectedCategory !== null) {
+      matchesCat =
+        c.categoriaId === selectedCategory ||
+        Boolean(
+          selectedCategoryObj &&
+          c.categoria &&
+          c.categoria.toLowerCase() === selectedCategoryObj.nombre.toLowerCase()
+        );
+    }
+    const matchesSearch =
+      searchQuery.trim() === "" ||
+      c.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      Boolean(c.descripcion && c.descripcion.toLowerCase().includes(searchQuery.toLowerCase()));
+    return matchesCat && matchesSearch;
+  });
 
   if (isInitializing) {
     return (
@@ -3245,7 +3293,7 @@ export default function App() {
               <View style={styles.servicesGridRow}>
                 <TouchableOpacity
                   style={[styles.serviceCard, { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }]}
-                  onPress={() => setSelectedCategory("Todos")}
+                  onPress={() => setSelectedCategory(null)}
                 >
                   <View style={{ flex: 1 }}>
                     <View style={[styles.serviceBadge, { backgroundColor: "#D1FAE5" }]}>
@@ -3276,22 +3324,94 @@ export default function App() {
               </View>
             )}
 
-            {/* Categorías Horizontales */}
+            {/* Selector Desplegable de Categorías de Comercio */}
             {!selectedComercio && (
-              <View style={styles.categorySection}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryScroll}>
-                  {categories.map((cat) => (
+              <View style={[styles.sectionBlock, { marginBottom: 12 }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "900", color: Theme.text }}>
+                    📂 Categorías de Comercio
+                  </Text>
+                  {selectedCategory !== null && (
                     <TouchableOpacity
-                      key={cat}
-                      style={[styles.categoryChip, selectedCategory === cat && styles.categoryChipActive]}
-                      onPress={() => setSelectedCategory(cat)}
+                      onPress={() => setSelectedCategory(null)}
+                      style={{ paddingHorizontal: 8, paddingVertical: 2, backgroundColor: "#ECFDF5", borderRadius: 8 }}
                     >
-                      <Text style={[styles.categoryChipText, selectedCategory === cat && styles.categoryChipTextActive]}>
-                        {cat}
+                      <Text style={{ fontSize: 10, fontWeight: "bold", color: Theme.primaryDark }}>
+                        Ver todos ✕
                       </Text>
                     </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                  )}
+                </View>
+
+                {errorCategorias ? (
+                  <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#FEF3C7", padding: 10, borderRadius: 12, borderWidth: 1, borderColor: "#FDE68A" }}>
+                    <Text style={{ fontSize: 11, color: "#92400E", flex: 1 }}>
+                      No se pudieron cargar las categorías.
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => loadCategoriasComercio()}
+                      style={{ backgroundColor: "#D97706", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: "bold", color: "#FFF" }}>Reintentar</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      backgroundColor: "#FFFFFF",
+                      paddingHorizontal: 14,
+                      paddingVertical: 12,
+                      borderRadius: 14,
+                      borderWidth: 1,
+                      borderColor: selectedCategory !== null ? Theme.primary : "#E2E8F0",
+                      shadowColor: "#000",
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.05,
+                      shadowRadius: 2,
+                      elevation: 1,
+                    }}
+                    onPress={() => setShowCategoryModal(true)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 8 }}>
+                      <Text style={{ fontSize: 16, marginRight: 8 }}>
+                        {selectedCategoryObj?.icono || "🏪"}
+                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }} numberOfLines={1}>
+                          {selectedCategoryObj ? selectedCategoryObj.nombre : "Todos los comercios"}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                          {selectedCategoryObj
+                            ? `Mostrando comercios en ${selectedCategoryObj.nombre}`
+                            : "Todas las categorías disponibles"}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: 12, color: Theme.textMuted }}>▼</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Badge indicador de categoría activa */}
+                {selectedCategoryObj && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 6, paddingHorizontal: 4 }}>
+                    <Text style={{ fontSize: 11, color: Theme.textMuted }}>Filtro:</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#D1FAE5", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
+                      <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.primaryDark }}>
+                        {selectedCategoryObj.nombre}
+                      </Text>
+                      <TouchableOpacity onPress={() => setSelectedCategory(null)} style={{ marginLeft: 6 }}>
+                        <Text style={{ fontSize: 11, fontWeight: "bold", color: Theme.primaryDark }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                      ({filteredComercios.length} {filteredComercios.length === 1 ? "aliado" : "aliados"})
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
@@ -3420,22 +3540,42 @@ export default function App() {
             {/* Sección de Comercios Aliados (si no hay uno seleccionado) */}
             {!selectedComercio && (
               <View style={styles.sectionBlock}>
-                <Text style={styles.sectionTitle}>Comercios Aliados</Text>
-                {comercios.length === 0 ? (
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                  <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Comercios Aliados</Text>
+                  <Text style={{ fontSize: 11, fontWeight: "600", color: Theme.textMuted }}>
+                    {filteredComercios.length} {filteredComercios.length === 1 ? "disponible" : "disponibles"}
+                  </Text>
+                </View>
+                {filteredComercios.length === 0 ? (
                   <View style={styles.emptyCard}>
                     <Text style={styles.emptyCardTitle}>
-                      {networkStatus === "loading"
+                      {selectedCategory !== null
+                        ? `No hay comercios en «${selectedCategoryObj?.nombre || "esta categoría"}»`
+                        : networkStatus === "loading"
                         ? "Conectando con la red FastGo..."
-                        : "No hay comercios registrados aún"}
+                        : "No encontramos comercios que coincidan"}
                     </Text>
                     <Text style={styles.emptyCardText}>
-                      {networkStatus === "loading"
-                        ? "Cargando aliados en línea desde Render Cloud"
+                      {selectedCategory !== null || searchQuery.trim()
+                        ? "Prueba cambiando de categoría o restableciendo los filtros de búsqueda."
                         : "Pronto se sumarán nuevos aliados a tu zona."}
                     </Text>
+                    {(selectedCategory !== null || searchQuery.trim() || selectedDepartamentoId) && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          setSelectedCategory(null);
+                          setSearchQuery("");
+                        }}
+                        style={{ marginTop: 12, backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#A7F3D0", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, alignSelf: "center" }}
+                      >
+                        <Text style={{ fontSize: 12, fontWeight: "bold", color: Theme.primaryDark }}>
+                          Restablecer filtros y ver todos
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
-                  comercios.map((c) => (
+                  filteredComercios.map((c) => (
                     <TouchableOpacity
                       key={c.id}
                       style={styles.commerceCard}
@@ -6849,6 +6989,108 @@ export default function App() {
             <TouchableOpacity
               style={[styles.outlineBtn, { marginTop: 12 }]}
               onPress={() => setShowGeoModal(false)}
+            >
+              <Text style={{ color: Theme.text, fontWeight: "bold" }}>Listo / Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* MODAL DE SELECCIÓN DE CATEGORÍA DE COMERCIO */}
+      {showCategoryModal && (
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCardContainer, { maxHeight: "80%", padding: 18 }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <View>
+                <Text style={{ fontSize: 16, fontWeight: "900", color: Theme.text }}>
+                  📂 Categorías de Comercio
+                </Text>
+                <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
+                  Filtra los comercios aliados por su especialidad
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 16, fontWeight: "bold", color: Theme.textMuted }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 380 }}>
+              {/* Opción Todos los comercios */}
+              <TouchableOpacity
+                style={[
+                  styles.geoOptionCard,
+                  selectedCategory === null && { borderColor: Theme.primary, backgroundColor: "#ECFDF5" },
+                ]}
+                onPress={() => {
+                  setSelectedCategory(null);
+                  setShowCategoryModal(false);
+                }}
+              >
+                <Text style={{ fontSize: 18, marginRight: 8 }}>🏪</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>
+                    Todos los comercios
+                  </Text>
+                  <Text style={{ fontSize: 10, color: Theme.textMuted }}>
+                    Mostrar todas las categorías disponibles en FASTGO
+                  </Text>
+                </View>
+                {selectedCategory === null && (
+                  <Text style={{ fontSize: 14, color: Theme.primary, fontWeight: "900" }}>✓</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Lista dinámica de categorías activas */}
+              {categoriasComercio.map((cat) => {
+                const isSelected = selectedCategory === cat.id;
+                return (
+                  <TouchableOpacity
+                    key={`cat-${cat.id}`}
+                    style={[
+                      styles.geoOptionCard,
+                      isSelected && { borderColor: Theme.primary, backgroundColor: "#ECFDF5" },
+                    ]}
+                    onPress={() => {
+                      setSelectedCategory(cat.id);
+                      setShowCategoryModal(false);
+                    }}
+                  >
+                    <Text style={{ fontSize: 18, marginRight: 8 }}>{cat.icono || "🏷️"}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, fontWeight: "bold", color: Theme.text }}>
+                        {cat.nombre}
+                      </Text>
+                      {cat.descripcion && (
+                        <Text style={{ fontSize: 10, color: Theme.textMuted }} numberOfLines={1}>
+                          {cat.descripcion}
+                        </Text>
+                      )}
+                    </View>
+                    {isSelected && (
+                      <Text style={{ fontSize: 14, color: Theme.primary, fontWeight: "900" }}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+
+              {categoriasComercio.length === 0 && !loadingCategorias && (
+                <View style={{ padding: 16, alignItems: "center" }}>
+                  <Text style={{ fontSize: 12, color: Theme.textMuted }}>
+                    No se encontraron categorías activas.
+                  </Text>
+                  <TouchableOpacity
+                    onPress={() => loadCategoriasComercio()}
+                    style={{ marginTop: 8, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: Theme.primary, borderRadius: 8 }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: "bold", color: "#FFF" }}>Recargar</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={[styles.outlineBtn, { marginTop: 12 }]}
+              onPress={() => setShowCategoryModal(false)}
             >
               <Text style={{ color: Theme.text, fontWeight: "bold" }}>Listo / Cerrar</Text>
             </TouchableOpacity>

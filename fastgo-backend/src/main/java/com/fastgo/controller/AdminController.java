@@ -61,8 +61,12 @@ public class AdminController {
         if (correo == null || correo.isBlank()) {
             correo = "soporte@fastgo.com";
         }
-        emailService.enviarCorreoRecuperacion(correo, "Usuario Test Admin", "test-token-12345");
-        return ResponseEntity.ok(Map.of("mensaje", "Correo de prueba enviado a " + correo));
+        boolean ok = emailService.enviarCorreoRecuperacion(correo, "Usuario Test Admin", "test-token-12345");
+        return ResponseEntity.ok(Map.of(
+                "mensaje", ok ? "Correo de prueba enviado con éxito a " + correo : "Fallo el despacho via SMTP a " + correo,
+                "estado", ok ? "ENVIADO" : "FALLIDO",
+                "correo", correo
+        ));
     }
 
     @PutMapping("/tiendas/{id}/activar")
