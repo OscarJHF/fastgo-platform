@@ -231,6 +231,8 @@ export const AppRoutes: React.FC = () => {
         <Route path="/admin/usuarios" element={<RoleRoute allowedRoles={['ADMIN']}><AdminUsersPage /></RoleRoute>} />
         <Route path="/admin/categorias" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCategoriesPage /></RoleRoute>} />
         <Route path="/admin/comercios" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCommercesPage /></RoleRoute>} />
+        <Route path="/admin/tiendas" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCommercesPage /></RoleRoute>} />
+        <Route path="/admin-panel/tiendas" element={<RoleRoute allowedRoles={['ADMIN']}><AdminCommercesPage /></RoleRoute>} />
         <Route path="/admin/metricas" element={<RoleRoute allowedRoles={['ADMIN']}><AdminMetricsPage /></RoleRoute>} />
 
         <Route path="/pedidos" element={<ProtectedRoute><OrdersPage /></ProtectedRoute>} />

@@ -140,4 +140,38 @@ describe('OrderDetailPage Component Tests', () => {
       expect(screen.getByText('Pedido #20')).toBeInTheDocument();
     });
   });
+
+  it('renders gracefully without crashing when tracking data has null latitud/longitud (e.g. Pedido #33)', async () => {
+    vi.mocked(pedidoService.getOrder).mockResolvedValue(mockOrder as any);
+    vi.mocked(pedidoService.getOrderDetails).mockResolvedValue(mockDetails as any);
+    vi.mocked(trackingService.obtenerUltimaUbicacion).mockResolvedValue({
+      id: null,
+      pedidoId: 33,
+      domiciliarioId: 3,
+      estadoPedido: 'EN_CAMINO',
+      activo: true,
+      latitud: null,
+      longitud: null,
+      precision: null,
+      velocidad: null,
+      rumbo: null,
+      fechaHora: null,
+      actualizadoEn: null,
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/pedidos/33']}>
+        <ToastProvider>
+          <Routes>
+            <Route path="/pedidos/:id" element={<OrderDetailPage />} />
+          </Routes>
+        </ToastProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Pedido #20')).toBeInTheDocument();
+      expect(screen.getByText(/Esperando primera transmisión de coordenadas/i)).toBeInTheDocument();
+    });
+  });
 });

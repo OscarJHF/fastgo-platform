@@ -16,11 +16,11 @@ public class PagoController {
     public PagoController(PagoService pagoService) { this.pagoService = pagoService; }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('CLIENTE') or hasRole('COMERCIO')")
+    @PreAuthorize("hasRole('CLIENTE') or hasRole('COMERCIO') or hasRole('ADMIN')")
     public ResponseEntity<Pago> obtener(@PathVariable Integer id) { return ResponseEntity.ok(pagoService.obtenerPorId(id)); }
 
     @GetMapping("/pedido/{pedidoId}")
-    @PreAuthorize("hasRole('CLIENTE') or hasRole('COMERCIO')")
+    @PreAuthorize("hasRole('CLIENTE') or hasRole('COMERCIO') or hasRole('ADMIN')")
     public ResponseEntity<List<Pago>> listarPorPedido(@PathVariable Integer pedidoId) { return ResponseEntity.ok(pagoService.listarPorPedido(pedidoId)); }
 
     @PutMapping("/{pagoId}/estado")

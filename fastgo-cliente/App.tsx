@@ -167,15 +167,16 @@ interface PedidoItem {
 }
 
 interface TrackingData {
-  id: number;
-  pedidoId: number;
-  domiciliarioId: number;
-  latitud: number;
-  longitud: number;
+  id?: number | null;
+  pedidoId?: number;
+  domiciliarioId?: number;
+  latitud?: number | null;
+  longitud?: number | null;
   precision?: number | null;
   rumbo?: number | null;
   velocidad?: number | null;
-  fechaHora: string;
+  fechaHora?: string | null;
+  activo?: boolean;
 }
 
 interface DetallePedidoItem {
@@ -3786,7 +3787,14 @@ export default function App() {
                     <Text style={styles.orderHeaderId}>Pedido #{selectedPedido.id}</Text>
                     {selectedPedido.creadoEn ? (
                       <Text style={{ fontSize: 11, color: Theme.textMuted, marginTop: 2 }}>
-                        📅 {new Date(selectedPedido.creadoEn).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" })}
+                        📅 {(() => {
+                          try {
+                            const d = new Date(selectedPedido.creadoEn);
+                            return isNaN(d.getTime()) ? String(selectedPedido.creadoEn) : d.toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" });
+                          } catch {
+                            return String(selectedPedido.creadoEn);
+                          }
+                        })()}
                       </Text>
                     ) : null}
                   </View>
@@ -3951,12 +3959,12 @@ export default function App() {
                       </Text>
                       <Text style={{ fontSize: 10, color: "#2563EB", fontWeight: "bold" }}>EN RUTA</Text>
                     </View>
-                    {trackingCliente ? (
+                    {trackingCliente && trackingCliente.latitud != null && trackingCliente.longitud != null && !isNaN(Number(trackingCliente.latitud)) && !isNaN(Number(trackingCliente.longitud)) ? (
                       <View style={{ marginTop: 6 }}>
                         <Text style={{ fontSize: 11, color: "#1E3A8A" }}>
-                          Posición actual: {trackingCliente.latitud.toFixed(4)}, {trackingCliente.longitud.toFixed(4)}
-                          {trackingCliente.velocidad != null ? ` • ${(trackingCliente.velocidad * 3.6).toFixed(0)} km/h` : ""}
-                          {trackingCliente.precision != null ? ` • ±${Math.round(trackingCliente.precision)}m` : ""}
+                          Posición actual: {Number(trackingCliente.latitud).toFixed(4)}, {Number(trackingCliente.longitud).toFixed(4)}
+                          {trackingCliente.velocidad != null && !isNaN(Number(trackingCliente.velocidad)) ? ` • ${(Number(trackingCliente.velocidad) * 3.6).toFixed(0)} km/h` : ""}
+                          {trackingCliente.precision != null && !isNaN(Number(trackingCliente.precision)) ? ` • ±${Math.round(Number(trackingCliente.precision))}m` : ""}
                         </Text>
                         <TouchableOpacity
                           style={{
@@ -5087,9 +5095,9 @@ export default function App() {
                               Ref: {p.destinoReferencia}
                             </Text>
                           ) : null}
-                          {p.destinoLatitud != null && p.destinoLongitud != null ? (
+                          {p.destinoLatitud != null && p.destinoLongitud != null && !isNaN(Number(p.destinoLatitud)) && !isNaN(Number(p.destinoLongitud)) ? (
                             <Text style={{ fontSize: 10, fontWeight: "bold", color: "#2563EB", marginTop: 2 }}>
-                              GPS: {p.destinoLatitud.toFixed(4)}, {p.destinoLongitud.toFixed(4)}
+                              GPS: {Number(p.destinoLatitud).toFixed(4)}, {Number(p.destinoLongitud).toFixed(4)}
                             </Text>
                           ) : null}
                         </View>
@@ -5168,9 +5176,9 @@ export default function App() {
                               Ref: {p.destinoReferencia}
                             </Text>
                           ) : null}
-                          {p.destinoLatitud != null && p.destinoLongitud != null ? (
+                          {p.destinoLatitud != null && p.destinoLongitud != null && !isNaN(Number(p.destinoLatitud)) && !isNaN(Number(p.destinoLongitud)) ? (
                             <Text style={{ fontSize: 10, fontWeight: "bold", color: "#2563EB", marginTop: 2 }}>
-                              GPS: {p.destinoLatitud.toFixed(4)}, {p.destinoLongitud.toFixed(4)}
+                              GPS: {Number(p.destinoLatitud).toFixed(4)}, {Number(p.destinoLongitud).toFixed(4)}
                             </Text>
                           ) : null}
                         </View>

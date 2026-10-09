@@ -48,18 +48,18 @@ export const AdminDashboardPage: React.FC = () => {
           </Card>
         </Link>
 
-        <Link to={APP_ROUTES.ADMIN_COMMERCES}>
+        <Link to={APP_ROUTES.ADMIN_TIENDAS}>
           <Card hoverable className="p-6 h-full flex flex-col justify-between">
             <div>
               <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
                 <Store className="w-5 h-5" />
               </div>
-              <h3 className="font-black text-base text-gray-900">Comercios del Sistema</h3>
+              <h3 className="font-black text-base text-gray-900">Tiendas y Comercios</h3>
               <p className="text-xs text-gray-500 mt-1">
-                Supervisa todos los comercios aliados activos y sus sucursales.
+                Activa, desactiva, suspende o reactiva tiendas, planes y supervisa operaciones.
               </p>
             </div>
-            <span className="text-xs font-bold text-purple-700 mt-4 inline-block">Ver comercios →</span>
+            <span className="text-xs font-bold text-purple-700 mt-4 inline-block">Gestionar tiendas →</span>
           </Card>
         </Link>
 

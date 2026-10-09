@@ -60,6 +60,7 @@ export const AdminCommercesPage: React.FC = () => {
 
   // Modal de acción administrativa sobre tiendas
   const [selectedStore, setSelectedStore] = useState<AdminTienda | null>(null);
+  const [selectedStoreDetail, setSelectedStoreDetail] = useState<AdminTienda | null>(null);
   const [actionType, setActionType] = useState<'activar' | 'desactivar' | 'suspender' | 'reactivar' | 'eliminar' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [isProcessingAction, setIsProcessingAction] = useState(false);
@@ -489,6 +490,15 @@ export const AdminCommercesPage: React.FC = () => {
 
                   {/* Administrative Action Buttons */}
                   <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setSelectedStoreDetail(s)}
+                      className="text-xs flex items-center gap-1 text-blue-700 bg-blue-50 hover:bg-blue-100 border-blue-200"
+                    >
+                      <Eye className="w-3.5 h-3.5" /> Ver Detalle
+                    </Button>
+
                     {s.estado !== 'ACTIVA' && !s.eliminado && (
                       <Button
                         size="sm"
@@ -972,6 +982,203 @@ export const AdminCommercesPage: React.FC = () => {
                 isLoading={isProcessingAction}
               >
                 {actionType === 'eliminar' ? 'Confirmar Eliminación Segura' : `Confirmar ${actionType}`}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Consulta Detallada de Tienda */}
+      {selectedStoreDetail && (
+        <Modal
+          isOpen={true}
+          onClose={() => setSelectedStoreDetail(null)}
+          title={`Detalle de Tienda: ${selectedStoreDetail.nombre}`}
+          maxWidth="lg"
+        >
+          <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+            {/* Header info */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-gray-50 rounded-xl border border-gray-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-black text-gray-900">{selectedStoreDetail.nombre}</h3>
+                  {selectedStoreDetail.destacado && (
+                    <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-200">
+                      ⭐ Destacada
+                    </span>
+                  )}
+                  {selectedStoreDetail.esPrincipal ? (
+                    <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded-full">
+                      Principal
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-purple-100 text-purple-700 font-bold px-2 py-0.5 rounded-full">
+                      Adicional
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-0.5">ID: #{selectedStoreDetail.id} • Registrada: {selectedStoreDetail.fechaCreacion ? new Date(selectedStoreDetail.fechaCreacion).toLocaleDateString('es-CO') : '—'}</p>
+              </div>
+              <div>{getStatusBadge(selectedStoreDetail.estado)}</div>
+            </div>
+
+            {/* Propietario */}
+            <div className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm space-y-2">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-blue-600" /> Propietario / Cuenta Asociada
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Nombre:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.propietarioNombre || 'No registrado'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Correo:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.propietarioCorreo || 'No registrado'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Teléfono:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.propietarioTelefono || selectedStoreDetail.telefono || 'No registrado'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ubicación */}
+            <div className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm space-y-2">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" /> Ubicación y Jurisdicción DANE
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Dirección:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.direccion || 'Sin dirección registrada'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Departamento DANE:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.departamentoNombre || 'Cundinamarca'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Municipio DANE:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.municipioNombre || selectedStoreDetail.ciudad || 'Bogotá'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Métricas Operativas */}
+            <div className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm space-y-2">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <Boxes className="w-3.5 h-3.5 text-indigo-600" /> Operaciones y Catálogo
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div className="bg-slate-50 p-2 rounded-lg">
+                  <span className="text-gray-400 block text-[10px]">Sucursales</span>
+                  <span className="text-base font-black text-gray-900">{selectedStoreDetail.totalSucursales ?? 0}</span>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-lg">
+                  <span className="text-gray-400 block text-[10px]">Productos</span>
+                  <span className="text-base font-black text-gray-900">{selectedStoreDetail.totalProductos ?? 0}</span>
+                </div>
+                <div className="bg-slate-50 p-2 rounded-lg">
+                  <span className="text-gray-400 block text-[10px]">Pedidos Históricos</span>
+                  <span className="text-base font-black text-gray-900">{selectedStoreDetail.totalPedidos ?? 0}</span>
+                </div>
+                <div className="bg-amber-50 p-2 rounded-lg border border-amber-100">
+                  <span className="text-amber-700 block text-[10px] font-bold">Pedidos Activos</span>
+                  <span className="text-base font-black text-amber-900">{selectedStoreDetail.pedidosActivos ?? 0}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Estado de Suscripción */}
+            <div className="p-3 bg-white rounded-xl border border-gray-100 shadow-sm space-y-2">
+              <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-600" /> Estado de Suscripción
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Plan Actual:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.tipoPlan || (selectedStoreDetail.esPrincipal ? 'TIENDA_PRINCIPAL' : 'TIENDA_ADICIONAL')}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Estado Plan:</span>
+                  <span className="font-semibold text-gray-800">{selectedStoreDetail.estadoSuscripcion || selectedStoreDetail.estado}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 block text-[10px]">Vencimiento:</span>
+                  <span className="font-semibold text-gray-800">
+                    {selectedStoreDetail.fechaVencimiento ? new Date(selectedStoreDetail.fechaVencimiento).toLocaleDateString('es-CO') : 'Sin fecha fija'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions in Detail Modal */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedStoreDetail.estado !== 'ACTIVA' && !selectedStoreDetail.eliminado && (
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
+                      const st = selectedStoreDetail;
+                      setSelectedStoreDetail(null);
+                      handleOpenAction(st, 'activar');
+                    }}
+                    className="text-xs"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Activar Tienda
+                  </Button>
+                )}
+                {selectedStoreDetail.estado === 'ACTIVA' && !selectedStoreDetail.eliminado && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const st = selectedStoreDetail;
+                      setSelectedStoreDetail(null);
+                      handleOpenAction(st, 'suspender');
+                    }}
+                    className="text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200"
+                  >
+                    <PauseCircle className="w-3.5 h-3.5" /> Suspender
+                  </Button>
+                )}
+                {selectedStoreDetail.estado === 'SUSPENDIDA' && !selectedStoreDetail.eliminado && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const st = selectedStoreDetail;
+                      setSelectedStoreDetail(null);
+                      handleOpenAction(st, 'reactivar');
+                    }}
+                    className="text-xs text-green-700 bg-green-50 hover:bg-green-100 border-green-200"
+                  >
+                    <PlayCircle className="w-3.5 h-3.5" /> Reactivar
+                  </Button>
+                )}
+                {selectedStoreDetail.estado !== 'DESACTIVADA' && !selectedStoreDetail.eliminado && (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      const st = selectedStoreDetail;
+                      setSelectedStoreDetail(null);
+                      handleOpenAction(st, 'desactivar');
+                    }}
+                    className="text-xs text-red-600 bg-red-50 hover:bg-red-100 border-red-200"
+                  >
+                    <XCircle className="w-3.5 h-3.5" /> Desactivar
+                  </Button>
+                )}
+              </div>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setSelectedStoreDetail(null)}
+              >
+                Cerrar
               </Button>
             </div>
           </div>

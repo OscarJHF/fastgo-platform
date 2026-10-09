@@ -521,10 +521,10 @@ export const OrderDetailPage: React.FC = () => {
             </p>
           )}
 
-          {order.destinoLatitud != null && order.destinoLongitud != null && (
+          {order.destinoLatitud != null && order.destinoLongitud != null && !isNaN(Number(order.destinoLatitud)) && !isNaN(Number(order.destinoLongitud)) && (
             <div className="flex items-center justify-between pt-1">
               <span className="text-[11px] text-gray-500">
-                Coordenadas destino: <strong>{order.destinoLatitud.toFixed(4)}, {order.destinoLongitud.toFixed(4)}</strong>
+                Coordenadas destino: <strong>{Number(order.destinoLatitud).toFixed(4)}, {Number(order.destinoLongitud).toFixed(4)}</strong>
               </span>
               <a
                 href={`https://www.google.com/maps/search/?api=1&query=${order.destinoLatitud},${order.destinoLongitud}`}
@@ -548,17 +548,19 @@ export const OrderDetailPage: React.FC = () => {
               <span className="text-[10px] text-blue-700 font-semibold">Telemetría GPS FastGo</span>
             </div>
 
-            {tracking ? (
+            {tracking && tracking.latitud != null && tracking.longitud != null && !isNaN(Number(tracking.latitud)) && !isNaN(Number(tracking.longitud)) ? (
               <div className="space-y-2 pt-1 text-[11px] text-blue-800">
                 <p>
-                  Posición actual: <strong>{tracking.latitud.toFixed(5)}, {tracking.longitud.toFixed(5)}</strong>
-                  {tracking.velocidad != null && ` • ${(tracking.velocidad * 3.6).toFixed(0)} km/h`}
-                  {tracking.precision != null && ` • Precisión: ±${Math.round(tracking.precision)}m`}
+                  Posición actual: <strong>{Number(tracking.latitud).toFixed(5)}, {Number(tracking.longitud).toFixed(5)}</strong>
+                  {tracking.velocidad != null && !isNaN(Number(tracking.velocidad)) && ` • ${(Number(tracking.velocidad) * 3.6).toFixed(0)} km/h`}
+                  {tracking.precision != null && !isNaN(Number(tracking.precision)) && ` • Precisión: ±${Math.round(Number(tracking.precision))}m`}
                 </p>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-blue-600">
-                    Último reporte: {formatDate(tracking.fechaHora)}
-                  </span>
+                  {tracking.fechaHora && (
+                    <span className="text-[10px] text-blue-600">
+                      Último reporte: {formatDate(tracking.fechaHora)}
+                    </span>
+                  )}
                   <a
                     href={`https://www.google.com/maps/search/?api=1&query=${tracking.latitud},${tracking.longitud}`}
                     target="_blank"

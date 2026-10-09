@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import { CartProvider } from './context/CartContext';
 import { ToastProvider } from './context/ToastContext';
 import { MerchantStoreProvider } from './context/MerchantStoreContext';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { AppRoutes } from './routes';
 
 export const App: React.FC = () => {
@@ -13,7 +14,9 @@ export const App: React.FC = () => {
         <AuthProvider>
           <MerchantStoreProvider>
             <CartProvider>
-              <AppRoutes />
+              <ErrorBoundary>
+                <AppRoutes />
+              </ErrorBoundary>
             </CartProvider>
           </MerchantStoreProvider>
         </AuthProvider>

@@ -320,6 +320,12 @@ public class ComercioService {
                 .toList();
     }
 
+    public AdminTiendaResponseDTO buscarPorIdAdmin(Integer id) {
+        Comercio c = comercioRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Comercio no encontrado con id: " + id));
+        return toAdminDTO(c);
+    }
+
     @Transactional
     public AdminTiendaResponseDTO activarTiendaAdmin(Integer id, String razon) {
         Usuario admin = usuario();

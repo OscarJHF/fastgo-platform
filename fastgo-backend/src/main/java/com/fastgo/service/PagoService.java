@@ -130,6 +130,12 @@ public class PagoService {
     private void autorizarPedido(Integer pedidoId) {
         Pedido pedido = pedido(pedidoId);
         Usuario usuario = usuario();
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        boolean esAdmin = (auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equalsIgnoreCase(a.getAuthority()) || "ADMIN".equalsIgnoreCase(a.getAuthority())))
+                || (usuario.getRol() != null && "ADMIN".equalsIgnoreCase(usuario.getRol().getNombre()))
+                || (usuario.getRoles() != null && usuario.getRoles().stream().anyMatch(r -> "ADMIN".equalsIgnoreCase(r.getNombre())));
 
         boolean esClientePropio =
                 pedido.getUsuarioId().equals(usuario.getId());
@@ -137,7 +143,7 @@ public class PagoService {
         boolean esComercioPropio =
                 esComercioPropietario(pedido, usuario);
 
-        if (!esClientePropio && !esComercioPropio) {
+        if (!esAdmin && !esClientePropio && !esComercioPropio) {
             throw new RuntimeException(
                     "No tienes permiso para consultar este pago");
         }

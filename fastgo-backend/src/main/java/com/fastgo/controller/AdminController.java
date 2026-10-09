@@ -30,21 +30,39 @@ public class AdminController {
     private final SuscripcionService suscripcionService;
     private final AuditoriaAdminRepository auditoriaAdminRepository;
     private final com.fastgo.service.UsuarioService usuarioService;
+    private final com.fastgo.service.EmailService emailService;
 
     public AdminController(
             ComercioService comercioService,
             SuscripcionService suscripcionService,
             AuditoriaAdminRepository auditoriaAdminRepository,
-            com.fastgo.service.UsuarioService usuarioService) {
+            com.fastgo.service.UsuarioService usuarioService,
+            com.fastgo.service.EmailService emailService) {
         this.comercioService = comercioService;
         this.suscripcionService = suscripcionService;
         this.auditoriaAdminRepository = auditoriaAdminRepository;
         this.usuarioService = usuarioService;
+        this.emailService = emailService;
     }
 
     @GetMapping("/tiendas")
     public ResponseEntity<List<AdminTiendaResponseDTO>> listarTiendas() {
         return ResponseEntity.ok(comercioService.listarTodasAdmin());
+    }
+
+    @GetMapping("/tiendas/{id}")
+    public ResponseEntity<AdminTiendaResponseDTO> obtenerTienda(@PathVariable @Positive Integer id) {
+        return ResponseEntity.ok(comercioService.buscarPorIdAdmin(id));
+    }
+
+    @PostMapping("/test-email")
+    public ResponseEntity<Map<String, String>> testEmail(@RequestBody(required = false) Map<String, String> body) {
+        String correo = body != null ? body.get("correo") : null;
+        if (correo == null || correo.isBlank()) {
+            correo = "soporte@fastgo.com";
+        }
+        emailService.enviarCorreoRecuperacion(correo, "Usuario Test Admin", "test-token-12345");
+        return ResponseEntity.ok(Map.of("mensaje", "Correo de prueba enviado a " + correo));
     }
 
     @PutMapping("/tiendas/{id}/activar")

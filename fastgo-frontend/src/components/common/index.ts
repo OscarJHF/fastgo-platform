@@ -7,5 +7,6 @@ export * from './Badge';
 export * from './Spinner';
 export * from './EmptyState';
 export * from './ErrorState';
+export * from './ErrorBoundary';
 export * from './ConfirmDialog';
 export * from './FastGoLogo';
