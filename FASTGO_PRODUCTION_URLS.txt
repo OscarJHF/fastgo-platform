@@ -17,13 +17,16 @@ Database (Neon PostgreSQL 18):
 ep-shiny-thunder-b4zxd29n-pooler.c-6.us-east-2.aws.neon.tech:5432/neondb
 
 Android APK Download URL:
-https://github.com/OscarJHF/fastgo-platform/releases/download/v2.0-beta/FASTGO-Beta2-release.apk
+https://fastgo-app.fastgo-frontend.workers.dev/descargar/apk
 
-GitHub Release v2.0-beta:
-https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.0-beta
+GitHub Release v2.2.5:
+https://github.com/OscarJHF/fastgo-platform/releases/tag/v2.2.5
+
+GitHub Direct Asset URL:
+https://github.com/OscarJHF/fastgo-platform/releases/download/v2.2.5/FASTGO-release-2.2.5.apk
 
 GitHub Repository:
 https://github.com/OscarJHF/fastgo-platform
 
-APK SHA-256:
-C52F0F69EF6BDE44A4C48A5A05CA401D308B7DA1F8A3C1ED0AC499264A667659
+APK SHA-256 (v2.2.5):
+4731139AF33CD62E24892D71088D2867B9FD92623FA560117E6685CBF996D7CF
